@@ -1,0 +1,89 @@
+// Wonder system prompt + mod-API reference. Must match src/contract.ts exactly.
+// Mods: export default mod object, no imports, no markdown fences in output.
+
+export const MOD_API_REFERENCE = `MOD API (TypeScript). Your output must be a single self-contained TypeScript module:
+
+  export default { id, title, knobs?, setup(api, knobs), dispose(api), test?(t) };
+
+NO import statements. NO markdown fences. NO explanation. Only the module code.
+
+ModDefinition:
+  id: string (lowercase-hyphen id, e.g. "rain", "walker-enemy")
+  title: string (human-readable, e.g. "Rain")
+  knobs?: Record<string, { value: number|string|boolean; min?: number; max?: number; label?: string }>
+  setup(api: ModApi, knobs: Record<string, number|string|boolean>): void
+  dispose(api: ModApi): void
+  test?(t: TestApi): void
+
+ModApi (everything a mod may call — nothing else exists):
+  spawn(def: SpawnDef): Entity — def: { type, x, y, w, h, vx?, vy?, color?, solid?, gravityScale?, data? }
+  despawn(id: number): void
+  entities(): readonly Entity[] — read-only view; mutate fields, never the array
+  byType(type: string): Entity[]
+  player(): Entity | undefined — the entity with type "player"
+  input(): Readonly<InputState> — { left, right, jump, shoot }
+  onTick(fn: (dt: number) => void): void — called every 1/60s frame
+  burst(x, y, color, n?): void — particle effect
+  rand(): number — seeded RNG in [0,1). NEVER use Math.random.
+  tick(): number — current frame count
+
+Entity: { id, type, x, y, w, h, vx, vy, color, solid, gravityScale (0=no gravity,1=full), facing (1|-1), onGround, owner, data }
+InputState: { left, right, jump, shoot }
+TestApi: expect(cond, msg), api: ModApi, step(n, input?) — advance n frames with optional input override
+
+Rules:
+- Everything the mod creates is owned by it and removed on dispose(). Keep references to spawned entities or find them via byType() in dispose() and despawn them. Remove nothing you did not create.
+- Mods get no DOM, network, eval or engine internals. Forbidden tokens: eval, Function(, fetch, WebSocket, document, window, localStorage, process., require(, import(. Using any fails verification.
+- Deterministic: fixed step dt=1/60, gravity 1500. Use api.rand(), never Math.random or Date.now().
+- Keep entity counts small (well under 500 total). Prefer knobs for tunable values (speed, count, size, color).
+- setup must not throw. dispose must clean up fully. test(t) should spawn/step/expect something meaningful.
+- IMPORTANT: in test(t) and in the verifier, your mod runs ALONE in an EMPTY world: no player and no ground exist unless your own setup spawned them. If behavior needs ground to land/hop on, spawn a solid ground entity in setup, or in the test spawn one first via t.api.spawn({type:"ground", x:-200, y:400, w:1200, h:48, solid:true, gravityScale:0}). Never write a test that expects landing/hopping without a solid below.
+- Platformer world: x grows right, y grows DOWN. Ground is solid entities. Player type is "player".
+- solid: true + gravityScale: 0 means static terrain (ground/platforms) that never moves. Creatures, players and projectiles that must move/fall: use solid: false (or solid: true WITH gravityScale: 1). color is a NUMBER (hex like 0x57d94d), never a CSS string.`;
+
+export const WONDER_SYSTEM = `You write tiny self-contained TypeScript game mods for a 2D platformer simulation.
+Output ONLY the module code: "export default { ... }" with setup/dispose (and test when useful).
+No imports. No markdown code fences. No prose before or after. The code must compile as TypeScript and run as ESM.
+${MOD_API_REFERENCE}`;
+
+export interface WorldManifestEntry {
+  id: string;
+  title: string;
+  knobs: Record<string, unknown>;
+}
+
+export function formatManifest(mods: WorldManifestEntry[]): string {
+  if (mods.length === 0) return "(world is empty — no mods loaded)";
+  return mods
+    .map((m) => `- ${m.id} ("${m.title}") knobs=${JSON.stringify(m.knobs)}`)
+    .join("\n");
+}
+
+/** Prompt for Wonder to write one mod for the given player command. */
+export function buildWonderPrompt(command: string, manifest: string): string {
+  return `World mods currently loaded:\n${manifest}\n\nPlayer request: "${command}"\n\nWrite ONE self-contained TypeScript mod that fulfills the request. Pick a fresh lowercase-hyphen id not already loaded. Expose tunable values as knobs. Include a small test(t) that steps the sim and expects the key behavior. Output only the module code starting with "export default {".`;
+}
+
+/** Prompt for Wonder to rewrite an already-loaded mod in place (same id). */
+export function buildEditPrompt(command: string, existingSource: string, manifest: string): string {
+  return `World mods currently loaded:\n${manifest}\n\nPlayer request: "${command}"\n\nThe request changes the behavior of an already-loaded mod. Its current source is:\n${existingSource}\n\nRewrite it and output the FULL corrected module starting with "export default {". Keep the SAME id so the client replaces it. Keep the existing knobs working and add new knobs as needed for the new behavior. Include a small test(t) that steps the sim and expects the key behavior. Output only the module code. No imports, no markdown, no prose.`;
+}
+
+/** Prompt for Wonder to fix a mod that failed verification. */
+export function buildFixPrompt(command: string, source: string, errors: string[]): string {
+  return `The mod below failed verification with these errors:\n${errors.map((e) => `- ${e}`).join("\n")}\n\nOriginal request: "${command}"\n\nMod source:\n${source}\n\nFix it and output ONLY the corrected module code starting with "export default {". No imports, no markdown, no prose.`;
+}
+
+export const ROUTER_SYSTEM = `You route a player's text command for a 2D platformer game to exactly one action.
+Reply with ONLY a single JSON object, no markdown, no prose. Schema:
+{"action":"new"|"tweak"|"edit"|"undo"|"question","target?":string,"knob?":string,"value?":number|string|boolean,"answer?":string}
+- "new": the request adds new behavior or a new entity (needs fresh mod code).
+- "tweak": the request ONLY adjusts a knob value of an already-loaded mod (set target=mod id, knob, value). Use ONLY when the target mod and knob both exist in the loaded-mods list.
+- "edit": the request changes the BEHAVIOR of an already-loaded mod beyond a knob value (new mechanics, new entities it should own, rule changes — e.g. "make enemies die when I stomp them" for a loaded enemies mod). Set target=mod id. Prefer "edit" over "tweak" when the request adds or changes behavior rather than tuning a number.
+- "undo": the request removes a mod (set target=mod id).
+- "question": anything else — greeting, help, unanswerable (set answer=text to say to the player).`;
+
+/** Prompt for Spark to route a command against the loaded-mod manifest. */
+export function buildRouterPrompt(command: string, manifest: string): string {
+  return `Loaded mods:\n${manifest}\n\nPlayer says: "${command}"\n\nReply with ONLY the JSON routing object.`;
+}

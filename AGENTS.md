@@ -8,6 +8,7 @@ This is an entry for the Meta Global AI Developer Hackathon (solo, Indie track).
 - `docs/DESIGN.md`: every product and architecture decision (locked; discuss before changing).
 - `docs/SPIKE.md`: the current milestone and its pass bar.
 - `docs/META-API.md`: Meta model capabilities, endpoints, realtime details, pricing.
+- `docs/adr/`: architecture decision records. Read the index (`docs/adr/README.md`) before changing anything an ADR covers.
 
 ## Current milestone
 **The spike** (`docs/SPIKE.md`). Rectangles, a text box, Wonder writes mods, a verifier, hot-loading. No art and no voice until the spike passes its go/no-go.
@@ -26,3 +27,5 @@ This is an entry for the Meta Global AI Developer Hackathon (solo, Indie track).
 - **Original IP only.** No Mario or Nintendo names, sprites or assets.
 - **Only work built during the event** may appear in the demo. Keep commits honest and frequent; the repo will be public.
 - Prefer small, verifiable steps: write a test or a headless check for each engine feature.
+- **Document decisions as ADRs.** Any change that picks between real alternatives, creates or changes a contract (sim/server/client, mod API, wire protocol), changes runtime semantics another component depends on, or would surprise a future reader ships with an ADR in the same change (format: `docs/adr/README.md`). No ADR, not done. Accepted ADRs are never edited; a changed mind gets a new ADR that supersedes the old one. Bug fixes with one obvious cause, behavior-preserving refactors, and visual-only tweaks need no ADR — if in doubt, write a short one. New ADRs start as Draft; only the project owner marks them Accepted.
+- **Keep the repo obvious to a cold viewer.** The README is the entry point and must always answer, without reading code: what this is, the hackathon it's for (event, track, deadline), the full tech stack and which Meta models do which job, how to run it locally, what's already working (with evidence), and what isn't built yet. Any change that makes part of that stale — new component, new model, new run step, new working/broken feature — updates the README (and linked docs) in the same change. A viewer should never have to reverse-engineer the tech or the state of the project from source files.

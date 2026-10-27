@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Metabuild — talk to build</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/src/client/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <main id="stage-wrap">
+        <div id="stage"></div>
+        <div id="hint">Move: A/D or arrows &nbsp; Jump: W / Space &nbsp; Shoot: X</div>
+      </main>
+      <aside id="rail">
+        <header>
+          <h1>METABUILD</h1>
+          <p class="sub">Say it. It builds itself.</p>
+        </header>
+        <section id="orb-row">
+          <div id="orb" data-state="idle"></div>
+          <div>
+            <div id="orb-state">Listening</div>
+            <div id="orb-say">Say something — or type below. Try “add a player”.</div>
+          </div>
+        </section>
+        <form id="command-form">
+          <input id="command" type="text" placeholder="add a player, make it rain…" autocomplete="off" />
+          <button type="submit">Build</button>
+        </form>
+        <div id="chips">
+          <button data-cmd="add a player">+ Player</button>
+          <button data-cmd="add some ground">+ Ground</button>
+          <button data-cmd="add enemies">+ Enemies</button>
+          <button data-cmd="make it rain">Rain</button>
+          <button data-cmd="add coins">Coins</button>
+          <button data-cmd="add a moving platform">Moving platform</button>
+          <button data-cmd="shoot fire arrows">Fire arrows</button>
+          <button data-cmd="starter world">Starter world</button>
+        </div>
+        <h2>Mods in this world</h2>
+        <div id="server-status">Server: connecting…</div>
+        <ul id="mods"></ul>
+        <h2>Build log</h2>
+        <ol id="log"></ol>
+      </aside>
+    </div>
+    <script type="module" src="/src/client/main.ts"></script>
+  </body>
+</html>

@@ -33,11 +33,14 @@ Per team, not per key. Read the `x-ratelimit-*` headers.
 - $150 Meta credit, claimed through the hackathon Google Form. It arrives in batches, so claim early.
 - Set a Spend Limit alert on the Billing page.
 
-## Benchmarks (fill in on day 1)
+## Benchmarks (measured 2026-10-27)
+
 | Call | p50 | p95 | Notes |
 |---|---|---|---|
-| Spark router (short JSON) | | | |
-| Wonder mod (~80 lines) | | | |
-| Muse Image sprite sheet | | | |
-| SAM 3.1 single image | | | |
-| Transcribe: speech → partial | | | |
+| Spark router (short JSON) | ~0.7s | ~3.2s | With the router system prompt + 1024 tokens, `reasoning_effort: minimal`. At 256 tokens replies returned empty |
+| Wonder mod (~80 lines) | ~8s | ~13s | Full command median 8.7s / p95 12.3s across the 10-command spike run (`scripts/spike-run.ts`), incl. route+compile+verify |
+| Muse Image sprite sheet | — | — | Not yet measured (art pipeline not built) |
+| SAM 3.1 single image | — | — | Not yet measured |
+| Transcribe: speech → partial | — | — | Not yet measured (voice not built) |
+
+Critical finding: at the default reasoning effort, Wonder/Spark replies come back **empty** on our prompts (reasoning tokens eat the whole budget). All calls use `reasoning_effort: minimal` — see [ADR 0001](adr/0001-reasoning-effort-minimal.md).

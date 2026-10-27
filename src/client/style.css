@@ -1,0 +1,33 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #0b0e13; color: #e8e4d8; font-family: "Segoe UI", system-ui, sans-serif; }
+#app { display: grid; grid-template-columns: 1fr 340px; height: 100vh; }
+#stage-wrap { position: relative; min-width: 0; background: #05070a; }
+#stage, #stage canvas { width: 100%; height: 100%; display: block; }
+#hint { position: absolute; left: 14px; bottom: 12px; font: 12px Consolas, monospace; color: #9aa3ad; background: rgba(5,7,10,.75); padding: 6px 9px; }
+#rail { border-left: 3px solid #ffc94d; padding: 18px; overflow-y: auto; background: #10141b; }
+h1 { margin: 0; font-size: 28px; letter-spacing: .04em; color: #ffc94d; }
+.sub { margin: 4px 0 18px; color: #b9b2a0; font-size: 13px; }
+h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #8f97a3; margin: 20px 0 8px; }
+#orb-row { display: flex; gap: 12px; align-items: center; background: #171d28; padding: 12px; border: 1px solid #2a3342; }
+#orb { width: 42px; height: 42px; flex: none; border-radius: 50%; background: #ffc94d; box-shadow: 0 0 0 6px rgba(255,201,77,.15); animation: pulse 1.6s ease-in-out infinite; }
+#orb[data-state="building"] { background: #39d0b0; animation-duration: .5s; }
+#orb[data-state="failed"] { background: #e2483d; animation: none; }
+#orb[data-state="done"] { background: #7ee081; animation: none; }
+@keyframes pulse { 50% { transform: scale(1.14); } }
+@media (prefers-reduced-motion: reduce) { #orb { animation: none; } }
+#orb-state { font-weight: 700; font-size: 13px; }
+#orb-say { font-size: 12px; color: #c9c2ae; margin-top: 2px; }
+#command-form { display: flex; gap: 8px; margin-top: 14px; }
+#command { flex: 1; min-width: 0; background: #05070a; border: 1px solid #3a4454; color: #fff; padding: 10px; font-size: 14px; }
+#command-form button, #chips button { background: #ffc94d; color: #171106; border: 0; padding: 10px 12px; font-weight: 700; cursor: pointer; }
+#chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+#chips button { background: #232c3b; color: #e8e4d8; font-weight: 600; padding: 6px 9px; font-size: 12px; }
+#server-status { font: 11px Consolas, monospace; color: #9aa3ad; }
+#mods { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 8px; }
+#mods li { background: #171d28; border: 1px solid #2a3342; padding: 10px; }
+#mods .title { display: flex; justify-content: space-between; font-weight: 700; font-size: 13px; }
+#mods .undo { background: none; border: 1px solid #e2483d; color: #ff8a7a; padding: 3px 8px; cursor: pointer; }
+.knob { display: grid; grid-template-columns: 90px 1fr 38px; gap: 8px; align-items: center; font-size: 11px; margin-top: 8px; color: #b9b2a0; }
+.knob output { font-family: Consolas, monospace; text-align: right; }
+#log { font: 11px Consolas, monospace; color: #9aa3ad; padding-left: 18px; display: grid; gap: 5px; }
+@media (max-width: 900px) { #app { grid-template-columns: 1fr; grid-template-rows: 55vh 1fr; } #rail { border-left: 0; border-top: 3px solid #ffc94d; } }

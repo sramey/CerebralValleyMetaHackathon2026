@@ -1,0 +1,28 @@
+{
+  "name": "metabuild",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Talk-to-build platformer: you talk, AI writes verified mods, they hot-load live.",
+  "scripts": {
+    "dev": "vite",
+    "server": "tsx server/index.ts",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "benchmark": "tsx scripts/benchmark.ts"
+  },
+  "dependencies": {
+    "esbuild": "^0.25.0",
+    "pixi.js": "^8.6.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3",
+    "vitest": "^2.1.8"
+  }
+}
