@@ -21,6 +21,7 @@ The server validates every tweak against its manifest before sending it:
 - Same-id edit was proven live: spike command 6 ("make enemies die when I stomp them") rewrote `walker-enemy` in place during the 10/10 spike run.
 - Known imperfection: "make the player jump higher" built a new `mega-jump` mod instead of tweaking the jump knob. Tightening relative-tweak language ("higher/faster/slower" against an existing knob) is future router work; it passes functionally today.
 - The server manifest and the client's loaded mods can still diverge (client may load local built-ins the server has never seen). The client remains the authority for what is on screen; server fallbacks only choose *how to build*, never mutate client state directly.
+- Amendment (2026-10-27, playtest fix): a fully-specified tweak (target + knob + numeric value) naming a mod the **server** has not seen is now forwarded to the client anyway, because the client may hold it as a local built-in. The client applies it if loaded, or says "add that mod first" if not. Unknown-target tweaks *without* a full spec still fall back to `new` as above.
 
 ## Alternatives considered
 

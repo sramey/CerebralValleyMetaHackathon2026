@@ -81,7 +81,7 @@ export class World {
       // Static solids (gravityScale 0) never move. A solid with gravity still
       // gets physics: it collides with other solids, it just also blocks them.
       if (e.solid && e.gravityScale === 0) continue;
-      e.vy += SIM.gravity * e.gravityScale * dt;
+      e.vy = Math.min(e.vy + SIM.gravity * e.gravityScale * dt, 1100); // terminal velocity
       // X axis
       e.x += e.vx * dt;
       for (const s of solids) if (s !== e && overlap(e, s)) {

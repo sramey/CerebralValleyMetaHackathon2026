@@ -16,6 +16,10 @@ Original prompt: lets setup our project, get oriented, organized, and setup, see
 - Round-2 visuals landed (Spark worker): per-type code-drawn art (player headband/squash, blob enemies, spinning coins, grass+soil ground, fire trails, rain streaks), moon, parallax hills, vignette. Verified in browser screenshot.
 - Server edit route + tweak fallbacks landed; edit confirmed live by spike cmd 6 (walker-enemy rewritten under same id).
 
+- Checkpoint committed + pushed: 26baa43 (spike complete).
+- Agent playtest (Spark critic, fresh eyes, 9 screenshots) top finding: player can run off the ground edge and fall forever (reproduced at y=26106, vy=8775), leaving an empty sky — looked like "canvas renders nothing". Fixed: terminal velocity 1100 (src/sim/world.ts), player respawns at spawn after y>1000 (src/mods/player.ts), regression test added (17/17). Re-proven live in browser: same walk now ends back on ground.
+- Playtest fix 2: fully-specified tweaks for client-local mods are forwarded to the client instead of rebuilding (server/index.ts; ADR 0005 amended).
+
 ## TODO for worker windows (see docs/WORKERS.md)
 
 - worker1: harden/replace src/sim + src/mods + tests ( owns those files; current versions are orchestrator-built and passing).

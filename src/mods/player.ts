@@ -10,6 +10,11 @@ export const playerMod: ModDefinition = {
   setup(api, knobs) {
     const p = api.spawn({ type: "player", x: 120, y: 40, w: 26, h: 34, color: 0xffc94d, gravityScale: 1 });
     api.onTick(() => {
+      // Fell off the world: respawn at the start instead of falling forever.
+      if (p.y > 1000) {
+        p.x = 120; p.y = 40; p.vx = 0; p.vy = 0;
+        api.burst(p.x + p.w / 2, p.y + p.h / 2, 0xffc94d, 12);
+      }
       const input = api.input();
       const speed = Number(knobs.speed);
       p.vx = input.left ? -speed : input.right ? speed : 0;

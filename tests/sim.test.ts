@@ -38,6 +38,14 @@ describe("sim", () => {
     expect(s.onGround).toBe(true);
     expect(s.y + s.h).toBeCloseTo(300, 0);
   });
+  it("fall speed is capped and the player respawns after falling off", () => {
+    const w = new World(5); const l = new ModLoader(w);
+    l.load(playerMod); // no ground: player falls from spawn
+    for (let i = 0; i < 600; i++) w.step();
+    const p = w.entities.find((e) => e.type === "player")!;
+    expect(p.vy).toBeLessThanOrEqual(1100);
+    expect(p.y).toBeLessThan(1000); // respawned, not falling forever
+  });
   it("unload removes all owned entities", () => {
     const w = new World(1); const l = new ModLoader(w);
     l.load(playerMod);

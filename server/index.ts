@@ -152,6 +152,15 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
       send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
       return;
     }
+    // Client is the authority on what is loaded (it also has local built-in
+    // mods the server has never seen). Forward a fully-specified tweak and
+    // let the client apply or reject it, instead of rebuilding from scratch.
+    if (!rec && route.target && route.knob && typeof route.value === "number") {
+      console.log(`[route] tweak forwarded to client: ${route.target}.${route.knob}=${route.value}`);
+      send(ws, { kind: "tweak", modId: route.target, knob: route.knob, value: route.value });
+      send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
+      return;
+    }
     // Tweak that names no loaded target/knob never fails: an unknown target
     // is built fresh, while a known target with an inapplicable knob is a
     // behavior change — rewrite that mod in place (edit).
