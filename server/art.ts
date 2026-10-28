@@ -80,6 +80,13 @@ const SCENERY_WORDS = [
   "island",
   "icicle",
   "snowflake",
+  "tornado",
+  "twister",
+  "cyclone",
+  "whirlwind",
+  "vortex",
+  "hurricane",
+  "waterspout",
 ] as const;
 
 export function isScenerySubject(text: string): boolean {

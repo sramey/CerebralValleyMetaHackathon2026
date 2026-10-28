@@ -12,6 +12,14 @@
       <main id="stage-wrap">
         <div id="stage"></div>
         <div id="hint">Move: A/D or arrows &nbsp; Jump: W / Space &nbsp; Shoot: X</div>
+        <div id="radial-menu" hidden>
+          <div id="radial-center">object</div>
+          <button type="button" data-action="bigger" style="--a:-90deg; animation-delay:0ms" title="Bigger">＋</button>
+          <button type="button" data-action="front" style="--a:-18deg; animation-delay:40ms" title="Bring to front">Front</button>
+          <button type="button" data-action="remove" style="--a:54deg; animation-delay:80ms" title="Remove">Remove</button>
+          <button type="button" data-action="back" style="--a:126deg; animation-delay:120ms" title="Send to back">Back</button>
+          <button type="button" data-action="smaller" style="--a:198deg; animation-delay:160ms" title="Smaller">－</button>
+        </div>
       </main>
       <aside id="rail">
         <header>
@@ -29,6 +37,7 @@
           <input id="command" type="text" placeholder="add a player, make it rain…" autocomplete="off" />
           <button type="submit">Build</button>
         </form>
+        <button id="camera-btn" type="button">Bring an object in (camera)</button>
         <div id="chips">
           <button data-cmd="add a player">+ Player</button>
           <button data-cmd="add some ground">+ Ground</button>
@@ -45,6 +54,38 @@
         <h2>Build log</h2>
         <ol id="log"></ol>
       </aside>
+    </div>
+    <div id="hud">
+      <div id="orb-bar">
+        <div id="orb-dot" class="orb listening"></div>
+        <form id="orb-form"><input id="orb-input" type="text" placeholder="Tell the orb what to build..." autocomplete="off"></form>
+        <div id="orb-feedback">Say it. It builds itself.</div>
+      </div>
+      <button id="drawer-toggle" type="button" aria-label="Toggle panel" title="Toggle panel">»</button>
+    </div>
+    <div id="camera-modal" hidden>
+      <div class="camera-card">
+        <video id="camera-video" autoplay playsinline></video>
+        <p id="camera-nocam" hidden>No camera available — upload a photo instead.</p>
+        <input id="camera-label" type="text" placeholder="What are you holding? e.g. coffee mug" autocomplete="off" />
+        <label class="camera-pixel"><input id="camera-pixel" type="checkbox" checked /> Pixel-art style</label>
+        <label class="camera-wand-sens">Sensitivity <input id="wand-sens" type="range" min="18" max="60" value="40" /></label>
+        <div class="camera-actions">
+          <button id="camera-capture" type="button">Capture</button>
+          <button id="camera-upload-btn" type="button">Upload a photo instead</button>
+          <input id="camera-upload" type="file" accept="image/*" hidden />
+          <button id="camera-find" type="button" hidden>Find it</button>
+          <button id="camera-bg" type="button" hidden>1) Capture empty background</button>
+          <button id="camera-cancel" type="button">Cancel</button>
+        </div>
+        <div id="camera-preview-wrap" hidden>
+          <canvas id="camera-preview"></canvas>
+          <div id="camera-box" hidden></div>
+          <div id="camera-dot" hidden></div>
+        </div>
+        <p id="camera-status" hidden></p>
+        <button id="camera-confirm" type="button" hidden>Bring it into the game</button>
+      </div>
     </div>
     <script type="module" src="/src/client/main.ts"></script>
   </body>

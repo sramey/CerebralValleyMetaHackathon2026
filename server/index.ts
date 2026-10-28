@@ -1,6 +1,8 @@
 // WebSocket game server on port 8787. Route (Spark) -> write (Wonder) ->
 // compile -> verify -> one auto-fix -> hot-load message. Never crashes on a
 // bad mod or a missing MODEL_API_KEY (answers with say in that case).
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
 import { SIM } from "../src/contract";
 import type { ClientMsg, KnobDefs, KnobValue, ServerMsg } from "../src/contract";
@@ -10,6 +12,7 @@ import { verifyMod } from "./verify";
 import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, formatManifest, ROUTER_SYSTEM, WONDER_SYSTEM } from "./prompt";
 import { logBuild, saveModSources } from "./createlog";
 import { artCachedUrl, artKeyForType, deriveSubject, generateSubjectArt, isScenerySubject, pickArtType } from "./art";
+import { segmentPhoto } from "./photo";
 
 const PORT = 8787;
 
@@ -23,6 +26,66 @@ interface ManifestRec {
 }
 
 const manifest = new Map<string, ManifestRec>();
+
+interface BuiltinDef { alias: string; file: string; id: string }
+
+// Hand-written mods in src/mods: simple exact commands use these, not Wonder.
+const BUILTINS: BuiltinDef[] = [
+  { alias: "player", file: "player.ts", id: "player" },
+  { alias: "ground", file: "ground.ts", id: "ground" },
+  { alias: "rain", file: "rain.ts", id: "rain" },
+  { alias: "coin", file: "coins.ts", id: "coins" },
+  { alias: "coins", file: "coins.ts", id: "coins" },
+  { alias: "enemy", file: "enemy.ts", id: "enemies" },
+  { alias: "enemies", file: "enemy.ts", id: "enemies" },
+  { alias: "moving platform", file: "platform-moving.ts", id: "moving-platform" },
+  { alias: "fire arrow", file: "fire-arrow.ts", id: "fire-arrow" },
+  { alias: "fire arrows", file: "fire-arrow.ts", id: "fire-arrow" },
+  { alias: "chicken", file: "chicken.ts", id: "chicken" },
+];
+
+// "starter world" alias: player then ground, delivered sequentially.
+const STARTER_WORLD: BuiltinDef[] = [
+  { alias: "player", file: "player.ts", id: "player" },
+  { alias: "ground", file: "ground.ts", id: "ground" },
+];
+
+function normalizeBuiltinCommand(command: string): string {
+  let s = command.toLowerCase().trim().replace(/\s+/g, " ");
+  s = s.replace(/[.!?,;:]+$/, "").trim();
+  s = s.replace(/^(?:add|make|create|spawn|build|give|put)\s+/, "");
+  s = s.replace(/^(?:a|an|the)\s+/, "");
+  s = s.replace(/[.!?,;:]+$/, "").trim();
+  return s;
+}
+
+interface DeliverTimings { route: number; write: number; compile: number; verify: number }
+
+/** Compile/verify/send/manifest/log one mod source. Returns false on any failure. */
+async function deliverMod(ws: WebSocket, command: string, source: string, routeLabel: string, t0: number, timings: DeliverTimings): Promise<boolean> {
+  try {
+    stage(ws, { kind: "stage", stage: "compiling", detail: "compiling the mod", command });
+    const c0 = performance.now();
+    const compiled = compileMod(source);
+    timings.compile += Math.round(performance.now() - c0);
+    if (!compiled.ok) return false;
+    stage(ws, { kind: "stage", stage: "verifying", detail: "verifying the mod", command });
+    const v0 = performance.now();
+    const verified = await verifyMod(source, compiled.js);
+    timings.verify += Math.round(performance.now() - v0);
+    if (!verified.ok || !verified.def) return false;
+    const def = verified.def;
+    const rec: ManifestRec = { id: def.id, title: def.title, source, compiled: compiled.js, knobs: def.knobs ?? {} };
+    manifest.set(def.id, rec);
+    stage(ws, { kind: "stage", stage: "done", detail: `loaded ${def.id} (${SIM.healthFrames} frames OK)`, command });
+    send(ws, { kind: "mod", mod: { id: def.id, title: def.title, source, compiled: compiled.js, knobs: rec.knobs } });
+    const files = saveModSources([source], def.id);
+    logBuild({ command, route: routeLabel, outcome: "mod", modId: def.id, title: def.title, timings: { route: timings.route, write: 0, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) }, verify: { ok: true, errors: [], msPerFrame: verified.msPerFrame }, fixAttempted: false, sourceFile: files[files.length - 1], sourceFiles: files });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 type RouteAction = "new" | "tweak" | "edit" | "undo" | "question";
 interface Route {
@@ -49,6 +112,178 @@ function knobValues(rec: ManifestRec): Record<string, unknown> {
 
 function manifestText(): string {
   return formatManifest([...manifest.values()].map((m) => ({ id: m.id, title: m.title, knobs: knobValues(m) })));
+}
+
+function photoTitle(prompt: string): string {
+  const trimmed = prompt.trim();
+  const cap = trimmed ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1) : trimmed;
+  return `${cap} (photo)`;
+}
+
+function buildPhotoModSource(key: string, prompt: string, aspect: number): string {
+  const aspectLit = String(Number((Number.isFinite(aspect) && aspect > 0 ? aspect : 1).toFixed(4)));
+  const idLit = JSON.stringify(key);
+  const titleLit = JSON.stringify(photoTitle(prompt));
+  return [
+    `export default {`,
+    `  id: ${idLit},`,
+    `  title: ${titleLit},`,
+    `  knobs: { size: { value: 64, min: 24, max: 160, label: "Size" } },`,
+    `  setup(api, knobs) {`,
+    `    const h = Number(knobs.size);`,
+    `    const aspect = ${aspectLit};`,
+    `    const w = Math.min(220, Math.max(16, h * aspect));`,
+    `    api.spawn({ type: ${idLit}, x: 260, y: 400 - h, w: w, h: h, color: 0xffd76a, solid: false, gravityScale: 1 });`,
+    `    api.onTick(() => {`,
+    `      if (api.tick() % 200 !== 0) return;`,
+    `      for (const e of api.byType(${idLit})) {`,
+    `        if (e.onGround) e.vy = -240;`,
+    `      }`,
+    `    });`,
+    `  },`,
+    `  dispose(api) {`,
+    `    for (const e of api.byType(${idLit})) api.despawn(e.id);`,
+    `  },`,
+    `  test(t) {`,
+    `    t.step(5);`,
+    `    t.expect(t.api.byType(${idLit}).length === 1, "exactly one photo entity");`,
+    `  },`,
+    `};`,
+    ``,
+  ].join("\n");
+}
+
+const pendingFinds = new Map<WebSocket, Map<string, { box: { x: number; y: number; w: number; h: number }; prompt: string }>>();
+
+async function buildPhotoMod(ws: WebSocket, key: string, prompt: string, aspect: number): Promise<void> {
+  const t0 = performance.now();
+  const safePrompt = typeof prompt === "string" ? prompt : "";
+  const command = `photo: ${safePrompt}`;
+  let compileMs = 0;
+  let verifyMs = 0;
+  try {
+    if (typeof key !== "string" || !key) {
+      send(ws, { kind: "say", text: "That photo didn't come through — try taking it again." });
+      logBuild({ command, route: "new", outcome: "failed", timings: { route: 0, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) }, fixAttempted: false });
+      return;
+    }
+    const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+    const source = buildPhotoModSource(key, safePrompt, safeAspect);
+    const c0 = performance.now();
+    const compiled = compileMod(source);
+    compileMs = Math.round(performance.now() - c0);
+    if (!compiled.ok) {
+      send(ws, { kind: "say", text: `That didn't verify: ${compiled.errors.join("; ").slice(0, 500)}` });
+      logBuild({ command, route: "new", outcome: "failed", timings: { route: 0, write: 0, compile: compileMs, verify: 0, total: Math.round(performance.now() - t0) }, verify: { ok: false, errors: compiled.errors, msPerFrame: 0 }, fixAttempted: false });
+      return;
+    }
+    const v0 = performance.now();
+    const verified = await verifyMod(source, compiled.js);
+    verifyMs = Math.round(performance.now() - v0);
+    if (!verified.ok || !verified.def) {
+      const errors = verified.errors.length > 0 ? verified.errors : ["verification failed"];
+      send(ws, { kind: "say", text: `That didn't verify: ${errors.join("; ").slice(0, 500)}` });
+      logBuild({ command, route: "new", outcome: "failed", timings: { route: 0, write: 0, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) }, verify: { ok: false, errors, msPerFrame: verified.msPerFrame }, fixAttempted: false });
+      return;
+    }
+    const def = verified.def;
+    const rec: ManifestRec = { id: def.id, title: def.title, source, compiled: compiled.js, knobs: def.knobs ?? {} };
+    manifest.set(def.id, rec);
+    stage(ws, { kind: "stage", stage: "done", detail: `loaded ${def.id} (${SIM.healthFrames} frames OK)`, command });
+    send(ws, { kind: "mod", mod: { id: def.id, title: def.title, source, compiled: compiled.js, knobs: rec.knobs, artPending: key } });
+    const files = saveModSources([source], def.id);
+    logBuild({ command, route: "new", outcome: "mod", modId: def.id, title: def.title, timings: { route: 0, write: 0, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) }, verify: { ok: true, errors: [], msPerFrame: verified.msPerFrame }, fixAttempted: false, sourceFile: files[files.length - 1], sourceFiles: files });
+  } catch (err) {
+    try {
+      send(ws, { kind: "say", text: `Photo failed: ${err instanceof Error ? err.message : String(err)}` });
+    } catch { /* ignore */ }
+    try {
+      logBuild({ command, route: "new", outcome: "failed", timings: { route: 0, write: 0, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) }, fixAttempted: false });
+    } catch { /* ignore */ }
+  }
+}
+
+async function handlePhoto(ws: WebSocket, msg: Extract<ClientMsg, { kind: "photo" }>): Promise<void> {
+  const t0 = performance.now();
+  const prompt = typeof msg.prompt === "string" ? msg.prompt : "";
+  const command = `photo: ${prompt}`;
+  if (typeof msg.image !== "string" || !msg.image.startsWith("data:image") || msg.image.length >= 4_000_000) {
+    send(ws, { kind: "say", text: "That photo didn't come through — try taking it again." });
+    logBuild({ command, route: "new", outcome: "say", timings: { route: 0, write: 0, compile: 0, verify: 0, total: 0 }, fixAttempted: false });
+    return;
+  }
+  if (typeof msg.key !== "string" || !msg.key) {
+    send(ws, { kind: "say", text: "That photo didn't come through — try taking it again." });
+    logBuild({ command, route: "new", outcome: "say", timings: { route: 0, write: 0, compile: 0, verify: 0, total: 0 }, fixAttempted: false });
+    return;
+  }
+  try {
+    const box = await segmentPhoto(msg.image, prompt);
+    send(ws, { kind: "segment", key: msg.key, box });
+    if (!box) {
+      send(ws, { kind: "say", text: "I couldn't spot that in the photo — hold it up clearly and try again." });
+      logBuild({ command, route: "new", outcome: "say", timings: { route: 0, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) }, fixAttempted: false });
+      return;
+    }
+    await buildPhotoMod(ws, msg.key, prompt, box.w / box.h);
+  } catch (err) {
+    try {
+      send(ws, { kind: "say", text: `Photo failed: ${err instanceof Error ? err.message : String(err)}` });
+    } catch { /* ignore */ }
+    try {
+      logBuild({ command, route: "new", outcome: "failed", timings: { route: 0, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) }, fixAttempted: false });
+    } catch { /* ignore */ }
+  }
+}
+
+async function handlePhotoFind(ws: WebSocket, msg: Extract<ClientMsg, { kind: "photoFind" }>): Promise<void> {
+  const key = typeof msg.key === "string" ? msg.key : "";
+  const prompt = typeof msg.prompt === "string" ? msg.prompt : "";
+  try {
+    if (typeof msg.image !== "string" || !msg.image.startsWith("data:image") || msg.image.length >= 4_000_000) {
+      send(ws, { kind: "segment", key, box: null });
+      return;
+    }
+    const box = await segmentPhoto(msg.image, prompt);
+    if (box) {
+      let perWs = pendingFinds.get(ws);
+      if (!perWs) {
+        perWs = new Map();
+        pendingFinds.set(ws, perWs);
+      }
+      perWs.set(key, { box, prompt });
+    }
+    send(ws, { kind: "segment", key, box });
+  } catch {
+    try {
+      send(ws, { kind: "segment", key, box: null });
+    } catch { /* ignore */ }
+  }
+}
+
+async function handlePhotoBring(ws: WebSocket, msg: Extract<ClientMsg, { kind: "photoBring" }>): Promise<void> {
+  const key = typeof msg.key === "string" ? msg.key : "";
+  const perWs = pendingFinds.get(ws);
+  const entry = perWs?.get(key);
+  if (!entry) {
+    send(ws, { kind: "say", text: "That detection expired — find the object again." });
+    return;
+  }
+  perWs!.delete(key);
+  if (perWs!.size === 0) pendingFinds.delete(ws);
+  const aspect = entry.box.h !== 0 ? entry.box.w / entry.box.h : 1;
+  await buildPhotoMod(ws, key, entry.prompt, aspect);
+}
+
+async function handlePhotoBringLocal(ws: WebSocket, msg: Extract<ClientMsg, { kind: "photoBringLocal" }>): Promise<void> {
+  const key = typeof msg.key === "string" ? msg.key : "";
+  const prompt = typeof msg.prompt === "string" ? msg.prompt : "";
+  const aspect = (msg as { aspect?: unknown }).aspect;
+  if (typeof aspect !== "number" || !Number.isFinite(aspect) || aspect < 0.1 || aspect > 10) {
+    send(ws, { kind: "say", text: "That photo didn't come through — try taking it again." });
+    return;
+  }
+  await buildPhotoMod(ws, key, prompt, aspect);
 }
 
 function parseRoute(text: string): Route | null {
@@ -223,6 +458,46 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
     }
   }
 
+  // Built-in fast path: exact simple "new" commands use hand-written mods.
+  // Any read/compile/verify failure falls through to Wonder below.
+  if (route.action === "new") {
+    const key = normalizeBuiltinCommand(command);
+    const builtinTimings: DeliverTimings = { route: routeMs, write: 0, compile: 0, verify: 0 };
+    const deliverBuiltin = async (b: BuiltinDef): Promise<boolean> => {
+      let src: string;
+      try {
+        src = readFileSync(join(process.cwd(), "src/mods", b.file), "utf8");
+      } catch {
+        return false;
+      }
+      const ok = await deliverMod(ws, command, src, "builtin", t0, builtinTimings);
+      compileMs = builtinTimings.compile;
+      verifyMs = builtinTimings.verify;
+      return ok;
+    };
+    if (key === "starter world") {
+      const pending = STARTER_WORLD.filter((b) => !manifest.has(b.id));
+      if (pending.length > 0) {
+        let delivered = false;
+        for (const b of pending) {
+          if (await deliverBuiltin(b)) delivered = true;
+        }
+        if (delivered) {
+          send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) } });
+          return;
+        }
+      }
+    } else {
+      const builtin = BUILTINS.find((b) => b.alias === key);
+      if (builtin && !manifest.has(builtin.id)) {
+        if (await deliverBuiltin(builtin)) {
+          send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) } });
+          return;
+        }
+      }
+    }
+  }
+
   // 3. new / edit: Wonder writes one mod. An edit whose target is gone falls
   // back to new.
   let editRec: ManifestRec | undefined;
@@ -346,9 +621,32 @@ function handleMessage(ws: WebSocket, raw: string): void {
     send(ws, { kind: "say", text: "I only speak JSON — try the text box again." });
     return;
   }
+  if (!msg || typeof msg !== "object" || typeof (msg as { kind?: unknown }).kind !== "string") {
+    send(ws, { kind: "say", text: "I only speak JSON — try the text box again." });
+    return;
+  }
   if (msg.kind === "command") {
     handleCommand(ws, msg.text).catch((err) => {
       send(ws, { kind: "say", text: `Command failed: ${err instanceof Error ? err.message : String(err)}` });
+    });
+  } else if (msg.kind === "photo") {
+    handlePhoto(ws, msg).catch((err) => {
+      send(ws, { kind: "say", text: `Photo failed: ${err instanceof Error ? err.message : String(err)}` });
+    });
+  } else if (msg.kind === "photoFind") {
+    handlePhotoFind(ws, msg).catch((err) => {
+      try {
+        send(ws, { kind: "segment", key: typeof msg.key === "string" ? msg.key : "", box: null });
+      } catch { /* ignore */ }
+      void err;
+    });
+  } else if (msg.kind === "photoBring") {
+    handlePhotoBring(ws, msg).catch((err) => {
+      send(ws, { kind: "say", text: `Photo failed: ${err instanceof Error ? err.message : String(err)}` });
+    });
+  } else if (msg.kind === "photoBringLocal") {
+    handlePhotoBringLocal(ws, msg).catch((err) => {
+      send(ws, { kind: "say", text: `Photo failed: ${err instanceof Error ? err.message : String(err)}` });
     });
   } else if (msg.kind === "undo") {
     if (manifest.has(msg.modId)) {
@@ -371,6 +669,9 @@ function handleMessage(ws: WebSocket, raw: string): void {
 const wss = new WebSocketServer({ port: PORT, host: "127.0.0.1" });
 wss.on("connection", (ws: WebSocket) => {
   send(ws, { kind: "say", text: "hello! Tell me what to build — e.g. 'add a player'." });
+  ws.on("close", () => {
+    pendingFinds.delete(ws);
+  });
   ws.on("message", (data) => {
     try {
       handleMessage(ws, String(data));

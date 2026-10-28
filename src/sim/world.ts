@@ -34,9 +34,17 @@ export class World {
   }
 
   spawn(def: SpawnDef, owner: string): Entity {
-    // Hard cap: evict oldest non-player entity rather than growing unbounded.
+    // Hard cap: evict only as many as needed for this one spawn, in priority
+    // order: (a) oldest entity owned by the spawning owner, (b) oldest
+    // non-player entity that is not ground/platform, (c) oldest non-player.
     while (this.entities.length >= SIM.maxEntities) {
-      const idx = this.entities.findIndex((e) => e.type !== "player");
+      let idx = this.entities.findIndex((e) => e.owner === owner && e.type !== "player");
+      if (idx === -1) {
+        idx = this.entities.findIndex(
+          (e) => e.type !== "player" && e.type !== "ground" && e.type !== "platform",
+        );
+      }
+      if (idx === -1) idx = this.entities.findIndex((e) => e.type !== "player");
       if (idx === -1) break;
       this.entities.splice(idx, 1);
     }
@@ -49,6 +57,7 @@ export class World {
       solid: def.solid ?? false,
       gravityScale: def.gravityScale ?? 1,
       facing: 1, onGround: false, owner,
+      health: def.health ?? 100,
       data: { ...(def.data ?? {}) },
     };
     this.entities.push(e);
@@ -57,6 +66,17 @@ export class World {
 
   despawn(id: number): void {
     this.entities = this.entities.filter((e) => e.id !== id);
+  }
+
+  damage(id: number, amount: number): void {
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    const e = this.entities.find((en) => en.id === id);
+    if (!e) return;
+    e.health -= amount;
+    if (e.health <= 0) {
+      this.burst(e.x + e.w / 2, e.y + e.h / 2, e.color, 10);
+      this.despawn(e.id);
+    }
   }
 
   burst(x: number, y: number, color: number, n = 10): void {

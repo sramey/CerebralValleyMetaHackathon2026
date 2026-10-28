@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SIM } from "../src/contract";
+import type { ModApi, ModDefinition } from "../src/contract";
 import { World } from "../src/sim/world";
 import { ModLoader, runModTest } from "../src/sim/loader";
 import playerMod from "../src/mods/player";
@@ -113,5 +114,71 @@ describe("sim", () => {
       expect(Number.isFinite(e.x) && Number.isFinite(e.y)).toBe(true);
     }
     expect(w.entities.length).toBeLessThanOrEqual(SIM.maxEntities);
+  });
+  it("despawn is owner-scoped: another mod cannot despawn your entities", () => {
+    const w = new World(1); const l = new ModLoader(w);
+    let apiA!: ModApi; let apiB!: ModApi; let spawnedId = -1;
+    const modA: ModDefinition = {
+      id: "mod-a", title: "A",
+      setup(api) { apiA = api; spawnedId = api.spawn({ type: "thing", x: 0, y: 0, w: 10, h: 10 }).id; },
+      dispose() {},
+    };
+    const modB: ModDefinition = {
+      id: "mod-b", title: "B",
+      setup(api) { apiB = api; },
+      dispose() {},
+    };
+    l.load(modA); l.load(modB);
+    expect(w.entities.some((e) => e.id === spawnedId)).toBe(true);
+    apiB.despawn(spawnedId);
+    expect(w.entities.some((e) => e.id === spawnedId)).toBe(true);
+    apiA.despawn(spawnedId);
+    expect(w.entities.some((e) => e.id === spawnedId)).toBe(false);
+  });
+  it("health defaults to 100 and damage destroys at zero", () => {
+    const w = new World(1);
+    const e = w.spawn({ type: "enemy", x: 0, y: 0, w: 10, h: 10 }, "test");
+    expect(e.health).toBe(100);
+    w.damage(e.id, 30);
+    expect(e.health).toBe(70);
+    expect(w.entities.some((en) => en.id === e.id)).toBe(true);
+    w.damage(e.id, 70);
+    expect(w.entities.some((en) => en.id === e.id)).toBe(false);
+  });
+  it("spawn with custom health is destroyed by equal damage", () => {
+    const w = new World(1);
+    const e = w.spawn({ type: "enemy", x: 0, y: 0, w: 10, h: 10, health: 25 }, "test");
+    expect(e.health).toBe(25);
+    w.damage(e.id, 25);
+    expect(w.entities.some((en) => en.id === e.id)).toBe(false);
+  });
+  it("rain over 3600 ticks does not evict ground or strand player", () => {
+    const w = new World(7); const l = new ModLoader(w);
+    l.load(groundMod); l.load(playerMod); l.load(rainMod);
+    for (let i = 0; i < 3600; i++) w.step();
+    expect(w.entities.some((e) => e.type === "ground")).toBe(true);
+    const p = w.entities.find((e) => e.type === "player")!;
+    expect(p).toBeDefined();
+    expect(p.onGround).toBe(true);
+    expect(w.entities.filter((e) => e.type === "raindrop").length).toBeLessThan(300);
+  });
+  it("cap: leaky mod evicts its own oldest junk before ground", () => {
+    const w = new World(1); const l = new ModLoader(w);
+    l.load(groundMod);
+    const ground = w.entities.find((e) => e.type === "ground")!;
+    const junkIds: number[] = [];
+    const leaky: ModDefinition = {
+      id: "leaky", title: "Leaky",
+      setup(api) {
+        for (let i = 0; i < 600; i++) junkIds.push(api.spawn({ type: "junk", x: 0, y: 0, w: 4, h: 4 }).id);
+      },
+      dispose() {},
+    };
+    l.load(leaky);
+    expect(w.entities.some((e) => e.id === ground.id)).toBe(true);
+    expect(w.entities.length).toBeLessThanOrEqual(SIM.maxEntities);
+    expect(w.entities.some((e) => e.id === junkIds[0])).toBe(false);
+    expect(w.entities.some((e) => e.id === junkIds[junkIds.length - 1])).toBe(true);
+    expect(w.entities.filter((e) => e.type === "junk").length).toBeLessThan(600);
   });
 });

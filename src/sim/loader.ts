@@ -12,7 +12,11 @@ export class ModLoader {
     const w = this.world;
     return {
       spawn: (def) => w.spawn(def, owner),
-      despawn: (id) => w.despawn(id),
+      despawn: (id) => {
+        const e = w.entities.find((en) => en.id === id);
+        if (e && e.owner === owner) w.despawn(id);
+      },
+      damage: (id, amt) => w.damage(id, amt),
       entities: () => w.entities,
       byType: (type) => w.entities.filter((e) => e.type === type),
       player: () => w.entities.find((e) => e.type === "player"),
@@ -67,7 +71,11 @@ export function runModTest(def: ModDefinition): { ok: boolean; errors: string[] 
         expect: (cond, msg) => { if (!cond) errors.push(msg); },
         api: {
           spawn: (d) => world.spawn(d, def.id),
-          despawn: (id) => world.despawn(id),
+          despawn: (id) => {
+            const e = world.entities.find((en) => en.id === id);
+            if (e && e.owner === def.id) world.despawn(id);
+          },
+          damage: (id, amt) => world.damage(id, amt),
           entities: () => world.entities,
           byType: (type) => world.entities.filter((e) => e.type === type),
           player: () => world.entities.find((e) => e.type === "player"),

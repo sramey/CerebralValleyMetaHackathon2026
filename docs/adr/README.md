@@ -41,3 +41,5 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0007](0007-art-pipeline-chroma-key-first.md) | Art: Image sheet + client chroma-key slicing; SAM validates, mask decode deferred | Draft |
 | [0008](0008-async-art-digitize-placeholder.md) | Art streams asynchronously; digitize placeholder while it generates | Draft |
 | [0009](0009-scenery-vs-creature-art.md) | Intent classification: scenery vs creature art | Draft |
+| [0010](0010-camera-object-prototype.md) | Camera object prototype: SAM box + client flood-fill cutout, template mod | Draft |
+| [0011](0011-combat-targeting-and-health.md) | Combat targeting and health: opt-in hostiles/heroes, 100 HP + damage, exact-match routing | Draft |

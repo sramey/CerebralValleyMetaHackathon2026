@@ -27,6 +27,7 @@ export interface Entity {
   gravityScale: number;
   facing: 1 | -1;
   onGround: boolean;
+  health: number;
   /** Owning mod id, or "engine" for built-ins. Set by the loader. */
   owner: string;
   data: Record<string, number | string | boolean>;
@@ -44,6 +45,7 @@ export interface SpawnDef {
   color?: number;
   solid?: boolean;
   gravityScale?: number;
+  health?: number;
   data?: Record<string, number | string | boolean>;
 }
 
@@ -52,6 +54,7 @@ export interface SpawnDef {
 export interface ModApi {
   spawn(def: SpawnDef): Entity;
   despawn(id: number): void;
+  damage: (id: number, amount: number) => void;
   /** All live entities (read-only view; mutate fields, never the array). */
   entities(): readonly Entity[];
   byType(type: string): Entity[];
@@ -88,7 +91,11 @@ export interface ModDefinition {
 export type ClientMsg =
   | { kind: "command"; text: string }
   | { kind: "undo"; modId: string }
-  | { kind: "knob"; modId: string; knob: string; value: KnobValue };
+  | { kind: "knob"; modId: string; knob: string; value: KnobValue }
+  | { kind: "photo"; key: string; image: string; prompt: string }
+  | { kind: "photoFind"; key: string; image: string; prompt: string }
+  | { kind: "photoBring"; key: string }
+  | { kind: "photoBringLocal"; key: string; prompt: string; aspect: number };
 
 export type BuildStage = "routing" | "writing" | "compiling" | "verifying" | "fixing" | "done" | "failed";
 
@@ -99,6 +106,7 @@ export type ServerMsg =
   | { kind: "tweak"; modId: string; knob: string; value: KnobValue }
   | { kind: "removed"; modId: string }
   | { kind: "say"; text: string }
+  | { kind: "segment"; key: string; box: { x: number; y: number; w: number; h: number } | null }
   | { kind: "timing"; command: string; ms: { route: number; write: number; compile: number; verify: number; total: number } };
 
 export interface VerifyResult {

@@ -47,6 +47,45 @@ export async function loadSpriteSheet(url: string): Promise<Texture[]> {
     for (let i = 0; i < px.length; i += 4) {
       if (isMagenta(px[i], px[i + 1], px[i + 2])) px[i + 3] = 0;
     }
+    // despill / edge cleanup
+    for (let i = 0; i < px.length; i += 4) {
+      if (px[i + 3] === 0) continue;
+      const r = px[i], g = px[i + 1], b = px[i + 2];
+      if (Math.min(r, b) - g > 95 && r > 120 && b > 120) px[i + 3] = 0;
+    }
+    for (let i = 0; i < px.length; i += 4) {
+      if (px[i + 3] === 0) continue;
+      let r = px[i];
+      const g = px[i + 1];
+      let b = px[i + 2];
+      const m = Math.min(r, b);
+      if (m - g > 28) {
+        const pull = (m - g) * 0.65;
+        r -= pull * (r / Math.max(1, m));
+        b -= pull * (b / Math.max(1, m));
+        px[i] = r;
+        px[i + 2] = b;
+      }
+    }
+    {
+      const alphaCopy = new Uint8Array(w * h);
+      for (let p = 0; p < w * h; p++) alphaCopy[p] = px[p * 4 + 3];
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const p = y * w + x;
+          if (alphaCopy[p] === 0) continue;
+          const i = p * 4;
+          const r = px[i], g = px[i + 1], b = px[i + 2];
+          if (Math.min(r, b) - g <= 18) continue;
+          const hasTransparentNeighbor =
+            (x > 0 && alphaCopy[p - 1] === 0) ||
+            (x < w - 1 && alphaCopy[p + 1] === 0) ||
+            (y > 0 && alphaCopy[p - w] === 0) ||
+            (y < h - 1 && alphaCopy[p + w] === 0);
+          if (hasTransparentNeighbor) px[i + 3] = 0;
+        }
+      }
+    }
     ctx.putImageData(data, 0, 0);
 
     // column occupancy -> frame runs separated by >12 empty columns

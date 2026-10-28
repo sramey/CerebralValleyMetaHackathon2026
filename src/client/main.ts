@@ -1,4 +1,4 @@
-import { Application, Graphics, Sprite } from "pixi.js";
+import { Application, Graphics, Sprite, Texture } from "pixi.js";
 import { framesFor, loadSpriteSheet, loadSubjects } from "./sprites";
 import chickenMod from "../mods/chicken";
 import { SIM } from "../contract";
@@ -24,6 +24,7 @@ const loader = new ModLoader(world);
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
 
 const stageEl = $("#stage");
+const stageWrapEl = $("#stage-wrap");
 const orb = $("#orb");
 const orbState = $("#orb-state");
 const orbSay = $("#orb-say");
@@ -31,11 +32,17 @@ const modsEl = $("#mods");
 const logEl = $("#log");
 const serverStatus = $("#server-status");
 const inputEl = $<HTMLInputElement>("#command");
+const orbDot = $("#orb-dot");
+const orbFeedback = $("#orb-feedback");
+const orbInputEl = $<HTMLInputElement>("#orb-input");
 
 function say(text: string, state = "idle"): void {
   orbSay.textContent = text;
   orb.dataset.state = state;
   orbState.textContent = state === "building" ? "Building" : state === "failed" ? "Rolled back" : state === "done" ? "Done" : "Listening";
+  const orbClass = state === "building" ? "building" : state === "failed" ? "failed" : state === "done" ? "done" : "listening";
+  orbDot.className = `orb ${orbClass}`;
+  orbFeedback.textContent = text;
 }
 function log(text: string): void {
   const li = document.createElement("li");
@@ -46,10 +53,12 @@ function log(text: string): void {
 
 // --- rendering -------------------------------------------------------------
 const app = new Application();
-await app.init({ resizeTo: stageEl, background: 0x05070a, antialias: false });
+await app.init({ background: 0x05070a, antialias: false });
 stageEl.appendChild(app.canvas);
 const gfx = new Graphics();
 app.stage.addChild(gfx);
+app.stage.sortableChildren = true;
+gfx.zIndex = -100;
 
 // AI sprites (Muse Image sheets, chroma-keyed + sliced client-side). Frames:
 // 0 idle, 1-2 walk/run, 3 jump. Entities whose type names a subject get its
@@ -61,7 +70,25 @@ const framesBySubject = await loadSubjects({
 console.info(`[art] subjects loaded: ${Object.entries(framesBySubject).map(([k, v]) => `${k}=${v.length}`).join(" ")}`);
 const pendingArt = new Set<string>();
 const scenerySubjects = new Set<string>();
+let photoSeq = 0;
+const pendingPhotos = new Map<string, HTMLCanvasElement>();
 const spritePool = new Map<number, Sprite>();
+let camYSmooth: number | null = null;
+let camXSmooth: number | null = null;
+const layerOverride = new Map<number, number>();
+function subjectKeyFor(e: Entity): string | undefined {
+  const frames = framesFor(framesBySubject, e.type, e.type === "player");
+  if (frames.length < 1) return undefined;
+  return Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0];
+}
+function layerOf(e: Entity, subjectKey: string | undefined): number {
+  if (e.type === "player") return 9;
+  const override = layerOverride.get(e.id);
+  if (override !== undefined) return override;
+  if (subjectKey !== undefined && scenerySubjects.has(subjectKey)) return 0;
+  if (subjectKey !== undefined && subjectKey.startsWith("photo")) return 1;
+  return 2;
+}
 function spriteFor(id: number): Sprite {
   let s = spritePool.get(id);
   if (!s) {
@@ -218,6 +245,14 @@ function drawDigitize(e: Entity, x: number, y: number): void {
   gfx.rect(x, y, e.w, e.h).stroke({ color: 0xc8f6ff, alpha: 0.25 + 0.35 * pulse, width: 1.5 });
 }
 
+function drawHealthBar(e: Entity, x: number, y: number): void {
+  const health = (e as { health?: number }).health;
+  if (typeof health !== "number" || health <= 0 || health >= 100) return;
+  gfx.rect(x, y - 9, e.w, 4).fill({ color: 0x0b0e13, alpha: 0.7 });
+  const color = health > 50 ? 0x3fd06a : health > 25 ? 0xffc94d : 0xff5a4d;
+  gfx.rect(x, y - 9, e.w * health / 100, 4).fill(color);
+}
+
 function drawEntity(e: Entity, camX: number, camY: number): void {
   const x = e.x - camX;
   const y = e.y - camY;
@@ -225,7 +260,7 @@ function drawEntity(e: Entity, camX: number, camY: number): void {
   const H = app.screen.height;
   if (x + e.w < -40 || x > W + 40 || y + e.h < -40 || y > H + 40) return; // off-screen cull
   const t = e.type;
-  if (framesFor(framesBySubject, t, t === "player").length >= 2) return; // sprite pass below
+  if (framesFor(framesBySubject, t, t === "player").length >= 1) return; // sprite pass below
   if (t !== "player") {
     for (const k of pendingArt) {
       if (t.includes(k)) { drawDigitize(e, x, y); return; }
@@ -249,11 +284,139 @@ function drawEntity(e: Entity, camX: number, camY: number): void {
   gfx.rect(x, y, e.w, e.h).fill(e.color);
 }
 
+// --- drawer + radial menu ---------------------------------------------------
+const layoutEl = $("#app");
+const drawerToggle = $<HTMLButtonElement>("#drawer-toggle");
+const radialMenu = $("#radial-menu");
+const radialCenter = $("#radial-center");
+let radialTargetId: number | null = null;
+function desiredCamXFor(w: number): number {
+  const playerForCam = world.entities.find((e) => e.type === "player");
+  return playerForCam ? playerForCam.x + playerForCam.w / 2 - w * 0.38 : world.camera.x;
+}
+function desiredCamYFor(h: number): number {
+  const playerForCam = world.entities.find((e) => e.type === "player");
+  return playerForCam ? playerForCam.y + playerForCam.h - h * 0.90 : world.camera.y;
+}
+function fitRenderer(): void {
+  const rect = stageWrapEl.getBoundingClientRect();
+  const w = Math.max(320, Math.floor(rect.width));
+  const h = Math.max(240, Math.floor(rect.height));
+  const sizeChanged = app.screen.width !== w || app.screen.height !== h;
+  if (sizeChanged) app.renderer.resize(w, h);
+  app.canvas.style.width = `${w}px`;
+  app.canvas.style.height = `${h}px`;
+  if (sizeChanged) {
+    camXSmooth = desiredCamXFor(w);
+    camYSmooth = desiredCamYFor(h);
+  }
+}
+fitRenderer();
+drawerToggle.addEventListener("click", () => {
+  const hidden = layoutEl.classList.toggle("drawer-hidden");
+  drawerToggle.textContent = hidden ? "«" : "»";
+  drawerToggle.setAttribute("aria-expanded", String(!hidden));
+  fitRenderer();
+  setTimeout(fitRenderer, 260);
+  setTimeout(fitRenderer, 400);
+});
+addEventListener("resize", fitRenderer);
+function closeRadialMenu(): void {
+  radialTargetId = null;
+  radialMenu.hidden = true;
+}
+function openRadialMenu(e: Entity): void {
+  radialTargetId = e.id;
+  radialCenter.textContent = e.type;
+  radialMenu.style.left = `${e.x - (camXSmooth ?? world.camera.x) + e.w / 2}px`;
+  radialMenu.style.top = `${e.y - (camYSmooth ?? world.camera.y) + e.h / 2}px`;
+  radialMenu.hidden = false;
+}
+function entityAt(wx: number, wy: number): Entity | undefined {
+  const candidates = world.entities
+    .map((e, index) => ({ e, index }))
+    .filter(({ e }) => {
+      const t = e.type.toLowerCase();
+      if (t.includes("ground") || t.includes("platform")) return false;
+      return wx >= e.x - 4 && wx <= e.x + e.w + 4 && wy >= e.y - 4 && wy <= e.y + e.h + 4;
+    });
+  candidates.sort((a, b) => {
+    const playerDiff = Number(b.e.type === "player") - Number(a.e.type === "player");
+    if (playerDiff !== 0) return playerDiff;
+    const layerDiff = layerOf(b.e, subjectKeyFor(b.e)) - layerOf(a.e, subjectKeyFor(a.e));
+    if (layerDiff !== 0) return layerDiff;
+    return b.index - a.index;
+  });
+  return candidates[0]?.e;
+}
+let canvasDown: { x: number; y: number } | null = null;
+app.canvas.addEventListener("pointerdown", (ev) => { canvasDown = { x: ev.clientX, y: ev.clientY }; });
+app.canvas.addEventListener("pointerup", (ev) => {
+  if (!canvasDown) return;
+  const moved = Math.hypot(ev.clientX - canvasDown.x, ev.clientY - canvasDown.y);
+  canvasDown = null;
+  if (moved > 6) return;
+  const rect = app.canvas.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
+  const sx = (ev.clientX - rect.left) * (app.screen.width / rect.width);
+  const sy = (ev.clientY - rect.top) * (app.screen.height / rect.height);
+  const hit = entityAt(sx + (camXSmooth ?? world.camera.x), sy + (camYSmooth ?? world.camera.y));
+  if (hit) openRadialMenu(hit);
+  else closeRadialMenu();
+});
+document.addEventListener("pointerdown", (ev) => {
+  if (radialTargetId === null) return;
+  const target = ev.target as Node | null;
+  if (target && radialMenu.contains(target)) return;
+  if (target === app.canvas) return;
+  closeRadialMenu();
+});
+addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeRadialMenu(); });
+document.querySelectorAll<HTMLButtonElement>("#radial-menu [data-action]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    if (radialTargetId === null) return;
+    const e = world.entities.find((en) => en.id === radialTargetId);
+    if (!e) { closeRadialMenu(); return; }
+    const action = btn.dataset.action;
+    if (action === "bigger" || action === "smaller") {
+      const factor = action === "bigger" ? 1.15 : 0.87;
+      const nw = Math.min(420, Math.max(10, e.w * factor));
+      const nh = Math.min(420, Math.max(10, e.h * factor));
+      e.x -= (nw - e.w) / 2;
+      e.y -= (nh - e.h);
+      e.w = nw; e.h = nh;
+    } else if (action === "front") {
+      layerOverride.set(e.id, 5);
+    } else if (action === "back") {
+      layerOverride.set(e.id, -1);
+    } else if (action === "remove") {
+      world.despawn(e.id);
+      layerOverride.delete(e.id);
+      closeRadialMenu();
+    }
+  });
+});
+
 function render(): void {
   gfx.clear();
-  const { x: camX, y: camY } = world.camera;
   const W = app.screen.width;
   const H = app.screen.height;
+  const desiredCamX = desiredCamXFor(W);
+  if (camXSmooth === null) camXSmooth = desiredCamX;
+  else camXSmooth += (desiredCamX - camXSmooth) * 0.12;
+  const camX = camXSmooth;
+  const desiredCamY = desiredCamYFor(H);
+  if (camYSmooth === null) camYSmooth = desiredCamY;
+  else camYSmooth += (desiredCamY - camYSmooth) * 0.12;
+  // Radial menu follows its entity; close if it is gone.
+  if (radialTargetId !== null) {
+    const target = world.entities.find((e) => e.id === radialTargetId);
+    if (!target) closeRadialMenu();
+    else {
+      radialMenu.style.left = `${target.x - camX + target.w / 2}px`;
+      radialMenu.style.top = `${target.y - camYSmooth + target.h / 2}px`;
+    }
+  }
   // vertical sky gradient via stacked bands
   const bandH = Math.ceil(H / SKY_BANDS);
   for (let i = 0; i < SKY_BANDS; i++) {
@@ -269,16 +432,16 @@ function render(): void {
   gfx.circle(W - 70, 60, 17).fill(0xf2ead0);
   gfx.circle(W - 76, 54, 14).fill(SKY[1]);
   // far hill silhouettes
-  const horizon = H * 0.62 - camY * 0.1;
+  const horizon = H * 0.62 - camYSmooth * 0.1;
   drawRidge(ridgeFar, camX, 0.3, horizon, 0, 0x0a1418);
   drawRidge(ridgeNear, camX, 0.55, horizon + 34, 1, 0x0d1b20);
   // solids-first, reuse scratch array
   order.length = 0;
   for (let i = 0; i < world.entities.length; i++) order.push(world.entities[i]);
   order.sort((a, b) => Number(b.solid) - Number(a.solid));
-  for (let i = 0; i < order.length; i++) drawEntity(order[i], camX, camY);
+  for (let i = 0; i < order.length; i++) drawEntity(order[i], camX, camYSmooth);
   for (const p of world.particles) {
-    gfx.rect(p.x - camX, p.y - camY, p.size, p.size).fill(p.color);
+    gfx.rect(p.x - camX, p.y - camYSmooth, p.size, p.size).fill(p.color);
   }
   // Sprite primaries: per owner+subject every entity at >=30% of the group's
   // max area gets the sprite; small assembled sub-parts stay rects under it.
@@ -288,7 +451,7 @@ function render(): void {
     const groups = new Map<string, { maxArea: number; items: { id: number; area: number }[] }>();
     for (const e of world.entities) {
       const frames = framesFor(framesBySubject, e.type, e.type === "player");
-      if (frames.length < 2) continue;
+      if (frames.length < 1) continue;
       const subject = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0] ?? e.type;
       const gk = `${e.owner}|${subject}`;
       const area = e.w * e.h;
@@ -303,26 +466,40 @@ function render(): void {
       }
     }
   }
+  const spriteDraw: { e: Entity; frame: Texture; subjectKey: string | undefined }[] = [];
   for (const e of world.entities) {
     const frames = framesFor(framesBySubject, e.type, e.type === "player");
-    if (frames.length < 2 || !primaries.has(e.id)) continue;
+    if (frames.length < 1 || !primaries.has(e.id)) continue;
     seen.add(e.id);
     const moving = Math.abs(e.vx) > 5;
     const subjectKey = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0];
-    const frame = subjectKey !== undefined && scenerySubjects.has(subjectKey) ? frames[e.id % frames.length]
+    const frame = frames.length === 1 ? frames[0]
+      : subjectKey !== undefined && scenerySubjects.has(subjectKey) ? frames[e.id % frames.length]
       : !e.onGround && e.gravityScale === 0 && frames.length >= 2 ? frames[Math.floor(world.tickCount / 5) % frames.length]
       : frames.length >= 4 && !e.onGround ? frames[3]
       : moving ? frames[1 + Math.floor(world.tickCount / 8) % Math.min(2, frames.length - 1)]
       : frames[0];
+    spriteDraw.push({ e, frame, subjectKey });
+  }
+  spriteDraw.sort((a, b) => layerOf(a.e, a.subjectKey) - layerOf(b.e, b.subjectKey));
+  for (const { e, frame, subjectKey } of spriteDraw) {
     const s = spriteFor(e.id);
-    const targetH = e.type === "player" ? 56 : Math.max(34, e.h * 1.7);
+    const targetH = e.type === "player" ? 56 : Math.min(240, Math.max(34, e.h * 1.5));
     const scale = targetH / frame.height;
     s.texture = frame;
     s.scale.set(scale * e.facing, scale);
-    s.position.set(e.x - camX + e.w / 2, e.y - camY + e.h + 2);
+    s.position.set(e.x - camX + e.w / 2, e.y - camYSmooth + e.h + 2);
+    s.zIndex = layerOf(e, subjectKey);
     s.visible = true;
   }
   for (const [id, s] of spritePool) if (!seen.has(id)) s.visible = false;
+  // health bars: single pass after rect and sprite passes (player included)
+  for (const e of world.entities) {
+    const x = e.x - camX;
+    const y = e.y - camYSmooth;
+    if (x + e.w < -40 || x > W + 40 || y + e.h < -40 || y > H + 40) continue;
+    drawHealthBar(e, x, y);
+  }
   // subtle vignette: 4 edge rects
   const V = 26;
   gfx.rect(0, 0, W, V).fill({ color: 0x000000, alpha: 0.28 });
@@ -334,11 +511,16 @@ function render(): void {
 // fixed-step loop: sim never reads wall-clock, accumulator only paces steps
 let last = performance.now();
 let acc = 0;
+let noPlayerTicks = 0;
 function frame(now: number): void {
   acc += Math.min(100, now - last);
   last = now;
   const stepMs = SIM.dt * 1000;
-  while (acc >= stepMs) { world.step(); acc -= stepMs; }
+  while (acc >= stepMs) {
+    world.step(); acc -= stepMs;
+    if (!loader.has("player") || world.entities.some((e) => e.type === "player")) noPlayerTicks = 0;
+    else if (++noPlayerTicks > 90) { noPlayerTicks = 0; loadLocal(playerMod); say("Knocked out — you're back in!", "done"); }
+  }
   render();
   requestAnimationFrame(frame);
 }
@@ -347,7 +529,7 @@ requestAnimationFrame(frame);
 // --- input -------------------------------------------------------------------
 const keys = new Set<string>();
 addEventListener("keydown", (e) => {
-  if (e.target === inputEl) return;
+  if (e.target === inputEl || e.target === orbInputEl) return;
   keys.add(e.code);
   syncInput();
   if (["ArrowUp", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
@@ -419,9 +601,17 @@ function loadLocal(def: ModDefinition): void {
   log(`loaded ${def.id}`);
   renderMods();
 }
+let starterAutoLoaded = false;
+function autoLoadStarterOnce(): void {
+  if (starterAutoLoaded) return;
+  starterAutoLoaded = true;
+  if (loader.list().length === 0 && world.entities.length === 0) {
+    loadLocal(playerMod);
+    loadLocal(groundMod);
+  }
+}
 function handleLocal(text: string): boolean {
   const t = text.toLowerCase();
-  if (t.includes("starter")) { loadLocal(playerMod); loadLocal(groundMod); return true; }
   if (t.includes("undo") || t.startsWith("remove")) {
     const mods = loader.list();
     const last = mods[mods.length - 1];
@@ -429,14 +619,21 @@ function handleLocal(text: string): boolean {
     else say("Nothing to undo.");
     return true;
   }
-  if (t.includes("player") || t.includes("ninja")) { loadLocal(playerMod); return true; }
-  if (t.includes("ground") || t.includes("platform")) { loadLocal(groundMod); return true; }
-  if (t.includes("enem") || t.includes("walker") || t.includes("turtle")) { loadLocal(enemyMod); return true; }
-  if (t.includes("rain")) { loadLocal(rainMod); return true; }
-  if (t.includes("coin") || t.includes("score")) { loadLocal(coinsMod); return true; }
-  if (t.includes("moving platform")) { loadLocal(movingPlatformMod); return true; }
-  if (t.includes("arrow") || t.includes("shoot")) { loadLocal(fireArrowMod); return true; }
-  if (t.includes("chicken")) { loadLocal(chickenMod); return true; }
+  let n = t.trim().replace(/[.!?,;:]+$/, "").trim().replace(/\s+/g, " ");
+  n = n.replace(/^(?:add|make|create|spawn|build|give|put)\s+/, "");
+  while (/^(?:a|an|the)\s+/.test(n)) n = n.replace(/^(?:a|an|the)\s+/, "");
+  // Exact matches only: anything with extra descriptive words falls through to the server.
+  // Extra aliases are the normalized forms of the index.html chip commands, which must keep working:
+  // "add some ground" -> "some ground", "make it rain" -> "it rain", "shoot fire arrows" (unchanged).
+  if (n === "starter world" || n === "starter") { loadLocal(playerMod); loadLocal(groundMod); return true; }
+  if (n === "player" || n === "ninja") { loadLocal(playerMod); return true; }
+  if (n === "ground" || n === "some ground") { loadLocal(groundMod); return true; }
+  if (n === "enemy" || n === "enemies" || n === "walker" || n === "walkers" || n === "turtle") { loadLocal(enemyMod); return true; }
+  if (n === "rain" || n === "it rain") { loadLocal(rainMod); return true; }
+  if (n === "coin" || n === "coins") { loadLocal(coinsMod); return true; }
+  if (n === "moving platform") { loadLocal(movingPlatformMod); return true; }
+  if (n === "fire arrow" || n === "fire arrows" || n === "arrow" || n === "arrows" || n === "shoot fire arrows") { loadLocal(fireArrowMod); return true; }
+  if (n === "chicken") { loadLocal(chickenMod); return true; }
   if (t.includes("jump higher")) { tweak("player", "jump", 880, "Jump raised."); return true; }
   if (t.includes("faster")) {
     if (loader.has("enemies")) tweak("enemies", "speed", 140, "Walkers sped up.");
@@ -480,6 +677,587 @@ function loadArtWithRetry(key: string, url: string, scenery = false): void {
   };
   attempt(url, false);
 }
+
+// --- camera capture ----------------------------------------------------------
+// "Hold an object up to the camera": capture/upload -> pending capture ->
+// send {kind:"photoFind"} -> server segment box drawn as green box ->
+// Bring cuts locally (SAM box or click box) -> photoBring/photoBringLocal.
+const cameraBtn = $<HTMLButtonElement>("#camera-btn");
+const cameraModal = $("#camera-modal");
+const cameraVideo = $<HTMLVideoElement>("#camera-video");
+const cameraNoCam = $("#camera-nocam");
+const cameraLabel = $<HTMLInputElement>("#camera-label");
+const cameraPixel = document.querySelector<HTMLInputElement>("#camera-pixel");
+const cameraPreview = $<HTMLCanvasElement>("#camera-preview");
+const cameraBg = $<HTMLButtonElement>("#camera-bg");
+const cameraPreviewWrap = $("#camera-preview-wrap");
+const cameraBoxEl = $("#camera-box");
+const cameraDot = $("#camera-dot");
+const cameraStatus = $("#camera-status");
+const cameraFind = $<HTMLButtonElement>("#camera-find");
+const cameraConfirm = $<HTMLButtonElement>("#camera-confirm");
+const cameraUpload = $<HTMLInputElement>("#camera-upload");
+let cameraStream: MediaStream | null = null;
+let pendingCapture: { canvas: HTMLCanvasElement; dataUrl: string } | null = null;
+let currentKey: string | null = null;
+let foundBox: SegmentBox | null = null;
+let clickPoint: { fx: number; fy: number } | null = null;
+let bgCanvas: HTMLCanvasElement | null = null;
+type MaskInfo = { mask: Uint8Array; w: number; h: number; count: number };
+let diffComponents: MaskInfo[] = [];
+let selectedComponent = -1;
+let wandMask: MaskInfo | null = null;
+let lastWandPoint: { fx: number; fy: number } | null = null;
+const wandSensEl = document.querySelector<HTMLInputElement>("#wand-sens");
+
+function setCameraStatus(text: string): void {
+  cameraStatus.textContent = text;
+  cameraStatus.hidden = text.length === 0;
+}
+function updateCameraConfirm(): void {
+  cameraConfirm.disabled = !(
+    (diffComponents.length > 0 && selectedComponent >= 0) ||
+    (wandMask !== null && wandMask.count >= 300) ||
+    foundBox !== null || clickPoint !== null
+  );
+}
+function clearDetection(): void {
+  foundBox = null;
+  clickPoint = null;
+  diffComponents = [];
+  selectedComponent = -1;
+  wandMask = null;
+  lastWandPoint = null;
+  cameraBoxEl.hidden = true;
+  cameraDot.hidden = true;
+  updateCameraConfirm();
+}
+function redrawPreview(): void {
+  if (!pendingCapture) return;
+  const src = pendingCapture.canvas;
+  if (cameraPreview.width !== src.width) cameraPreview.width = src.width;
+  if (cameraPreview.height !== src.height) cameraPreview.height = src.height;
+  const ctx = cameraPreview.getContext("2d");
+  if (!ctx) return;
+  ctx.clearRect(0, 0, cameraPreview.width, cameraPreview.height);
+  ctx.drawImage(src, 0, 0);
+  const drawTint = (m: MaskInfo, alpha: number): void => {
+    const tmp = document.createElement("canvas");
+    tmp.width = m.w; tmp.height = m.h;
+    const tctx = tmp.getContext("2d");
+    if (!tctx) return;
+    const img = tctx.createImageData(m.w, m.h);
+    for (let p = 0; p < m.w * m.h; p++) {
+      if (!m.mask[p]) continue;
+      img.data[p * 4] = 63; img.data[p * 4 + 1] = 208; img.data[p * 4 + 2] = 106;
+      img.data[p * 4 + 3] = Math.round(alpha * 255);
+    }
+    tctx.putImageData(img, 0, 0);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(tmp, 0, 0, cameraPreview.width, cameraPreview.height);
+    ctx.restore();
+  };
+  if (diffComponents.length > 0) {
+    for (let i = 0; i < diffComponents.length; i++) drawTint(diffComponents[i], i === selectedComponent ? 0.65 : 0.45);
+  } else if (wandMask) {
+    drawTint(wandMask, 0.45);
+  }
+}
+function workImage(src: HTMLCanvasElement, workW: number): { w: number; h: number; data: Uint8ClampedArray } | null {
+  const w = Math.min(workW, src.width);
+  const h = Math.max(1, Math.round(src.height * (w / src.width)));
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.drawImage(src, 0, 0, w, h);
+  return { w, h, data: ctx.getImageData(0, 0, w, h).data };
+}
+function computeDiff(): void {
+  if (!pendingCapture || !bgCanvas) return;
+  const src = pendingCapture.canvas;
+  if (bgCanvas.width !== src.width || bgCanvas.height !== src.height) {
+    setCameraStatus("Background is a different size — capture the empty background again.");
+    return;
+  }
+  const a = workImage(src, 384);
+  const b = workImage(bgCanvas, 384);
+  if (!a || !b || a.w !== b.w || a.h !== b.h) return;
+  const { w, h } = a;
+  const total = w * h;
+  const changed = new Uint8Array(total);
+  for (let p = 0; p < total; p++) {
+    const o = p * 4;
+    const d = Math.max(Math.abs(a.data[o] - b.data[o]), Math.abs(a.data[o + 1] - b.data[o + 1]), Math.abs(a.data[o + 2] - b.data[o + 2]));
+    if (d > 40) changed[p] = 1;
+  }
+  const visited = new Uint8Array(total);
+  const queue = new Int32Array(total);
+  const comps: MaskInfo[] = [];
+  const minSize = Math.ceil(total * 0.0015);
+  for (let s = 0; s < total; s++) {
+    if (!changed[s] || visited[s]) continue;
+    let qh = 0, qt = 0;
+    queue[qt++] = s; visited[s] = 1;
+    const pixels: number[] = [];
+    while (qh < qt) {
+      const p = queue[qh++];
+      pixels.push(p);
+      const x = p % w; const y = (p - x) / w;
+      if (x > 0 && changed[p - 1] && !visited[p - 1]) { visited[p - 1] = 1; queue[qt++] = p - 1; }
+      if (x < w - 1 && changed[p + 1] && !visited[p + 1]) { visited[p + 1] = 1; queue[qt++] = p + 1; }
+      if (y > 0 && changed[p - w] && !visited[p - w]) { visited[p - w] = 1; queue[qt++] = p - w; }
+      if (y < h - 1 && changed[p + w] && !visited[p + w]) { visited[p + w] = 1; queue[qt++] = p + w; }
+    }
+    if (pixels.length >= minSize) {
+      const mask = new Uint8Array(total);
+      for (const p of pixels) mask[p] = 1;
+      comps.push({ mask, w, h, count: pixels.length });
+    }
+  }
+  comps.sort((x, y) => y.count - x.count);
+  diffComponents = comps.slice(0, 6);
+  selectedComponent = diffComponents.length > 0 ? 0 : -1;
+  redrawPreview();
+  updateCameraConfirm();
+  if (diffComponents.length > 0) {
+    setCameraStatus(`Found ${diffComponents.length} new thing(s). Click yours if I picked wrong, then Bring it in.`);
+  }
+}
+function computeWand(fx: number, fy: number): void {
+  if (!pendingCapture) return;
+  lastWandPoint = { fx, fy };
+  const sens = Math.min(60, Math.max(18, Number(wandSensEl?.value ?? 40) || 40));
+  const src = pendingCapture.canvas;
+  let workW = src.width;
+  if (src.width * src.height > 1_500_000) workW = 384;
+  const img = workImage(src, workW);
+  if (!img) return;
+  const { w, h, data } = img;
+  const total = w * h;
+  const sx = Math.min(w - 1, Math.max(0, Math.floor(fx * w)));
+  const sy = Math.min(h - 1, Math.max(0, Math.floor(fy * h)));
+  const seed = sy * w + sx;
+  const so = seed * 4;
+  const sr = data[so], sg = data[so + 1], sb = data[so + 2];
+  const mask = new Uint8Array(total);
+  const visited = new Uint8Array(total);
+  const queue = new Int32Array(total);
+  let qh = 0, qt = 0, count = 0;
+  const cap = Math.floor(total * 0.6);
+  queue[qt++] = seed; visited[seed] = 1; mask[seed] = 1; count = 1;
+  const distTo = (o: number, r: number, g: number, b: number): number => Math.max(Math.abs(data[o] - r), Math.abs(data[o + 1] - g), Math.abs(data[o + 2] - b));
+  while (qh < qt && count < cap) {
+    const p = queue[qh++];
+    const po = p * 4;
+    const pr = data[po], pg = data[po + 1], pb = data[po + 2];
+    const x = p % w; const y = (p - x) / w;
+    const neighbors = [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, y > 0 ? p - w : -1, y < h - 1 ? p + w : -1];
+    for (const n of neighbors) {
+      if (n < 0 || visited[n]) continue;
+      visited[n] = 1;
+      const o = n * 4;
+      const dSeed = distTo(o, sr, sg, sb);
+      const dNeighbor = distTo(o, pr, pg, pb);
+      if (dSeed < sens && (dNeighbor < 10 || dSeed < 22)) {
+        mask[n] = 1; count++;
+        queue[qt++] = n;
+        if (count >= cap) break;
+      }
+    }
+  }
+  // Erode by one pixel (4-neighbor) before tinting/using.
+  const eroded = new Uint8Array(total);
+  let erodedCount = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = y * w + x;
+      if (!mask[p]) continue;
+      if (x <= 0 || x >= w - 1 || y <= 0 || y >= h - 1) continue;
+      if (mask[p - 1] && mask[p + 1] && mask[p - w] && mask[p + w]) { eroded[p] = 1; erodedCount++; }
+    }
+  }
+  wandMask = { mask: eroded, w, h, count: erodedCount };
+  count = erodedCount;
+  redrawPreview();
+  const tip = cameraStream && !bgCanvas ? " Tip: 'Capture empty background' first gives the cleanest cut." : "";
+  if (count < 300) {
+    setCameraStatus("That highlighted almost nothing — try the background method: capture the empty scene first." + tip);
+  } else {
+    setCameraStatus("Highlighted your object — Bring it in, or click again to retry." + tip);
+  }
+  updateCameraConfirm();
+}
+function currentPrompt(): string {
+  return cameraLabel.value.trim() || "object";
+}
+function sendPhotoFind(): void {
+  if (!currentKey || !pendingCapture) return;
+  send({ kind: "photoFind", key: currentKey, image: pendingCapture.dataUrl, prompt: currentPrompt() } as unknown as ClientMsg);
+}
+
+type SegmentBox = { x: number; y: number; w: number; h: number };
+
+function normalizeBox(raw: unknown): SegmentBox | null {
+  if (!raw || typeof raw !== "object") return null;
+  const b = raw as Record<string, unknown>;
+  const num = (...vals: unknown[]): number | null => {
+    for (const v of vals) if (typeof v === "number" && Number.isFinite(v)) return v;
+    return null;
+  };
+  if (Array.isArray(raw) && raw.length >= 4) {
+    const [x, y, w, h] = raw as unknown[];
+    if ([x, y, w, h].every((v) => typeof v === "number")) return { x: x as number, y: y as number, w: w as number, h: h as number };
+  }
+  const x = num(b.x, b.left, b.x0, b.minX);
+  const y = num(b.y, b.top, b.y0, b.minY);
+  let w = num(b.w, b.width);
+  let h = num(b.h, b.height);
+  if (w === null || h === null) {
+    const x1 = num(b.x1, b.right, b.maxX);
+    const y1 = num(b.y1, b.bottom, b.maxY);
+    if (x !== null && x1 !== null) w = x1 - x;
+    if (y !== null && y1 !== null) h = y1 - y;
+  }
+  if (x === null || y === null || w === null || h === null) return null;
+  return { x, y, w, h };
+}
+
+function stopCamera(): void {
+  if (cameraStream) {
+    for (const track of cameraStream.getTracks()) track.stop();
+    cameraStream = null;
+  }
+  cameraVideo.srcObject = null;
+}
+function closeCameraModal(clearBg = true): void {
+  stopCamera();
+  cameraModal.hidden = true;
+  if (clearBg) bgCanvas = null;
+}
+function pixelateCut(cut: HTMLCanvasElement): { canvas: HTMLCanvasElement; pixelInfo: string } {
+  const pixelOn = (cameraPixel?.checked ?? (document.querySelector("#camera-pixel") as HTMLInputElement | null)?.checked) !== false;
+  if (!pixelOn) return { canvas: cut, pixelInfo: "pixel: off" };
+  const GH = 56;
+  const GW = Math.max(8, Math.round(cut.width * GH / cut.height));
+  const small = document.createElement("canvas");
+  small.width = GW; small.height = GH;
+  const sctx = small.getContext("2d", { willReadFrequently: true });
+  if (!sctx) return { canvas: cut, pixelInfo: "pixel: off" };
+  sctx.imageSmoothingEnabled = true;
+  sctx.drawImage(cut, 0, 0, GW, GH);
+  const simg = sctx.getImageData(0, 0, GW, GH);
+  const spx = simg.data;
+  for (let i = 0; i < spx.length; i += 4) {
+    if (spx[i + 3] < 128) spx[i + 3] = 0;
+    else {
+      spx[i + 3] = 255;
+      spx[i] = Math.min(255, Math.round(spx[i] / 36) * 36);
+      spx[i + 1] = Math.min(255, Math.round(spx[i + 1] / 36) * 36);
+      spx[i + 2] = Math.min(255, Math.round(spx[i + 2] / 36) * 36);
+    }
+  }
+  const alpha = new Uint8Array(GW * GH);
+  for (let p = 0; p < GW * GH; p++) alpha[p] = spx[p * 4 + 3];
+  for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
+    const p = y * GW + x;
+    if (alpha[p] === 0) continue;
+    const up = y > 0 ? alpha[p - GW] : 0, down = y < GH - 1 ? alpha[p + GW] : 0, left = x > 0 ? alpha[p - 1] : 0, right = x < GW - 1 ? alpha[p + 1] : 0;
+    if (up === 0 && down === 0 && left === 0 && right === 0) spx[p * 4 + 3] = 0;
+  }
+  sctx.putImageData(simg, 0, 0);
+  return { canvas: small, pixelInfo: `pixel: on ${GW}x${GH}` };
+}
+function storeCutTexture(key: string, cut: HTMLCanvasElement, texCanvas: HTMLCanvasElement): void {
+  const tex = Texture.from(texCanvas);
+  if (texCanvas !== cut) { try { (tex.source as unknown as { scaleMode: string }).scaleMode = "nearest"; } catch { /* ignore */ } }
+  framesBySubject[key] = [tex];
+  pendingArt.delete(key);
+  pendingPhotos.delete(key);
+  log(`photo object in game: ${key}`);
+}
+function maskCutTexture(key: string, src: HTMLCanvasElement, m: MaskInfo, mode: "diff" | "wand"): HTMLCanvasElement | null {
+  let minX = m.w, minY = m.h, maxX = -1, maxY = -1;
+  for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) if (m.mask[y * m.w + x]) {
+    if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
+  }
+  if (maxX < minX || maxY < minY) return null;
+  const scaleX = src.width / m.w, scaleY = src.height / m.h;
+  const x0 = Math.max(0, Math.floor(minX * scaleX)), y0 = Math.max(0, Math.floor(minY * scaleY));
+  const x1 = Math.min(src.width, Math.ceil((maxX + 1) * scaleX)), y1 = Math.min(src.height, Math.ceil((maxY + 1) * scaleY));
+  const cw = x1 - x0, ch = y1 - y0;
+  if (cw <= 0 || ch <= 0) return null;
+  const cut = document.createElement("canvas");
+  cut.width = cw; cut.height = ch;
+  const cctx = cut.getContext("2d", { willReadFrequently: true });
+  if (!cctx) return null;
+  cctx.drawImage(src, x0, y0, cw, ch, 0, 0, cw, ch);
+  const img = cctx.getImageData(0, 0, cw, ch);
+  for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+    const wx = Math.min(m.w - 1, Math.floor((x0 + x) * m.w / src.width));
+    const wy = Math.min(m.h - 1, Math.floor((y0 + y) * m.h / src.height));
+    if (!m.mask[wy * m.w + wx]) img.data[(y * cw + x) * 4 + 3] = 0;
+  }
+  cctx.putImageData(img, 0, 0);
+  const { canvas: texCanvas, pixelInfo } = pixelateCut(cut);
+  console.info(`[photo] key=${key} mode=${mode} component pixels=${m.count} mask=${m.w}x${m.h} src=${src.width}x${src.height} crop=${cw}x${ch} cut=${cut.width}x${cut.height} ${pixelInfo}`);
+  storeCutTexture(key, cut, texCanvas);
+  return texCanvas;
+}
+async function openCameraModal(): Promise<void> {
+  pendingCapture = null;
+  currentKey = null;
+  bgCanvas = null;
+  clearDetection();
+  setCameraStatus("");
+  cameraPreviewWrap.hidden = true;
+  cameraPreview.width = 1; cameraPreview.height = 1;
+  cameraPreview.getContext("2d")?.clearRect(0, 0, 1, 1);
+  cameraConfirm.hidden = true;
+  cameraConfirm.disabled = true;
+  cameraFind.hidden = true;
+  cameraBg.hidden = true;
+  cameraNoCam.hidden = true;
+  cameraVideo.hidden = false;
+  cameraModal.hidden = false;
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error("no camera API");
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    cameraVideo.srcObject = cameraStream;
+  } catch {
+    stopCamera();
+    cameraVideo.hidden = true;
+    cameraNoCam.hidden = false;
+  }
+}
+function setPendingCapture(source: CanvasImageSource, sw: number, sh: number): void {
+  if (sw <= 0 || sh <= 0) return;
+  const scale = Math.min(1, 768 / Math.max(sw, sh));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(sw * scale));
+  canvas.height = Math.max(1, Math.round(sh * scale));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+  if (currentKey !== null && pendingPhotos.has(currentKey)) pendingPhotos.delete(currentKey);
+  currentKey = `photo-${++photoSeq}`;
+  pendingPhotos.set(currentKey, canvas);
+  pendingCapture = { canvas, dataUrl };
+  clearDetection();
+  cameraPreviewWrap.hidden = false;
+  cameraConfirm.hidden = false;
+  cameraConfirm.disabled = true;
+  cameraFind.hidden = false;
+  cameraBg.hidden = false;
+  redrawPreview();
+  if (bgCanvas) computeDiff();
+  if (diffComponents.length === 0) setCameraStatus("Looking for it...");
+  sendPhotoFind();
+}
+function cutoutTexture(key: string, src: HTMLCanvasElement, box: SegmentBox): HTMLCanvasElement | null {
+  // Map the 1600-space box to canvas pixels, pad 5%, clamp to canvas.
+  const sx = src.width / 1600;
+  const sy = src.height / 1600;
+  const bw = box.w * sx;
+  const bh = box.h * sy;
+  const x0 = Math.max(0, Math.floor(box.x * sx - bw * 0.05));
+  const y0 = Math.max(0, Math.floor(box.y * sy - bh * 0.05));
+  const x1 = Math.min(src.width, Math.ceil(box.x * sx + bw + bw * 0.05));
+  const y1 = Math.min(src.height, Math.ceil(box.y * sy + bh + bh * 0.05));
+  const cw = x1 - x0;
+  const ch = y1 - y0;
+  if (cw <= 0 || ch <= 0) return null;
+  const crop = document.createElement("canvas");
+  crop.width = cw;
+  crop.height = ch;
+  const cctx = crop.getContext("2d", { willReadFrequently: true });
+  if (!cctx) return null;
+  cctx.drawImage(src, x0, y0, cw, ch, 0, 0, cw, ch);
+  const img = cctx.getImageData(0, 0, cw, ch);
+  const px = img.data;
+  // Background colour = average of the 4 crop corners.
+  const corners = [0, (cw - 1) * 4, (ch - 1) * cw * 4, ((ch - 1) * cw + cw - 1) * 4];
+  let br = 0, bg = 0, bb = 0;
+  for (const o of corners) { br += px[o]; bg += px[o + 1]; bb += px[o + 2]; }
+  br /= 4; bg /= 4; bb /= 4;
+  const dist = (i: number): number => Math.max(Math.abs(px[i] - br), Math.abs(px[i + 1] - bg), Math.abs(px[i + 2] - bb));
+  // Border-seeded flood fill: a pixel joins the background when its
+  // per-channel distance to the background colour is < 48.
+  const visited = new Uint8Array(cw * ch);
+  const queue = new Int32Array(cw * ch);
+  let qh = 0, qt = 0;
+  const push = (p: number): void => {
+    if (visited[p]) return;
+    visited[p] = 1;
+    if (dist(p * 4) < 48) queue[qt++] = p;
+  };
+  for (let x = 0; x < cw; x++) { push(x); push((ch - 1) * cw + x); }
+  for (let y = 0; y < ch; y++) { push(y * cw); push(y * cw + cw - 1); }
+  while (qh < qt) {
+    const p = queue[qh++];
+    px[p * 4 + 3] = 0;
+    const x = p % cw;
+    const y = (p - x) / cw;
+    if (x > 0) push(p - 1);
+    if (x < cw - 1) push(p + 1);
+    if (y > 0) push(p - cw);
+    if (y < ch - 1) push(p + cw);
+  }
+  cctx.putImageData(img, 0, 0);
+  // Trim fully-transparent borders.
+  let minX = cw, minY = ch, maxX = -1, maxY = -1;
+  for (let y = 0; y < ch; y++) {
+    for (let x = 0; x < cw; x++) {
+      if (px[(y * cw + x) * 4 + 3] > 0) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < minX || maxY < minY) return null;
+  const cut = document.createElement("canvas");
+  cut.width = maxX - minX + 1;
+  cut.height = maxY - minY + 1;
+  cut.getContext("2d")!.drawImage(crop, minX, minY, cut.width, cut.height, 0, 0, cut.width, cut.height);
+  const { canvas: texCanvas, pixelInfo } = pixelateCut(cut);
+  console.info(`[photo] key=${key} box=${JSON.stringify(box)} src=${src.width}x${src.height} crop=${cw}x${ch} cut=${cut.width}x${cut.height} ${pixelInfo}`);
+  storeCutTexture(key, cut, texCanvas);
+  return texCanvas;
+}
+function handleSegment(key: string, rawBox: unknown): void {
+  if (key !== currentKey || cameraModal.hidden) return;
+  const box = rawBox === null ? null : normalizeBox(rawBox);
+  if (box === null) {
+    foundBox = null;
+    cameraBoxEl.hidden = true;
+    if (diffComponents.length === 0 && !wandMask) setCameraStatus("Couldn't find it. Get closer, use a plain background, or click the object in the photo.");
+    updateCameraConfirm();
+    return;
+  }
+  foundBox = box;
+  cameraBoxEl.style.left = `${box.x / 16}%`;
+  cameraBoxEl.style.top = `${box.y / 16}%`;
+  cameraBoxEl.style.width = `${box.w / 16}%`;
+  cameraBoxEl.style.height = `${box.h / 16}%`;
+  cameraBoxEl.hidden = false;
+  if (diffComponents.length === 0 && !wandMask) setCameraStatus("Found it — the green box is what enters the game.");
+  updateCameraConfirm();
+}
+cameraBtn.addEventListener("click", () => { void openCameraModal(); });
+$("#camera-cancel").addEventListener("click", () => closeCameraModal());
+cameraModal.addEventListener("click", (e) => { if (e.target === cameraModal) closeCameraModal(); });
+$("#camera-capture").addEventListener("click", () => {
+  if (cameraVideo.videoWidth > 0) setPendingCapture(cameraVideo, cameraVideo.videoWidth, cameraVideo.videoHeight);
+});
+$("#camera-upload-btn").addEventListener("click", () => cameraUpload.click());
+cameraUpload.addEventListener("change", () => {
+  const file = cameraUpload.files?.[0];
+  cameraUpload.value = "";
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const image = new Image();
+  image.onload = () => {
+    setPendingCapture(image, image.naturalWidth, image.naturalHeight);
+    URL.revokeObjectURL(url);
+  };
+  image.onerror = () => URL.revokeObjectURL(url);
+  image.src = url;
+});
+cameraFind.addEventListener("click", () => {
+  if (!currentKey || !pendingCapture) return;
+  setCameraStatus("Looking for it...");
+  sendPhotoFind();
+});
+cameraBg.addEventListener("click", () => {
+  if (!pendingCapture) return;
+  const clone = document.createElement("canvas");
+  clone.width = pendingCapture.canvas.width; clone.height = pendingCapture.canvas.height;
+  clone.getContext("2d")?.drawImage(pendingCapture.canvas, 0, 0);
+  bgCanvas = clone;
+  diffComponents = []; selectedComponent = -1; wandMask = null;
+  foundBox = null; clickPoint = null; cameraBoxEl.hidden = true; cameraDot.hidden = true;
+  redrawPreview();
+  updateCameraConfirm();
+  setCameraStatus("Background remembered. Now hold the object up and Capture again.");
+});
+wandSensEl?.addEventListener("input", () => {
+  if (wandMask && lastWandPoint) computeWand(lastWandPoint.fx, lastWandPoint.fy);
+});
+cameraPreview.addEventListener("click", (e) => {
+  if (!pendingCapture) return;
+  const rect = cameraPreview.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
+  const fx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+  const fy = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+  if (diffComponents.length > 0) {
+    const m = diffComponents[0];
+    const wx = Math.min(m.w - 1, Math.max(0, Math.floor(fx * m.w)));
+    const wy = Math.min(m.h - 1, Math.max(0, Math.floor(fy * m.h)));
+    const idx = diffComponents.findIndex((c) => c.mask[wy * c.w + wx] === 1);
+    if (idx >= 0) {
+      selectedComponent = idx;
+      redrawPreview();
+      updateCameraConfirm();
+    }
+    return;
+  }
+  computeWand(fx, fy);
+});
+cameraConfirm.addEventListener("click", () => {
+  if (!pendingCapture || !currentKey) return;
+  const hasMask = (diffComponents.length > 0 && selectedComponent >= 0) || (wandMask !== null && wandMask.count >= 300);
+  if (!hasMask && foundBox === null && clickPoint === null) return;
+  const key = currentKey;
+  const canvas = pendingPhotos.get(key) ?? pendingCapture.canvas;
+  if (diffComponents.length > 0 && selectedComponent >= 0) {
+    const cut = maskCutTexture(key, canvas, diffComponents[selectedComponent], "diff");
+    if (!cut) { setCameraStatus("That spot cut out empty — try clicking the middle of the object."); return; }
+    pendingArt.add(key);
+    send({ kind: "photoBringLocal", key, prompt: currentPrompt(), aspect: cut.width / cut.height } as unknown as ClientMsg);
+    closeCameraModal(false);
+    return;
+  }
+  if (wandMask !== null && wandMask.count >= 300) {
+    const cut = maskCutTexture(key, canvas, wandMask, "wand");
+    if (!cut) { setCameraStatus("That spot cut out empty — try clicking the middle of the object."); return; }
+    pendingArt.add(key);
+    send({ kind: "photoBringLocal", key, prompt: currentPrompt(), aspect: cut.width / cut.height } as unknown as ClientMsg);
+    closeCameraModal(false);
+    return;
+  }
+  if (clickPoint !== null) {
+    const side = 0.55 * Math.min(canvas.width, canvas.height);
+    const cx = clickPoint.fx * canvas.width;
+    const cy = clickPoint.fy * canvas.height;
+    const clickBox: SegmentBox = {
+      x: (cx - side / 2) * (1600 / canvas.width),
+      y: (cy - side / 2) * (1600 / canvas.height),
+      w: side * (1600 / canvas.width),
+      h: side * (1600 / canvas.height),
+    };
+    const cut = cutoutTexture(key, canvas, clickBox);
+    if (!cut) {
+      setCameraStatus("That spot cut out empty — try clicking the middle of the object.");
+      return;
+    }
+    pendingArt.add(key);
+    send({ kind: "photoBringLocal", key, prompt: currentPrompt(), aspect: cut.width / cut.height } as unknown as ClientMsg);
+    closeCameraModal(false);
+    return;
+  }
+  const cut = cutoutTexture(key, canvas, foundBox!);
+  if (!cut) {
+    setCameraStatus("That spot cut out empty — try clicking the middle of the object.");
+    return;
+  }
+  pendingArt.add(key);
+  send({ kind: "photoBring", key } as unknown as ClientMsg);
+  closeCameraModal(false);
+});
 function connect(): void {
   try { ws = new WebSocket("ws://127.0.0.1:8787"); }
   catch { serverStatus.textContent = "Server: offline (local mods still work)"; return; }
@@ -506,7 +1284,7 @@ function connect(): void {
         say(`${msg.mod.title} verified and live.`, "done");
         renderMods();
         const artPending = (msg.mod as { artPending?: string }).artPending;
-        if (artPending) pendingArt.add(artPending);
+        if (artPending) { if (framesBySubject[artPending]) pendingArt.delete(artPending); else pendingArt.add(artPending); }
         const art = msg.mod.art;
         if (art) {
           pendingArt.add(art.key);
@@ -521,20 +1299,35 @@ function connect(): void {
       pendingArt.add(artMsg.art.key);
       loadArtWithRetry(artMsg.art.key, artMsg.art.url, artMsg.art.scenery === true);
     }
+    else if ((msg as unknown as { kind: string }).kind === "segment") {
+      const segMsg = msg as unknown as { kind: "segment"; key: string; box: unknown };
+      handleSegment(segMsg.key, segMsg.box ?? null);
+    }
   });
 }
 connect();
 
-$("#command-form").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const text = inputEl.value.trim();
+function submitCommand(text: string): void {
   if (!text) return;
-  inputEl.value = "";
   say(`Building: ${text}`, "building");
   if (!handleLocal(text)) {
     if (ws?.readyState === WebSocket.OPEN) send({ kind: "command", text });
     else say("That needs the AI server. Start it with: npm run server — local builds above still work.", "failed");
   }
+}
+$("#command-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const text = inputEl.value.trim();
+  if (!text) return;
+  inputEl.value = "";
+  submitCommand(text);
+});
+$("#orb-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const text = orbInputEl.value.trim();
+  if (!text) return;
+  orbInputEl.value = "";
+  submitCommand(text);
 });
 document.querySelectorAll<HTMLButtonElement>("#chips button").forEach((b) => {
   b.addEventListener("click", () => {
@@ -545,6 +1338,7 @@ document.querySelectorAll<HTMLButtonElement>("#chips button").forEach((b) => {
 
 renderMods();
 say("Say something — or type below. Try “add a player”.");
+autoLoadStarterOnce();
 
 // Test hooks: deterministic stepping + text view of the world (no DOM reads needed to playtest).
 (window as unknown as Record<string, unknown>).advanceTime = (ms: number) => {
@@ -552,6 +1346,14 @@ say("Say something — or type below. Try “add a player”.");
   for (let i = 0; i < steps; i++) world.step();
   render();
 };
+(window as unknown as Record<string, unknown>).art_state = () => JSON.stringify({
+  subjects: Object.fromEntries(Object.entries(framesBySubject).map(([k, v]) => [k, v.map((t) => `${Math.round(t.width)}x${Math.round(t.height)}`)])),
+  pendingArt: [...pendingArt],
+  scenery: [...scenerySubjects],
+  photoTex: Object.entries(framesBySubject).filter(([k]) => k.startsWith("photo")).map(([k, v]) => { const r = (v[0] as unknown as { source?: { resource?: unknown } })?.source?.resource; (window as unknown as Record<string, unknown>).__photoCanvas = r ?? null; return `${k}:${r instanceof HTMLCanvasElement ? `${r.width}x${r.height}` : typeof r}`; }),
+  camera: { x: Math.round(world.camera.x), y: Math.round(world.camera.y) },
+  sprites: [...spritePool.entries()].map(([id, s]) => ({ id, vis: s.visible, x: Math.round(s.position.x), y: Math.round(s.position.y), sx: Number(s.scale.x.toFixed(2)), sy: Number(s.scale.y.toFixed(2)), tex: s.texture ? `${Math.round(s.texture.width)}x${Math.round(s.texture.height)}` : "none" })),
+});
 (window as unknown as Record<string, unknown>).render_game_to_text = () => {
   const p = world.entities.find((e) => e.type === "player");
   return JSON.stringify({
@@ -559,7 +1361,7 @@ say("Say something — or type below. Try “add a player”.");
     tick: world.tickCount,
     mods: loader.list().map((m) => m.id),
     player: p ? { x: Math.round(p.x), y: Math.round(p.y), vx: Math.round(p.vx), vy: Math.round(p.vy), onGround: p.onGround } : null,
-    entities: world.entities.slice(0, 30).map((e) => ({ type: e.type, x: Math.round(e.x), y: Math.round(e.y) })),
+    entities: world.entities.slice(0, 30).map((e) => ({ type: e.type, x: Math.round(e.x), y: Math.round(e.y), vx: Math.round(e.vx), hp: Math.round(e.health), hostile: e.data.hostile === true, hero: e.data.hero === true })),
     particles: world.particles.length,
   });
 };

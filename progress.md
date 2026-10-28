@@ -47,6 +47,32 @@ Original prompt: lets setup our project, get oriented, organized, and setup, see
 - Gates: tsc clean, tests 20/20, Vite build green. Server restarted on the new code (detached, port 8787).
 - Uncommitted: contract/art/index/main/sprites changes plus generated sheets (duck, tree, hippo, zebra). Needs the owner's explicit "commit and push".
 
+## Status update — 2026-10-28 (camera object prototype, uncommitted)
+
+- "Bring an object in (camera)" works end-to-end: webcam capture (or photo upload fallback), SAM 3.1 returns a tight box in ~1.2s, a server-built template mod spawns one physics prop (verified like any mod, Size knob, gentle hop), and the client cuts the photo out inside the box with a border flood-fill and renders it as the prop's sprite. Verified live with a photographed red mug standing next to the ninja.
+- SAM findings (ADR 0010): the box coordinate space follows the SENT image size, not always 1600 — the server now normalizes by SAM's reported w/h (this was a real bug: half-scale box, crop on blank wall, invisible prop). The mask body is `<h>,<w>,` plus a base94-range RLE string; decoding it is still open and would replace flood-fill.
+- Prototype limits: flood-fill struggles with multi-tone backgrounds (fringe remnants remain); the photo texture lives only in the capturing client; one object per prompt.
+- Debug hooks kept: `window.art_state()` (subjects/pending/sprites) next to the existing playtest hooks, plus a `[photo]` console line with box/crop/cut sizes.
+- Uncommitted: camera prototype (contract, server/photo.ts, index, client, ADR 0010) plus user-generated airplane/cloud sheets. Needs the owner's explicit "commit and push".
+
+## Status update — 2026-10-28 (find/click + pixel imports, uncommitted)
+
+- Camera flow is now find-then-bring: SAM detection is previewed as a green box on the captured photo ("the green box is what enters the game"), SAM prompt retries (label → last word → "object") rescue most misses, and clicking the object in the preview cuts around the click with no SAM at all. All three paths verified live in the browser.
+- Photo imports are pixel-art by default (56-row grid, posterized, nearest-neighbor; checkbox in the modal): a photographed mug now enters as a chunky pixel mug that matches the game's art.
+- Real-world note: a hand-held soda can came in with a loose box (can + fingers) under the old blind flow; the green-box preview exists precisely so that case is visible before committing, with click as the override.
+- SAM mask decode: six encoding hypotheses tested and rejected (see ADR 0010 amendment); flood-fill remains the cutout until that codec is cracked.
+- Uncommitted: find/click/pixel-import changes. Needs the owner's explicit "commit and push".
+
+## Status update — 2026-10-28 (polish + combat rules, uncommitted)
+
+- HUD is now a fixed viewport layer (orb chat top-center with feedback, drawer toggle) over a layout that can never scroll the page; sidebar scrolls internally. Camera is render-smoothed: player at 38% width, feet at 90% height, ground resting at the bottom at any window size. Starter world auto-loads.
+- Objects are clickable: a radial menu blooms around an entity (Bigger/Smaller/Front/Back/Remove). Generated sprites render in layers (scenery → photos → creatures → player always front), with a 240px sprite-height sanity cap. Magenta fringe on generated sheets is despilled/eroded in the slicer. Tornadoes classify as scenery now; Wonder has pixel-size guidance (30–70px creatures, >200 only when "giant").
+- Camera imports: background-diff capture (remember empty scene → only new pixels enter), wand click now highlights the whole object with strict tolerances + sensitivity slider, SAM green-box find and pixel-art conversion all verified live.
+- Combat & targeting rules (ADR 0011): default creatures wander; hostiles hunt only when asked; heroes fight hostiles, never the player. Everything defaults to 100 HP, `api.damage` destroys at 0 (health bars render), and the player auto-respawns after a knockout. Verified live: hunter killed the player, a guardian destroyed the hunter, player respawned.
+- Bug root-caused: "ground keeps disappearing" was the 500-entity cap evicting the oldest entities (ground first) when spawner mods leaked entities (raindrops landing and freezing). Cap now evicts the spawner's own oldest first; rain despawns landed drops. Owner-scoped despawn also stops mods deleting each other's entities. Commands route to hand-built mods by EXACT match only (client + server) — creative sentences go to Wonder.
+- Tests: 25/25 (new: owner-despawn, health/damage, rain-soak, cap eviction). One anomaly seen once (a hero idling in live play) not reproduced in sim or a second live run; watching it.
+- Uncommitted: everything since 16609c8. Needs the owner's explicit "commit and push".
+
 ## Status update — 2026-10-28 (celestial scenery)
 
 - Sun/moon/etc. now classify as scenery via `isScenerySubject`.
