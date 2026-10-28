@@ -71,9 +71,11 @@ Never commit keys. `.env` is gitignored. Without a key the game still runs on bu
 - **Spike exam: 10/10 commands in one world, median 8.7s per build (bar: 8/10, <15s)** — run it yourself with `scripts/spike-run.ts`. This passes the Thu Oct 29 go/no-go bar early.
 - Tests: 16 passing (`npm test`), typecheck clean, production build green, verified in a real browser.
 
-**Not built yet**
+**Art pipeline: first proof (2026-10-27)**
 
-- Art pipeline (Muse Image sprite sheets + SAM 3.1 cutout) and the style bible — code-drawn shapes are placeholders.
+- Muse Image (`muse-image-1.0`) generates a sprite sheet in ~8s; the client chroma-keys the magenta background, slices frames, and animates the player as a real AI-drawn ninja (idle/run/jump). Regenerate with `npx tsx scripts/art-sheet.ts`. SAM 3.1 answers in ~1.2s with box + encoded mask (mask decode pending — [ADR 0007](docs/adr/0007-art-pipeline-chroma-key-first.md)). Other entities still use code-drawn shapes; the style bible and per-mod sprite requests are next.
+
+**Not built yet**
 - Voice hold-to-talk (Muse Voice Transcribe); text box is the input for now.
 - Endless level generator + "can you still win?" reachability bot, ghost playtest view.
 - Hosting/share links, session limits, worker-thread verifier isolation ([ADR 0003](docs/adr/0003-verifier-in-process-empty-world.md)).

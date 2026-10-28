@@ -8,6 +8,8 @@ import { chat, hasApiKey, SPARK, WONDER } from "./meta";
 import { compileMod } from "./compile";
 import { verifyMod } from "./verify";
 import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, formatManifest, ROUTER_SYSTEM, WONDER_SYSTEM } from "./prompt";
+import { logBuild, saveModSources } from "./createlog";
+import { artKeyForType, deriveSubject, generateSubjectArt, pickArtType } from "./art";
 
 const PORT = 8787;
 
@@ -17,6 +19,7 @@ interface ManifestRec {
   source: string;
   compiled: string;
   knobs: KnobDefs;
+  art?: { key: string; url: string };
 }
 
 const manifest = new Map<string, ManifestRec>();
@@ -76,7 +79,48 @@ function stripFences(src: string): string {
   return s;
 }
 
+/** Ask Spark to split a compound build command into standalone add-commands. */
+async function trySplitCompound(command: string): Promise<string[] | null> {
+  try {
+    const res = await chat(SPARK, [
+      {
+        role: "system",
+        content: "Reply with ONLY a JSON array of strings, each a standalone add-command. Split the request into at most 4 independent single-add commands. No markdown, no prose.",
+      },
+      { role: "user", content: command },
+    ], 512);
+    const start = res.text.indexOf("[");
+    const end = res.text.lastIndexOf("]");
+    if (start < 0 || end <= start) return null;
+    const arr: unknown = JSON.parse(res.text.slice(start, end + 1));
+    if (!Array.isArray(arr)) return null;
+    const items = arr
+      .filter((s): s is string => typeof s === "string")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+      .slice(0, 4);
+    return items.length >= 2 ? items : null;
+  } catch {
+    return null;
+  }
+}
+
 async function handleCommand(ws: WebSocket, text: string): Promise<void> {
+  // Compound split: only for build-shaped commands that join requests with
+  // "," or " and ". Anything else takes the normal single-command path.
+  if (/^\s*(add|make|create|spawn|build)\b/i.test(text) && (text.includes(",") || text.toLowerCase().includes(" and "))) {
+    const items = await trySplitCompound(text);
+    if (items && items.length >= 2) {
+      for (const item of items) {
+        await handleSingle(ws, item);
+      }
+      return;
+    }
+  }
+  await handleSingle(ws, text);
+}
+
+async function handleSingle(ws: WebSocket, text: string): Promise<void> {
   const t0 = performance.now();
   let routeMs = 0;
   let writeMs = 0;
@@ -92,6 +136,7 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
       text: "No MODEL_API_KEY is set, so I can't write mods right now — but I'm online. Add the key and try again!",
     });
     send(ws, { kind: "timing", command, ms: { route: 0, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
+    logBuild({ command, route: "new", outcome: "say", timings: { route: 0, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) }, fixAttempted: false });
     return;
   }
 
@@ -119,11 +164,13 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
   } catch (err) {
     send(ws, { kind: "say", text: `Router hiccup: ${err instanceof Error ? err.message : String(err)}. Try again?` });
     send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
+    logBuild({ command, route: "new", outcome: "say", timings: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) }, fixAttempted: false });
     return;
   }
   if (!route) {
     send(ws, { kind: "say", text: "I didn't quite get that — try something like 'add a player' or 'make it rain'." });
     send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
+    logBuild({ command, route: "new", outcome: "say", timings: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) }, fixAttempted: false });
     return;
   }
 
@@ -131,6 +178,7 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
   if (route.action === "question") {
     send(ws, { kind: "say", text: route.answer ?? "Hello! Tell me what to build — e.g. 'add a player', 'make it rain'." });
     send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
+    logBuild({ command, route: "question", outcome: "say", timings: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) }, fixAttempted: false });
     return;
   }
   if (route.action === "undo") {
@@ -150,6 +198,7 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
       rec.knobs[route.knob] = { ...rec.knobs[route.knob], value: route.value };
       send(ws, { kind: "tweak", modId: rec.id, knob: route.knob, value: route.value });
       send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
+      logBuild({ command, route: "tweak", outcome: "tweak", modId: rec.id, knob: route.knob, value: route.value, timings: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) }, fixAttempted: false });
       return;
     }
     // Client is the authority on what is loaded (it also has local built-in
@@ -159,6 +208,7 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
       console.log(`[route] tweak forwarded to client: ${route.target}.${route.knob}=${route.value}`);
       send(ws, { kind: "tweak", modId: route.target, knob: route.knob, value: route.value });
       send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
+      logBuild({ command, route: "tweak", outcome: "tweak", modId: route.target, knob: route.knob, value: route.value, timings: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) }, fixAttempted: false });
       return;
     }
     // Tweak that names no loaded target/knob never fails: an unknown target
@@ -185,6 +235,9 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
   }
   stage(ws, { kind: "stage", stage: "writing", detail: "writing the mod", command });
   let source = "";
+  const sources: string[] = [];
+  let fixAttempted = false;
+  const routeAction = route.action;
   try {
     const w0 = performance.now();
     const res = await chat(WONDER, [
@@ -193,9 +246,11 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
     ], 4096);
     writeMs = Math.round(performance.now() - w0);
     source = stripFences(res.text);
+    sources.push(source);
   } catch (err) {
     send(ws, { kind: "say", text: `The writer failed: ${err instanceof Error ? err.message : String(err)}` });
     send(ws, { kind: "timing", command, ms: { route: routeMs, write: writeMs, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
+    logBuild({ command, route: routeAction, outcome: "say", timings: { route: routeMs, write: writeMs, compile: 0, verify: 0, total: Math.round(performance.now() - t0) }, fixAttempted: false });
     return;
   }
 
@@ -203,12 +258,12 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
     const c0 = performance.now();
     const compiled = compileMod(src);
     compileMs += Math.round(performance.now() - c0);
-    if (!compiled.ok) return { ok: false as const, errors: compiled.errors, js: "" };
+    if (!compiled.ok) return { ok: false as const, errors: compiled.errors, js: "", msPerFrame: 0 };
     stage(ws, { kind: "stage", stage: "verifying", detail: "verifying the mod", command });
     const v0 = performance.now();
     const res = await verifyMod(src, compiled.js);
     verifyMs += Math.round(performance.now() - v0);
-    if (!res.ok) return { ok: false as const, errors: res.errors, js: compiled.js };
+    if (!res.ok) return { ok: false as const, errors: res.errors, js: compiled.js, msPerFrame: res.msPerFrame };
     return { ok: true as const, errors: [] as string[], js: compiled.js, res };
   };
 
@@ -217,6 +272,7 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
   if (!first.ok) {
     // ONE auto-fix round.
     stage(ws, { kind: "stage", stage: "fixing", detail: "fixing the mod", command });
+    fixAttempted = true;
     try {
       const w0 = performance.now();
       const fix = await chat(WONDER, [
@@ -225,27 +281,47 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
       ], 4096);
       writeMs += Math.round(performance.now() - w0);
       source = stripFences(fix.text);
+      sources.push(source);
       stage(ws, { kind: "stage", stage: "compiling", detail: "recompiling the fix", command });
       first = await attempt(source);
     } catch (err) {
       send(ws, { kind: "say", text: `Fix attempt failed: ${err instanceof Error ? err.message : String(err)}` });
       send(ws, { kind: "timing", command, ms: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) } });
+      const files = saveModSources(sources);
+      logBuild({ command, route: routeAction, outcome: "say", timings: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) }, fixAttempted, sourceFile: files[files.length - 1], sourceFiles: files });
       return;
     }
   }
 
   if (first.ok) {
     const def = first.res.def!;
-    const rec: ManifestRec = { id: def.id, title: def.title, source, compiled: first.js, knobs: def.knobs ?? {} };
+    // Art on demand: for the first non-generic spawned type, generate (or
+    // reuse the cached) sprite sheet and attach it to the mod + manifest.
+    let art: { key: string; url: string } | undefined;
+    const artType = pickArtType(source);
+    if (artType) {
+      const subject = deriveSubject(command, artType);
+      const key = artKeyForType(artType);
+      if (key) {
+        send(ws, { kind: "say", text: `Drawing ${subject}...` });
+        const url = await generateSubjectArt(subject, key);
+        if (url) art = { key, url };
+      }
+    }
+    const rec: ManifestRec = { id: def.id, title: def.title, source, compiled: first.js, knobs: def.knobs ?? {}, ...(art ? { art } : {}) };
     // Edit keeps the same id so the client loader replaces it; if Wonder
     // renamed it anyway, drop the stale entry instead of duplicating.
     if (editRec && def.id !== editRec.id) manifest.delete(editRec.id);
     manifest.set(def.id, rec);
     stage(ws, { kind: "stage", stage: "done", detail: `loaded ${def.id} (${SIM.healthFrames} frames OK)`, command });
-    send(ws, { kind: "mod", mod: { id: def.id, title: def.title, source, compiled: first.js, knobs: rec.knobs } });
+    send(ws, { kind: "mod", mod: { id: def.id, title: def.title, source, compiled: first.js, knobs: rec.knobs, ...(art ? { art } : {}) } });
+    const files = saveModSources(sources, def.id);
+    logBuild({ command, route: editRec ? "edit" : routeAction, outcome: editRec ? "edit" : "mod", modId: def.id, title: def.title, timings: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) }, verify: { ok: true, errors: [], msPerFrame: first.res.msPerFrame }, fixAttempted, sourceFile: files[files.length - 1], sourceFiles: files });
   } else {
     stage(ws, { kind: "stage", stage: "failed", detail: first.errors.join("; ").slice(0, 500), command });
     send(ws, { kind: "say", text: `That didn't verify: ${first.errors.join("; ").slice(0, 500)}` });
+    const files = saveModSources(sources);
+    logBuild({ command, route: routeAction, outcome: "failed", timings: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) }, verify: { ok: false, errors: first.errors, msPerFrame: first.msPerFrame }, fixAttempted, sourceFile: files[files.length - 1], sourceFiles: files });
   }
   send(ws, { kind: "timing", command, ms: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) } });
 }

@@ -1,4 +1,6 @@
-import { Application, Graphics } from "pixi.js";
+import { Application, Graphics, Sprite } from "pixi.js";
+import { framesFor, loadSpriteSheet, loadSubjects } from "./sprites";
+import chickenMod from "../mods/chicken";
 import { SIM } from "../contract";
 import type { ClientMsg, Entity, KnobValue, ModDefinition, ServerMsg } from "../contract";
 import { ModLoader } from "../sim/loader";
@@ -14,6 +16,7 @@ import fireArrowMod from "../mods/fire-arrow";
 const BUILTINS: Record<string, ModDefinition> = {
   player: playerMod, ground: groundMod, enemies: enemyMod, rain: rainMod,
   coins: coinsMod, "moving-platform": movingPlatformMod, "fire-arrow": fireArrowMod,
+  chicken: chickenMod,
 };
 
 const world = new World(1337);
@@ -47,6 +50,26 @@ await app.init({ resizeTo: stageEl, background: 0x05070a, antialias: false });
 stageEl.appendChild(app.canvas);
 const gfx = new Graphics();
 app.stage.addChild(gfx);
+
+// AI sprites (Muse Image sheets, chroma-keyed + sliced client-side). Frames:
+// 0 idle, 1-2 walk/run, 3 jump. Entities whose type names a subject get its
+// sprite; everything else falls back to code-drawn art.
+const framesBySubject = await loadSubjects({
+  ninja: "/art/ninja-sheet.webp",
+  chicken: "/art/chicken.webp",
+});
+console.info(`[art] subjects loaded: ${Object.entries(framesBySubject).map(([k, v]) => `${k}=${v.length}`).join(" ")}`);
+const spritePool = new Map<number, Sprite>();
+function spriteFor(id: number): Sprite {
+  let s = spritePool.get(id);
+  if (!s) {
+    s = new Sprite();
+    s.anchor.set(0.5, 1);
+    app.stage.addChild(s);
+    spritePool.set(id, s);
+  }
+  return s;
+}
 
 // --- code-drawn art (no image assets) ----------------------------------------
 // Palette: near-black blue sky family, amber player accent, no purple.
@@ -183,10 +206,14 @@ function drawEntity(e: Entity, camX: number, camY: number): void {
   const W = app.screen.width;
   const H = app.screen.height;
   if (x + e.w < -40 || x > W + 40 || y + e.h < -40 || y > H + 40) return; // off-screen cull
-  // dark outline behind every entity
-  gfx.rect(x - 1.5, y - 1.5, e.w + 3, e.h + 3).fill(OUTLINE);
   const t = e.type;
-  if (t === "player") { drawPlayer(e, x, y); return; }
+  if (framesFor(framesBySubject, t, t === "player").length >= 2) return; // sprite pass below
+  // dark outline behind every code-drawn entity
+  gfx.rect(x - 1.5, y - 1.5, e.w + 3, e.h + 3).fill(OUTLINE);
+  if (t === "player") {
+    drawPlayer(e, x, y);
+    return;
+  }
   if (t.indexOf("coin") >= 0) { drawCoin(e, x, y); return; }
   if (t.indexOf("ground") >= 0 || t.indexOf("platform") >= 0) { drawGround(e, x, y); return; }
   if (t.indexOf("projectile") >= 0 || t.indexOf("arrow") >= 0 || t.indexOf("fire") >= 0) { drawShot(e, x, y); return; }
@@ -230,6 +257,39 @@ function render(): void {
   for (const p of world.particles) {
     gfx.rect(p.x - camX, p.y - camY, p.size, p.size).fill(p.color);
   }
+  // Sprite primaries: per owner+subject only the largest entity gets the
+  // sprite; assembled sub-parts (wheels, stripes) stay rects under it.
+  const seen = new Set<number>();
+  const primaries = new Set<number>();
+  {
+    const best = new Map<string, { id: number; area: number }>();
+    for (const e of world.entities) {
+      const frames = framesFor(framesBySubject, e.type, e.type === "player");
+      if (frames.length < 2) continue;
+      const subject = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0] ?? e.type;
+      const gk = `${e.owner}|${subject}`;
+      const area = e.w * e.h;
+      if (!best.has(gk) || area > best.get(gk)!.area) best.set(gk, { id: e.id, area });
+    }
+    for (const v of best.values()) primaries.add(v.id);
+  }
+  for (const e of world.entities) {
+    const frames = framesFor(framesBySubject, e.type, e.type === "player");
+    if (frames.length < 2 || !primaries.has(e.id)) continue;
+    seen.add(e.id);
+    const moving = Math.abs(e.vx) > 5;
+    const frame = frames.length >= 4 && !e.onGround ? frames[3]
+      : moving ? frames[1 + Math.floor(world.tickCount / 8) % Math.min(2, frames.length - 1)]
+      : frames[0];
+    const s = spriteFor(e.id);
+    const targetH = e.type === "player" ? 56 : Math.max(34, e.h * 1.7);
+    const scale = targetH / frame.height;
+    s.texture = frame;
+    s.scale.set(scale * e.facing, scale);
+    s.position.set(e.x - camX + e.w / 2, e.y - camY + e.h + 2);
+    s.visible = true;
+  }
+  for (const [id, s] of spritePool) if (!seen.has(id)) s.visible = false;
   // subtle vignette: 4 edge rects
   const V = 26;
   gfx.rect(0, 0, W, V).fill({ color: 0x000000, alpha: 0.28 });
@@ -343,6 +403,7 @@ function handleLocal(text: string): boolean {
   if (t.includes("coin") || t.includes("score")) { loadLocal(coinsMod); return true; }
   if (t.includes("moving platform")) { loadLocal(movingPlatformMod); return true; }
   if (t.includes("arrow") || t.includes("shoot")) { loadLocal(fireArrowMod); return true; }
+  if (t.includes("chicken")) { loadLocal(chickenMod); return true; }
   if (t.includes("jump higher")) { tweak("player", "jump", 880, "Jump raised."); return true; }
   if (t.includes("faster")) {
     if (loader.has("enemies")) tweak("enemies", "speed", 140, "Walkers sped up.");
@@ -386,6 +447,19 @@ function connect(): void {
         loader.load(loaded.default);
         say(`${msg.mod.title} verified and live.`, "done");
         renderMods();
+        const art = msg.mod.art;
+        if (art) {
+          loadSpriteSheet(art.url).then((frames) => {
+            if (frames.length > 0) {
+              framesBySubject[art.key] = frames;
+              log(`art loaded for ${art.key} (${frames.length} frames)`);
+            } else {
+              log(`art failed for ${art.key}, keeping rect fallback`);
+            }
+          }).catch(() => {
+            log(`art failed for ${art.key}, keeping rect fallback`);
+          });
+        }
       } catch (err) {
         say(`That build failed to load here: ${err instanceof Error ? err.message : String(err)}`, "failed");
       }

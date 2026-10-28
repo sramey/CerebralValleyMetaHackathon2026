@@ -38,3 +38,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0004](0004-solid-with-gravity-physics.md) | Solid entities with gravity still get physics | Draft |
 | [0005](0005-tweak-edit-fallbacks.md) | Invalid tweaks fall back to edit/new instead of failing | Draft |
 | [0006](0006-spark-subagent-workers.md) | Build work is delegated to Spark subagents by file ownership | Draft |
+| [0007](0007-art-pipeline-chroma-key-first.md) | Art: Image sheet + client chroma-key slicing; SAM validates, mask decode deferred | Draft |

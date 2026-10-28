@@ -38,6 +38,7 @@ Rules:
 - Keep entity counts small (well under 500 total). Prefer knobs for tunable values (speed, count, size, color).
 - setup must not throw. dispose must clean up fully. test(t) should spawn/step/expect something meaningful.
 - IMPORTANT: in test(t) and in the verifier, your mod runs ALONE in an EMPTY world: no player and no ground exist unless your own setup spawned them. If behavior needs ground to land/hop on, spawn a solid ground entity in setup, or in the test spawn one first via t.api.spawn({type:"ground", x:-200, y:400, w:1200, h:48, solid:true, gravityScale:0}). Never write a test that expects landing/hopping without a solid below.
+- ONE ENTITY PER CREATURE/VEHICLE: spawn a creature, car, etc. as a SINGLE entity. The engine may attach a generated sprite sheet by entity type name — assembled sub-parts (wheels, cockpit, stripes as separate entities) break that art and look wrong. Put visual details in data/particles, not extra entities. Ground creatures that should rest on the ground need gravityScale 1 (or explicit ground placement at ground top y=400 minus height).
 - Platformer world: x grows right, y grows DOWN. Ground is solid entities. Player type is "player".
 - solid: true + gravityScale: 0 means static terrain (ground/platforms) that never moves. Creatures, players and projectiles that must move/fall: use solid: false (or solid: true WITH gravityScale: 1). color is a NUMBER (hex like 0x57d94d), never a CSS string.`;
 

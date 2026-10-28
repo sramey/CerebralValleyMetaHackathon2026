@@ -20,8 +20,20 @@ Original prompt: lets setup our project, get oriented, organized, and setup, see
 - Agent playtest (Spark critic, fresh eyes, 9 screenshots) top finding: player can run off the ground edge and fall forever (reproduced at y=26106, vy=8775), leaving an empty sky — looked like "canvas renders nothing". Fixed: terminal velocity 1100 (src/sim/world.ts), player respawns at spawn after y>1000 (src/mods/player.ts), regression test added (17/17). Re-proven live in browser: same walk now ends back on ground.
 - Playtest fix 2: fully-specified tweaks for client-local mods are forwarded to the client instead of rebuilding (server/index.ts; ADR 0005 amended).
 
+- ART PIPELINE PROVEN (2026-10-27): Muse Image sheet (~8s, WebP b64) -> client chroma-key/slice (ADR 0007). Player is an AI-drawn animated ninja. Chicken proof: Spark-generated chicken sheet + chicken mod, "add a chicken" shows a white AI chicken walking next to the ninja (state: 2 chickens, walking). Art now generalizes by entity-type subject (src/client/sprites.ts loadSubjects/framesFor).
+- CREDIT RULE (orchestrator): main model decides + verifies mechanically only. All build slices delegate to `muse-spark-1.3` subagents with compact briefs + structured returns. Keep orchestrator turns short; never re-derive what a test/screenshot can state.
+
 ## TODO for worker windows (see docs/WORKERS.md)
 
 - worker1: harden/replace src/sim + src/mods + tests ( owns those files; current versions are orchestrator-built and passing).
 - worker2: server/** + scripts/benchmark.ts — server/index.ts does not exist yet, so `npm run server` currently fails and the client shows "Server: offline". This is the top gap: live Wonder mod generation end-to-end is NOT yet wired.
 - Orchestrator next: once server lands, test a live Wonder command through WS, then commit/push only when user says.
+
+## Status update — 2026-10-28 (art era, uncommitted)
+
+- Server, live Wonder builds, verifier, hot-load, knobs/undo, compound-command splitting, and creation log (`logs/builds.jsonl`, `scripts/review-log.ts`) all work end-to-end in the browser.
+- Art on demand works: Wonder behavior mod + `muse-image-1.0` sheet, client chroma-keys and slices it (`src/client/sprites.ts`). Proven live: chicken, black retriever, kite kid, dragons, race car (single entity after the one-entity fix), and a purple fire-eyed cat.
+- Sprite slicing now splits merged poses recursively (widest run >520px split at its emptiest central column, max 6 frames); generation prompt requires wide magenta gaps so poses do not touch.
+- Gates: `npx tsc --noEmit` clean, `npm test` 20/20, `npm run build` green.
+- Known fragility: a server watch-restart during a sequential compound build can drop the remaining sub-builds; the earlier sub-builds are not logged in that case.
+- This whole art-era working tree is still UNCOMMITTED. Needs the owner's explicit "commit and push".

@@ -94,7 +94,7 @@ export type BuildStage = "routing" | "writing" | "compiling" | "verifying" | "fi
 
 export type ServerMsg =
   | { kind: "stage"; stage: BuildStage; detail: string; command?: string }
-  | { kind: "mod"; mod: { id: string; title: string; source: string; compiled: string; knobs: KnobDefs } }
+  | { kind: "mod"; mod: { id: string; title: string; source: string; compiled: string; knobs: KnobDefs; art?: { key: string; url: string } } }
   | { kind: "tweak"; modId: string; knob: string; value: KnobValue }
   | { kind: "removed"; modId: string }
   | { kind: "say"; text: string }
