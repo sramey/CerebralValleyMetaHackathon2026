@@ -93,13 +93,42 @@ export async function loadSpriteSheet(url: string): Promise<Texture[]> {
 
     const textures: Texture[] = [];
     for (const run of runs) {
-      // trim rows within this column run
-      let y0 = h, y1 = 0;
+      // Band crop: split occupied rows into bands separated by >24 empty
+      // rows and keep only the band with the most occupied pixels, so a
+      // stray object above/below the pose does not stretch the frame.
+      const rowCount = new Int32Array(h);
       for (let y = 0; y < h; y++) {
+        let count = 0;
         for (let x = run.x0; x <= run.x1; x++) {
-          if (px[(y * w + x) * 4 + 3] > 20) { if (y < y0) y0 = y; if (y > y1) y1 = y; break; }
+          if (px[(y * w + x) * 4 + 3] > 20) count++;
+        }
+        rowCount[y] = count;
+      }
+      const bands: { top: number; bottom: number; total: number }[] = [];
+      let cur: { top: number; bottom: number; total: number } | null = null;
+      let emptyRun = 0;
+      for (let y = 0; y < h; y++) {
+        if (rowCount[y] > 0) {
+          if (!cur) {
+            cur = { top: y, bottom: y, total: rowCount[y] };
+          } else if (emptyRun > 24) {
+            bands.push(cur);
+            cur = { top: y, bottom: y, total: rowCount[y] };
+          } else {
+            cur.bottom = y;
+            cur.total += rowCount[y];
+          }
+          emptyRun = 0;
+        } else if (cur) {
+          emptyRun++;
         }
       }
+      if (cur) bands.push(cur);
+      if (bands.length === 0) continue;
+      let best = bands[0];
+      for (const band of bands) if (band.total > best.total) best = band;
+      const y0 = best.top;
+      const y1 = best.bottom;
       if (y1 <= y0) continue;
       const fw = run.x1 - run.x0 + 1;
       const fh = y1 - y0 + 1;

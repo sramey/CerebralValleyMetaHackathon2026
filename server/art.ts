@@ -23,15 +23,97 @@ export function sanitizeArtKey(raw: string): string {
   return s.slice(0, 64);
 }
 
+const SCENERY_WORDS = [
+  "tree",
+  "pine",
+  "oak",
+  "birch",
+  "bush",
+  "shrub",
+  "rock",
+  "stone",
+  "boulder",
+  "flower",
+  "grass",
+  "plant",
+  "cactus",
+  "mushroom",
+  "cloud",
+  "mountain",
+  "hill",
+  "house",
+  "hut",
+  "cabin",
+  "castle",
+  "tower",
+  "fence",
+  "lamp",
+  "bridge",
+  "waterfall",
+  "lake",
+  "pond",
+  "sign",
+  "statue",
+  "crystal",
+  "coral",
+  "seaweed",
+  "stump",
+  "log",
+  "barrel",
+  "crate",
+  "door",
+  "window",
+  "treehouse",
+  "sun",
+  "moon",
+  "star",
+  "rainbow",
+  "planet",
+  "comet",
+  "meteor",
+  "aurora",
+  "snowman",
+  "igloo",
+  "tent",
+  "campfire",
+  "volcano",
+  "island",
+  "icicle",
+  "snowflake",
+] as const;
+
+export function isScenerySubject(text: string): boolean {
+  const lower = text.toLowerCase();
+  return SCENERY_WORDS.some((w) => lower.includes(w));
+}
+
 export function artUrlForKey(key: string): string {
   return `/art/gen/${key}.webp`;
+}
+
+export function artCachedUrl(keyRaw: string): string | null {
+  try {
+    const key = sanitizeArtKey(keyRaw);
+    if (!key) return null;
+    const cached = artCache.get(key);
+    if (cached) return cached;
+    const file = join(process.cwd(), "public", "art", "gen", `${key}.webp`);
+    if (existsSync(file)) {
+      const url = artUrlForKey(key);
+      artCache.set(key, url);
+      return url;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**
  * Generate sprite-sheet art for a subject, or reuse the cached file.
  * Returns the public URL, or null on any failure. Never throws.
  */
-export async function generateSubjectArt(subject: string, keyRaw: string): Promise<string | null> {
+export async function generateSubjectArt(subject: string, keyRaw: string, scenery = false): Promise<string | null> {
   try {
     const key = sanitizeArtKey(keyRaw);
     if (!key) return null;
@@ -47,10 +129,11 @@ export async function generateSubjectArt(subject: string, keyRaw: string): Promi
     const apiKey = loadEnv();
     if (!apiKey) return null;
     const cleanSubject = subject.trim() || key;
-    const prompt =
-      `Pixel art game sprite sheet of ${cleanSubject}, side view, 4 poses in a row: ` +
-      `idle, running, running, jumping. Flat solid magenta background (#FF00FF), ` +
-      `chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
+    const prompt = scenery
+      ? `Pixel art game scenery sprite sheet containing ONLY ${cleanSubject}: exactly 4 variants of that single object in one row, nothing else in the image, no landscape, no ground, no sky, no other objects or props. Each variant is the same object with a slightly different shape or size. NOT a character, no face, no eyes, no mouth, no arms, no legs, no animation poses. Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, variants far apart with wide empty magenta gaps between them, bottoms aligned on the same baseline, variants must NOT touch or overlap each other`
+      : `Pixel art game sprite sheet of ${cleanSubject}, side view, 4 poses in a row: ` +
+        `idle, running, running, jumping. Flat solid magenta background (#FF00FF), ` +
+        `chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
     const t0 = performance.now();
     const res = await fetch(IMAGE_URL, {
       method: "POST",
@@ -126,7 +209,10 @@ export function pickArtType(source: string): string | null {
 export function deriveSubject(command: string, fallbackType: string): string {
   let s = command.trim().replace(/^(add|make|create|spawn|build)\s+/i, "");
   s = s.replace(/^(a|an|the)\s+/i, "");
-  const head = s.split(/\s*,\s*|\s+and\s+|\s+that\s+|\s+which\s+/i)[0] ?? "";
+  const head =
+    (s.split(/\s*,\s*|\s+and\s+|\s+that\s+|\s+which\s+/i)[0] ?? "").split(
+      /\s+(in|on|over|under|above|below)\s+(the|a|an)\s+/i,
+    )[0] ?? "";
   s = head.trim().replace(/[.!?]+$/, "").trim();
   return s || fallbackType;
 }

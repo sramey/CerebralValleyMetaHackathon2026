@@ -9,7 +9,7 @@ import { compileMod } from "./compile";
 import { verifyMod } from "./verify";
 import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, formatManifest, ROUTER_SYSTEM, WONDER_SYSTEM } from "./prompt";
 import { logBuild, saveModSources } from "./createlog";
-import { artKeyForType, deriveSubject, generateSubjectArt, pickArtType } from "./art";
+import { artCachedUrl, artKeyForType, deriveSubject, generateSubjectArt, isScenerySubject, pickArtType } from "./art";
 
 const PORT = 8787;
 
@@ -19,7 +19,7 @@ interface ManifestRec {
   source: string;
   compiled: string;
   knobs: KnobDefs;
-  art?: { key: string; url: string };
+  art?: { key: string; url: string; scenery?: boolean };
 }
 
 const manifest = new Map<string, ManifestRec>();
@@ -295,17 +295,24 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
 
   if (first.ok) {
     const def = first.res.def!;
-    // Art on demand: for the first non-generic spawned type, generate (or
-    // reuse the cached) sprite sheet and attach it to the mod + manifest.
-    let art: { key: string; url: string } | undefined;
+    // Art on demand: cached art attaches immediately; otherwise the mod
+    // ships with artPending and the art streams in asynchronously.
+    let art: { key: string; url: string; scenery?: boolean } | undefined;
+    let artPending: string | undefined;
+    let pendingArt: { subject: string; key: string; scenery: boolean } | undefined;
     const artType = pickArtType(source);
     if (artType) {
       const subject = deriveSubject(command, artType);
       const key = artKeyForType(artType);
       if (key) {
-        send(ws, { kind: "say", text: `Drawing ${subject}...` });
-        const url = await generateSubjectArt(subject, key);
-        if (url) art = { key, url };
+        const scenery = isScenerySubject(subject) || isScenerySubject(artType);
+        const cachedUrl = artCachedUrl(key);
+        if (cachedUrl) {
+          art = { key, url: cachedUrl, ...(scenery ? { scenery: true } : {}) };
+        } else {
+          artPending = key;
+          pendingArt = { subject, key, scenery };
+        }
       }
     }
     const rec: ManifestRec = { id: def.id, title: def.title, source, compiled: first.js, knobs: def.knobs ?? {}, ...(art ? { art } : {}) };
@@ -314,7 +321,12 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
     if (editRec && def.id !== editRec.id) manifest.delete(editRec.id);
     manifest.set(def.id, rec);
     stage(ws, { kind: "stage", stage: "done", detail: `loaded ${def.id} (${SIM.healthFrames} frames OK)`, command });
-    send(ws, { kind: "mod", mod: { id: def.id, title: def.title, source, compiled: first.js, knobs: rec.knobs, ...(art ? { art } : {}) } });
+    send(ws, { kind: "mod", mod: { id: def.id, title: def.title, source, compiled: first.js, knobs: rec.knobs, ...(art ? { art } : {}), ...(artPending ? { artPending } : {}) } });
+    if (pendingArt) {
+      const { subject, key, scenery } = pendingArt;
+      generateSubjectArt(subject, key, scenery).then(url => { if (url) { rec.art = { key, url, ...(scenery ? { scenery: true } : {}) }; try { send(ws, { kind: "art", modId: def.id, art: { key, url, ...(scenery ? { scenery: true } : {}) } }); } catch {} } }).catch(() => {});
+      send(ws, { kind: "say", text: `Drawing ${subject}...` });
+    }
     const files = saveModSources(sources, def.id);
     logBuild({ command, route: editRec ? "edit" : routeAction, outcome: editRec ? "edit" : "mod", modId: def.id, title: def.title, timings: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) }, verify: { ok: true, errors: [], msPerFrame: first.res.msPerFrame }, fixAttempted, sourceFile: files[files.length - 1], sourceFiles: files });
   } else {

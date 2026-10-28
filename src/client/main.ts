@@ -59,6 +59,8 @@ const framesBySubject = await loadSubjects({
   chicken: "/art/chicken.webp",
 });
 console.info(`[art] subjects loaded: ${Object.entries(framesBySubject).map(([k, v]) => `${k}=${v.length}`).join(" ")}`);
+const pendingArt = new Set<string>();
+const scenerySubjects = new Set<string>();
 const spritePool = new Map<number, Sprite>();
 function spriteFor(id: number): Sprite {
   let s = spritePool.get(id);
@@ -200,6 +202,22 @@ function drawShot(e: Entity, x: number, y: number): void {
   gfx.rect(x + e.w * 0.2, y + e.h * 0.3, e.w * 0.6, e.h * 0.4).fill(0xfff6d8);
 }
 
+function drawDigitize(e: Entity, x: number, y: number): void {
+  const fract = (v: number): number => v - Math.floor(v);
+  const pulse = 0.5 + 0.5 * Math.sin(world.tickCount * 0.18);
+  const cell = 6;
+  for (let cx = 0; cx < e.w; cx += cell) {
+    for (let cy = 0; cy < e.h; cy += cell) {
+      const h = fract(Math.sin((e.x + cx) * 12.9898 + (e.y + cy) * 78.233 + Math.floor(world.tickCount / 6) * 37.7) * 43758.5453);
+      if (h < 0.3 + 0.5 * pulse) {
+        gfx.rect(x + cx, y + cy, Math.min(cell, e.w - cx), Math.min(cell, e.h - cy))
+          .fill({ color: h < 0.08 ? 0xc8f6ff : e.color, alpha: 0.5 + 0.45 * pulse });
+      }
+    }
+  }
+  gfx.rect(x, y, e.w, e.h).stroke({ color: 0xc8f6ff, alpha: 0.25 + 0.35 * pulse, width: 1.5 });
+}
+
 function drawEntity(e: Entity, camX: number, camY: number): void {
   const x = e.x - camX;
   const y = e.y - camY;
@@ -208,6 +226,11 @@ function drawEntity(e: Entity, camX: number, camY: number): void {
   if (x + e.w < -40 || x > W + 40 || y + e.h < -40 || y > H + 40) return; // off-screen cull
   const t = e.type;
   if (framesFor(framesBySubject, t, t === "player").length >= 2) return; // sprite pass below
+  if (t !== "player") {
+    for (const k of pendingArt) {
+      if (t.includes(k)) { drawDigitize(e, x, y); return; }
+    }
+  }
   // dark outline behind every code-drawn entity
   gfx.rect(x - 1.5, y - 1.5, e.w + 3, e.h + 3).fill(OUTLINE);
   if (t === "player") {
@@ -257,28 +280,38 @@ function render(): void {
   for (const p of world.particles) {
     gfx.rect(p.x - camX, p.y - camY, p.size, p.size).fill(p.color);
   }
-  // Sprite primaries: per owner+subject only the largest entity gets the
-  // sprite; assembled sub-parts (wheels, stripes) stay rects under it.
+  // Sprite primaries: per owner+subject every entity at >=30% of the group's
+  // max area gets the sprite; small assembled sub-parts stay rects under it.
   const seen = new Set<number>();
   const primaries = new Set<number>();
   {
-    const best = new Map<string, { id: number; area: number }>();
+    const groups = new Map<string, { maxArea: number; items: { id: number; area: number }[] }>();
     for (const e of world.entities) {
       const frames = framesFor(framesBySubject, e.type, e.type === "player");
       if (frames.length < 2) continue;
       const subject = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0] ?? e.type;
       const gk = `${e.owner}|${subject}`;
       const area = e.w * e.h;
-      if (!best.has(gk) || area > best.get(gk)!.area) best.set(gk, { id: e.id, area });
+      let g = groups.get(gk);
+      if (!g) { g = { maxArea: area, items: [] }; groups.set(gk, g); }
+      if (area > g.maxArea) g.maxArea = area;
+      g.items.push({ id: e.id, area });
     }
-    for (const v of best.values()) primaries.add(v.id);
+    for (const g of groups.values()) {
+      for (const item of g.items) {
+        if (item.area >= 0.3 * g.maxArea) primaries.add(item.id);
+      }
+    }
   }
   for (const e of world.entities) {
     const frames = framesFor(framesBySubject, e.type, e.type === "player");
     if (frames.length < 2 || !primaries.has(e.id)) continue;
     seen.add(e.id);
     const moving = Math.abs(e.vx) > 5;
-    const frame = frames.length >= 4 && !e.onGround ? frames[3]
+    const subjectKey = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0];
+    const frame = subjectKey !== undefined && scenerySubjects.has(subjectKey) ? frames[e.id % frames.length]
+      : !e.onGround && e.gravityScale === 0 && frames.length >= 2 ? frames[Math.floor(world.tickCount / 5) % frames.length]
+      : frames.length >= 4 && !e.onGround ? frames[3]
       : moving ? frames[1 + Math.floor(world.tickCount / 8) % Math.min(2, frames.length - 1)]
       : frames[0];
     const s = spriteFor(e.id);
@@ -422,6 +455,31 @@ let ws: WebSocket | null = null;
 function send(msg: ClientMsg): void {
   if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
 }
+function loadArtWithRetry(key: string, url: string, scenery = false): void {
+  const attempt = (u: string, isRetry: boolean): void => {
+    loadSpriteSheet(u).then((frames) => {
+      if (frames.length > 0) {
+        framesBySubject[key] = frames;
+        if (scenery) scenerySubjects.add(key);
+        pendingArt.delete(key);
+        log(`art loaded for ${key} (${frames.length} frames)`);
+      } else if (!isRetry) {
+        setTimeout(() => attempt(url + (url.includes("?") ? "&" : "?") + "t=" + Date.now(), true), 1500);
+      } else {
+        pendingArt.delete(key);
+        log(`art failed for ${key}, keeping rect fallback`);
+      }
+    }).catch(() => {
+      if (!isRetry) {
+        setTimeout(() => attempt(url + (url.includes("?") ? "&" : "?") + "t=" + Date.now(), true), 1500);
+      } else {
+        pendingArt.delete(key);
+        log(`art failed for ${key}, keeping rect fallback`);
+      }
+    });
+  };
+  attempt(url, false);
+}
 function connect(): void {
   try { ws = new WebSocket("ws://127.0.0.1:8787"); }
   catch { serverStatus.textContent = "Server: offline (local mods still work)"; return; }
@@ -447,22 +505,21 @@ function connect(): void {
         loader.load(loaded.default);
         say(`${msg.mod.title} verified and live.`, "done");
         renderMods();
+        const artPending = (msg.mod as { artPending?: string }).artPending;
+        if (artPending) pendingArt.add(artPending);
         const art = msg.mod.art;
         if (art) {
-          loadSpriteSheet(art.url).then((frames) => {
-            if (frames.length > 0) {
-              framesBySubject[art.key] = frames;
-              log(`art loaded for ${art.key} (${frames.length} frames)`);
-            } else {
-              log(`art failed for ${art.key}, keeping rect fallback`);
-            }
-          }).catch(() => {
-            log(`art failed for ${art.key}, keeping rect fallback`);
-          });
+          pendingArt.add(art.key);
+          loadArtWithRetry(art.key, art.url, (art as { scenery?: boolean }).scenery === true);
         }
       } catch (err) {
         say(`That build failed to load here: ${err instanceof Error ? err.message : String(err)}`, "failed");
       }
+    }
+    else if ((msg as unknown as { kind: string }).kind === "art") {
+      const artMsg = msg as unknown as { kind: "art"; modId: string; art: { key: string; url: string; scenery?: boolean } };
+      pendingArt.add(artMsg.art.key);
+      loadArtWithRetry(artMsg.art.key, artMsg.art.url, artMsg.art.scenery === true);
     }
   });
 }

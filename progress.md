@@ -37,3 +37,19 @@ Original prompt: lets setup our project, get oriented, organized, and setup, see
 - Gates: `npx tsc --noEmit` clean, `npm test` 20/20, `npm run build` green.
 - Known fragility: a server watch-restart during a sequential compound build can drop the remaining sub-builds; the earlier sub-builds are not logged in that case.
 - This whole art-era working tree is still UNCOMMITTED. Needs the owner's explicit "commit and push".
+
+## Status update — 2026-10-28 (async art + scenery, uncommitted)
+
+- Art now streams asynchronously: the mod ships right after verify (~5s builds) with `artPending`, the sheet arrives later via a new `{kind:"art"}` message, and entities render a pixelized pulsing digitize placeholder (`drawDigitize`) in their exact shape/place while art generates. Art loads retry once with a cache-buster after a 0-frame result (observed live once).
+- Scenery classification (`isScenerySubject` in `server/art.ts`): level/environment subjects (trees, rocks, houses...) get a variants-not-poses scenery sheet (no faces/legs) and static per-entity variant frames (`frames[e.id % n]`) instead of animation cycling. Verified: "add trees" produced 5+ distinct static trees.
+- Sprite fixes: every entity with area >= 30% of its owner+subject group max gets a sprite (repeated instances like trees all render; small assembled parts like wheels do not). Flying creatures (`gravityScale 0`, airborne) now cycle all frames — the sky duck visibly flaps; no duplication reproduced.
+- Slicer keeps only the dominant vertical band per frame, so stray objects a sheet sneaks in (a rock pile above a tree) no longer float in-game.
+- Gates: tsc clean, tests 20/20, Vite build green. Server restarted on the new code (detached, port 8787).
+- Uncommitted: contract/art/index/main/sprites changes plus generated sheets (duck, tree, hippo, zebra). Needs the owner's explicit "commit and push".
+
+## Status update — 2026-10-28 (celestial scenery)
+
+- Sun/moon/etc. now classify as scenery via `isScenerySubject`.
+- Scenery prompt hardened to ONLY-the-subject after a landscape composition (sun + rock piles); art subjects strip trailing locative phrases ("in the sky").
+- Giant sun verified faceless/static in-game.
+- Async-art + scenery work being committed at the owner's request.

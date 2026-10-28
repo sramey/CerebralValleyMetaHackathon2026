@@ -39,3 +39,5 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0005](0005-tweak-edit-fallbacks.md) | Invalid tweaks fall back to edit/new instead of failing | Draft |
 | [0006](0006-spark-subagent-workers.md) | Build work is delegated to Spark subagents by file ownership | Draft |
 | [0007](0007-art-pipeline-chroma-key-first.md) | Art: Image sheet + client chroma-key slicing; SAM validates, mask decode deferred | Draft |
+| [0008](0008-async-art-digitize-placeholder.md) | Art streams asynchronously; digitize placeholder while it generates | Draft |
+| [0009](0009-scenery-vs-creature-art.md) | Intent classification: scenery vs creature art | Draft |
