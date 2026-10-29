@@ -9,10 +9,14 @@ export const playerMod: ModDefinition = {
   },
   setup(api, knobs) {
     const p = api.spawn({ type: "player", x: 120, y: 40, w: 26, h: 34, color: 0xffc94d, gravityScale: 1 });
+    // Starter HUD (ADR 0019): the player's health is always visible, top-left.
+    const healthHud = { kind: "bar" as const, label: "HP", icon: "❤", value: 100, max: 100, position: "top-left" as const };
+    api.setHud("health", healthHud);
     api.onTick(() => {
       // Fell off the world: respawn at the start instead of falling forever.
       if (p.y > 1000) {
         p.x = 120; p.y = 40; p.vx = 0; p.vy = 0;
+        p.health = 100;
         api.burst(p.x + p.w / 2, p.y + p.h / 2, 0xffc94d, 12);
       }
       const input = api.input();
@@ -20,6 +24,8 @@ export const playerMod: ModDefinition = {
       p.vx = input.left ? -speed : input.right ? speed : 0;
       if (p.vx !== 0) p.facing = p.vx > 0 ? 1 : -1;
       if (input.jump && p.onGround) p.vy = -Number(knobs.jump);
+      // Live update: the bar follows combat damage and respawns.
+      api.setHud("health", { ...healthHud, value: Math.max(0, Math.round(p.health)) });
     });
   },
   dispose(api) {

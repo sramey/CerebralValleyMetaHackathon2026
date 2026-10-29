@@ -55,6 +55,55 @@ export interface SpawnDef {
   data?: Record<string, number | string | boolean>;
 }
 
+/** Where the client anchors a HUD widget inside the game viewport. */
+export type HudPosition =
+  | "top-left" | "top-right" | "top-center"
+  | "bottom-left" | "bottom-right" | "bottom-center"
+  | "center";
+
+/**
+ * Declarative HUD widget definition (ADR 0019). Pure data: the sim only stores
+ * it on world.hud; the client renders it. Mods never touch the DOM.
+ * - "bar": a meter (HP, mana, jetpack fuel, boss health). value/max.
+ * - "hearts": discrete pips (lives, ammo, hearts). value = filled pips
+ *   (a fraction fills the last pip partially), max = pip count.
+ * - "stat": a counter/readout (score, speed, timer, altitude). value + unit.
+ * - "banner": a callout. text; with duration it auto-removes after that many
+ *   sim seconds, without it stays until removeHud.
+ */
+export interface HudDef {
+  kind: "bar" | "hearts" | "stat" | "banner";
+  /** Short label ("HP", "Coins"). Banners use text instead. */
+  label?: string;
+  /** bar/hearts: current amount. stat: the number to show. */
+  value?: number;
+  /** bar/hearts: amount when full. stat: optional, adds a "3/20" readout. */
+  max?: number;
+  /** stat unit suffix ("s", "px/s"). */
+  unit?: string;
+  /** Short emoji/glyph shown before the label/value. */
+  icon?: string;
+  /** Fill/pip/accent color, NUMBER hex like 0x3fd06a — never a CSS string. */
+  color?: number;
+  /** banner: the message to show. */
+  text?: string;
+  /** banner: seconds of sim time before auto-removal; omit to keep it. */
+  duration?: number;
+  position?: HudPosition;
+  /** Hide without removing (toggle back by setting hidden: false). */
+  hidden?: boolean;
+}
+
+/** A HUD widget as stored on the world: the def plus its id, owner and, for
+ *  auto-removing banners, the sim-seconds it has left. */
+export interface HudWidget extends HudDef {
+  id: string;
+  /** Owning mod id, like entities. Set by the loader; cleaned on unload. */
+  owner: string;
+  /** Seconds of sim time left before a timed banner disappears. */
+  remaining?: number;
+}
+
 /** API handed to a mod in setup(). Everything a mod creates is owned by it
  *  and removed on dispose(). Mods get no DOM, network, eval or engine internals. */
 export interface ModApi {
@@ -71,6 +120,15 @@ export interface ModApi {
   /** Seeded RNG only. Never Math.random in sim code. */
   rand(): number;
   tick(): number;
+  /** Create or update a HUD widget (same id = update in place). Widgets you
+   *  create are removed automatically when your mod unloads. ADR 0019. */
+  setHud(id: string, def: HudDef): void;
+  /** Remove one of YOUR widgets by id (owner-scoped, like despawn). */
+  removeHud(id: string): void;
+  /** Read a widget back by id (any owner) — for tests and coordination. */
+  hud(id: string): HudWidget | undefined;
+  /** All widgets in creation order (read-only view). */
+  hudList(): readonly HudWidget[];
 }
 
 export type KnobValue = number | string | boolean;
