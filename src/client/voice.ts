@@ -25,6 +25,7 @@ type Phase = "idle" | "holding" | "transcribing";
 
 /** Holds shorter than this are treated as an accidental tap and cancelled. */
 const TAP_MS = 250;
+const MIC_IDLE_MS = 2 * 60 * 1000;
 const FINAL_FAILSAFE_MS = 8000;
 const PAD_BUTTONS = [4, 5]; // LB / RB
 
@@ -46,6 +47,10 @@ export function initVoice(deps: VoiceDeps) {
   let micReady = false;
   let micError = "";
   let ds: Downsampler | null = null;
+  let stream: MediaStream | null = null;
+  let actx: AudioContext | null = null;
+  let micDenied = false;
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
   const stats: VoiceStat[] = [];
 
   function paint(live: "live" | "wait" | "off", level = 0): void {
@@ -69,13 +74,27 @@ export function initVoice(deps: VoiceDeps) {
     deps.say(message, "failed");
   }
 
-  /** Mic + worklet are set up once, on the first press (the user gesture); later presses reuse them. */
+  /** Close the mic after a quiet spell so the browser's recording indicator goes off; the next gesture reopens it. */
+  function releaseMic(): void {
+    if (phase !== "idle") { armIdle(); return; }
+    stream?.getTracks().forEach((t) => t.stop());
+    void actx?.close().catch(() => {});
+    stream = null; actx = null; ds = null;
+    mic = null; micReady = false;
+  }
+  function armIdle(): void {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(releaseMic, MIC_IDLE_MS);
+  }
+
+  /** Mic + worklet are set up on the first user gesture (so the permission prompt is already answered by the first hold) and reused. */
   function ensureMic(): Promise<boolean> {
     if (mic) return mic;
     mic = (async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+        stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
         const ctx = new AudioContext({ latencyHint: "interactive" });
+        actx = ctx;
         await ctx.audioWorklet.addModule("/voice-worklet.js");
         await ctx.resume();
         const src = ctx.createMediaStreamSource(stream);
@@ -86,9 +105,13 @@ export function initVoice(deps: VoiceDeps) {
         ds = new Downsampler(ctx.sampleRate);
         node.port.onmessage = (ev: MessageEvent<Float32Array>) => onChunk(ev.data);
         micReady = true;
+        armIdle();
         return true;
       } catch (err) {
         micError = err instanceof Error ? err.message : String(err);
+        if (err instanceof DOMException && err.name === "NotAllowedError") micDenied = true;
+        stream?.getTracks().forEach((t) => t.stop());
+        stream = null;
         mic = null; // let a later press retry (e.g. after the user allows the mic)
         return false;
       }
@@ -111,6 +134,7 @@ export function initVoice(deps: VoiceDeps) {
     pressAt = performance.now();
     firstPartialAt = -1;
     paint("live");
+    micDenied = false; // an explicit press may re-ask
     deps.feedback.textContent = "Listening…";
     deps.sendJson({ kind: "voiceStart" });
     void ensureMic().then((ok) => {
@@ -135,6 +159,7 @@ export function initVoice(deps: VoiceDeps) {
     phase = "transcribing";
     paint("wait");
     deps.sendJson({ kind: "voiceEnd" });
+    armIdle();
     failsafe = setTimeout(() => fail("Didn't hear back — type instead."), FINAL_FAILSAFE_MS);
   }
 
@@ -165,6 +190,12 @@ export function initVoice(deps: VoiceDeps) {
     else deps.say("Didn't catch that — hold Shift and try again.");
     return true;
   }
+
+  // First user gesture of any kind opens the mic, so the permission prompt never eats a hold; after an idle
+  // release the next gesture reopens it (permission is already granted, so no prompt, no throwaway).
+  const warmMic = (): void => { if (!mic && !micDenied && !micReady) void ensureMic(); else if (micReady) armIdle(); };
+  addEventListener("pointerdown", warmMic, { capture: true });
+  addEventListener("keydown", warmMic, { capture: true });
 
   // Keyboard: Shift, but never while typing in a text box.
   addEventListener("keydown", (e) => {
@@ -204,6 +235,7 @@ export function initVoice(deps: VoiceDeps) {
     release: () => release("api"),
     stats,
     get phase() { return phase; },
+    releaseMic,
     get mic() { return micReady ? "ready" : micError || "pending"; },
   };
 
