@@ -10,6 +10,7 @@ import { drawCliff, drawShape, isCliff, kindOf, registerLook } from "./shapes";
 import { ModLoader } from "../sim/loader";
 import { createGhost } from "./ghost";
 import { createPipeline } from "./pipeline";
+import { createTheater } from "./build-theater";
 import { World } from "../sim/world";
 import playerMod from "../mods/player";
 import groundMod from "../mods/ground";
@@ -29,6 +30,7 @@ const world = new World(1337);
 const loader = new ModLoader(world);
 const ghost = createGhost(document.getElementById("stage-wrap")!);
 const pipeline = createPipeline(document.getElementById("stage-wrap")!);
+const theater = createTheater(document.getElementById("stage-wrap")!, (v) => pipeline.setCode(v.lines, v.partial, v.active), (m) => { pipeline.onMsg(m); theater.onMsg(m); });
 let rejectedAt = 0;
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
 
@@ -1393,6 +1395,7 @@ function connect(): void {
     let msg: ServerMsg;
     try { msg = JSON.parse(String(ev.data)) as ServerMsg; } catch { return; }
     pipeline.onMsg(msg);
+    theater.onMsg(msg);
     if (voice.onServerMsg(msg)) return;
     if (msg.kind === "world") { await applyWorld(msg); return; }
     if (msg.kind === "visitor") { showDemos(msg.demos); return; }

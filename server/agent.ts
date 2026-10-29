@@ -31,9 +31,30 @@ export interface AgentOptions {
   model?: string;
   /** Called before each tool runs (for stage updates). */
   onTool?: (name: string) => void;
+  /** If set, the model is streamed (stream: true) and every piece of text or tool-call source is passed here as it arrives (ADR 0022). */
+  onText?: (chunk: string) => void;
 }
 
 export interface AgentResult { text: string; calls: number; trace: AgentTrace[]; turns: number }
+
+/** The mod source out of a partially received tool-call arguments string, JSON escapes decoded; stops before an incomplete escape. */
+export function sourcePreview(rawArgs: string): string {
+  const m = /"source"\s*:\s*"/.exec(rawArgs);
+  if (!m) return "";
+  let out = "";
+  const body = rawArgs.slice(m.index + m[0].length);
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (c === '"') break;
+    if (c !== "\\") { out += c; continue; }
+    const n = body[i + 1];
+    if (n === undefined) break;
+    if (n === "u") { if (i + 5 >= body.length) break; out += String.fromCharCode(parseInt(body.slice(i + 2, i + 6), 16)); i += 5; continue; }
+    out += n === "n" ? "\n" : n === "t" ? "\t" : n === "r" ? "" : n;
+    i++;
+  }
+  return out;
+}
 
 interface Msg { role: string; content?: string | null; tool_calls?: unknown[]; tool_call_id?: string }
 
@@ -51,15 +72,9 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
   for (let round = 0; round <= maxCalls; round++) {
     const body: Record<string, unknown> = { model: opts.model ?? WONDER, messages, max_tokens: opts.maxTokens ?? 4096, reasoning_effort: "minimal" };
     if (calls < maxCalls) body.tools = defs;
-    const res = await fetch("https://api.meta.ai/v1/chat/completions", {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error(`Meta API ${res.status}: ${(await res.text().catch(() => "")).slice(0, 400)}`);
+    if (opts.onText && round > 0) opts.onText("\n");
+    const msg = await complete(key, body, opts.onText);
     turns++;
-    const data: any = await res.json();
-    const msg = data?.choices?.[0]?.message;
     const toolCalls: any[] = msg?.tool_calls ?? [];
     if (toolCalls.length === 0 || calls >= maxCalls) {
       const text: string = msg?.content ?? "";
@@ -114,4 +129,70 @@ export function inspectTool(inspect: () => Promise<unknown>): AgentTool {
       return { ok: true, message: JSON.stringify(await inspect()).slice(0, 4000) };
     },
   };
+}
+
+const ENDPOINT = "https://api.meta.ai/v1/chat/completions";
+
+/** One model turn. Streams when `onText` is given and falls back to the plain request if the stream cannot start. */
+async function complete(key: string, body: Record<string, unknown>, onText?: (chunk: string) => void): Promise<any> {
+  const headers = { "content-type": "application/json", authorization: `Bearer ${key}` };
+  if (onText) {
+    try {
+      const res = await fetch(ENDPOINT, { method: "POST", headers, body: JSON.stringify({ ...body, stream: true }) });
+      if (res.ok && res.body) return await readStream(res.body, onText);
+    } catch { /* fall through to the plain request */ }
+  }
+  const res = await fetch(ENDPOINT, { method: "POST", headers, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`Meta API ${res.status}: ${(await res.text().catch(() => "")).slice(0, 400)}`);
+  const data: any = await res.json();
+  const msg = data?.choices?.[0]?.message;
+  const text: string = msg?.content ?? "";
+  // Non-streamed fallback: hand the finished text over in one piece so the viewer still sees code appear.
+  if (onText) {
+    const call = (msg?.tool_calls ?? [])[0];
+    const shown = call ? sourcePreview(String(call.function?.arguments ?? "")) : text;
+    if (shown) onText(shown);
+  }
+  return msg;
+}
+
+/** Assemble an assistant message from an OpenAI-style SSE stream, reporting text as it arrives. */
+async function readStream(stream: ReadableStream<Uint8Array>, onText: (chunk: string) => void): Promise<any> {
+  const reader = stream.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  let content = "";
+  const calls: { id?: string; name: string; args: string; shown: number }[] = [];
+  const handle = (payload: string): void => {
+    if (payload === "[DONE]") return;
+    let j: any;
+    try { j = JSON.parse(payload); } catch { return; }
+    const d = j?.choices?.[0]?.delta;
+    if (!d) return;
+    if (typeof d.content === "string" && d.content) { content += d.content; onText(d.content); }
+    for (const tc of d.tool_calls ?? []) {
+      const c = (calls[tc.index ?? 0] ??= { name: "", args: "", shown: 0 });
+      if (tc.id) c.id = tc.id;
+      if (tc.function?.name) c.name += tc.function.name;
+      if (tc.function?.arguments) {
+        c.args += tc.function.arguments;
+        const src = sourcePreview(c.args);
+        if (src.length > c.shown) { onText(src.slice(c.shown)); c.shown = src.length; }
+      }
+    }
+  };
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i: number;
+    while ((i = buf.indexOf("\n\n")) >= 0) {
+      const block = buf.slice(0, i);
+      buf = buf.slice(i + 2);
+      for (const line of block.split("\n")) if (line.startsWith("data:")) handle(line.slice(5).trim());
+    }
+  }
+  if (buf.trim().startsWith("data:")) handle(buf.trim().slice(5).trim());
+  const tool_calls = calls.filter(Boolean).map((c, i) => ({ id: c.id ?? `call_${i}`, type: "function", function: { name: c.name, arguments: c.args } }));
+  return { content, ...(tool_calls.length ? { tool_calls } : {}) };
 }

@@ -669,6 +669,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
       return { ok: r.ok, message: r.ok ? "passed: it works and the player can still play" : r.errors.join("; ").slice(0, 700) };
     }),
   ];
+  const onText = (text: string) => send(ws, { kind: "codeStream", command, text });
   const onTool = (name: string) => stage(ws, { kind: "stage", stage: "writing", detail: name === "inspect_world" ? "looking at the world" : "playtesting a draft", command });
   const TOOL_RULES = "You have two tools. inspect_world shows the live world (mods, knob values, entity types and sizes): call it only when the request depends on what already exists. run_playtest compiles, verifies and playtests your complete source in the player's world: call it with your finished source; if it passes you are done, if it fails read the reason and call it again with a corrected source. If you skip the tools, reply with ONLY the module source.";
 
@@ -678,7 +679,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     const user = editRec ? buildEditPrompt(command, editRec.source, manifestText(ws), context) : buildWonderPrompt(command, manifestText(ws), context);
     let text: string;
     try {
-      const ag = await runAgent({ system: `${WONDER_SYSTEM}\n\n${TOOL_RULES}`, user, tools: tools(), maxCalls: 3, onTool });
+      const ag = await runAgent({ system: `${WONDER_SYSTEM}\n\n${TOOL_RULES}`, user, tools: tools(), maxCalls: 3, onTool, onText });
       agentTrace.push(...ag.trace);
       agentTurns += ag.turns;
       text = ag.text;
@@ -712,6 +713,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
         tools: tools(),
         maxCalls: 3,
         onTool,
+        onText,
       });
       agentTrace.push(...fix.trace);
       agentTurns += fix.turns;
