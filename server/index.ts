@@ -38,6 +38,7 @@ import { createStaticHandler } from "./static";
 import { createVoiceHub } from "./voice";
 import { appendTester, sanitizeTester } from "./testers";
 import { runSketchBuild } from "./sketch";
+import { runPaperBuild } from "./paper";
 import { clampKnobValue, gateMessage } from "./validate";
 import { screenRequest, lateVerdict } from "./safety";
 import type { PendingVerdict } from "./safety";
@@ -483,6 +484,66 @@ async function handleSketchMessage(ws: WebSocket, msg: Extract<ClientMsg, { kind
     }, msg);
   } catch (err) {
     send(ws, { kind: "say", text: `Sketch failed: ${err instanceof Error ? err.message : String(err)}` });
+    logBuild({ command, route: "new", outcome: "failed", timings: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) }, fixAttempted: false });
+  }
+  send(ws, { kind: "timing", command, ms: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) } });
+}
+
+/**
+ * Paper-to-level (ADR 0040): a photographed drawing on paper -> verified, playable level mod.
+ */
+async function handlePaperLevelMessage(ws: WebSocket, msg: Extract<ClientMsg, { kind: "paperLevel" }>): Promise<void> {
+  const t0 = performance.now();
+  const command = "📄 paper level";
+  const ask = typeof msg.prompt === "string" ? msg.prompt.trim() : "";
+  if (ask) {
+    const safety = await screenRequest(ask);
+    if (safety.unsafe) {
+      console.log(`[safety] paper level declined category=${safety.category ?? "other"} by=${safety.by} in ${safety.ms} ms`);
+      send(ws, { kind: "say", text: safety.reply });
+      send(ws, { kind: "timing", command: `[safety:${safety.category ?? "other"}]`, ms: { route: 0, write: 0, compile: 0, verify: 0, total: safety.ms } });
+      return;
+    }
+  }
+  if (!spend(ws, "build")) return;
+  const manifest = sess(ws).manifest;
+  await adoptingOf.get(ws);
+  await adoptBuiltins(manifest, ["ground"]);
+  const timings: DeliverTimings = { route: 0, write: 0, compile: 0, verify: 0 };
+  const deliver = async (source: string): Promise<{ ok: boolean; errors: string[] }> => {
+    stage(ws, { kind: "stage", stage: "compiling", detail: "building your paper level", command });
+    const c0 = performance.now();
+    const compiled = compileMod(source);
+    timings.compile += Math.round(performance.now() - c0);
+    if (!compiled.ok) return { ok: false, errors: compiled.errors };
+    stage(ws, { kind: "stage", stage: "verifying", detail: "verifying your paper level", command });
+    const v0 = performance.now();
+    const verified = await verifyMod(source, compiled.js);
+    timings.verify += Math.round(performance.now() - v0);
+    if (!verified.ok || !verified.def) return { ok: false, errors: verified.errors.length > 0 ? verified.errors : ["verification failed"] };
+    const def = verified.def;
+    const stash = (sess(ws).levelStash ??= new Map());
+    const replaced = [...manifest.values()].filter((m) => m.id !== def.id && (m.id === "ground" || m.id.startsWith("sketch-")));
+    if (replaced.length > 0 && !stash.has(def.id)) stash.set(def.id, replaced);
+    for (const m of replaced) { manifest.delete(m.id); send(ws, { kind: "removed", modId: m.id }); }
+    manifest.set(def.id, { id: def.id, title: def.title, source, compiled: compiled.js, knobs: def.knobs ?? {} });
+    noteTouched(sess(ws).recent, def.id);
+    stage(ws, { kind: "stage", stage: "done", detail: `loaded ${def.id} (${SIM.healthFrames} frames OK)`, command });
+    send(ws, { kind: "mod", mod: { id: def.id, title: def.title, source, compiled: compiled.js, knobs: def.knobs ?? {} } });
+    const files = saveModSources([source], def.id);
+    logBuild({ command, route: "new", outcome: "mod", modId: def.id, title: def.title, timings: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) }, verify: { ok: true, errors: [], msPerFrame: verified.msPerFrame }, fixAttempted: false, sourceFile: files[files.length - 1], sourceFiles: files });
+    return { ok: true, errors: [] };
+  };
+  try {
+    await runPaperBuild({
+      ask: (messages) => chat(WONDER, messages, 1400).then((r) => { timings.write += r.ms; return r.text; }),
+      deliver,
+      say: (text) => send(ws, { kind: "say", text }),
+      stage: (s, detail) => stage(ws, { kind: "stage", stage: s, detail, command }),
+      note: (text) => console.log(`[paper] ${text}`),
+    }, msg);
+  } catch (err) {
+    send(ws, { kind: "say", text: `Paper level failed: ${err instanceof Error ? err.message : String(err)}` });
     logBuild({ command, route: "new", outcome: "failed", timings: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) }, fixAttempted: false });
   }
   send(ws, { kind: "timing", command, ms: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) } });
@@ -1199,6 +1260,10 @@ function dispatchClientMsg(ws: WebSocket, msg: ClientMsg): void {
   } else if (msg.kind === "sketch") {
     handleSketchMessage(ws, msg).catch((err) => {
       send(ws, { kind: "say", text: `Sketch failed: ${err instanceof Error ? err.message : String(err)}` });
+    });
+  } else if (msg.kind === "paperLevel") {
+    handlePaperLevelMessage(ws, msg).catch((err) => {
+      send(ws, { kind: "say", text: `Paper level failed: ${err instanceof Error ? err.message : String(err)}` });
     });
   } else if (msg.kind === "restyle") {
     handleRestyle(ws, msg).catch(() => {});
