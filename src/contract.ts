@@ -196,7 +196,7 @@ export interface SketchStroke {
 /** Wire protocol: client <-> server over WebSocket (JSON text frames). */
 export type ClientMsg =
   | { kind: "command"; text: string }
-  /** Anonymous family-test metrics (ADR 0033), sent only when the page has ?tester=N. Never carries what anyone typed or said. */
+  /** Anonymous family-test metrics (ADR 0034), sent only when the page has ?tester=N. Never carries what anyone typed or said. */
   | { kind: "tester"; n: number; ev: "open" | "typed" | "voice" | "landed" | "rejected" | "failed" | "mood" | "close"; cid?: number; mood?: string }
   | { kind: "undo"; modId: string }
   | { kind: "knob"; modId: string; knob: string; value: KnobValue }
@@ -271,7 +271,7 @@ export interface StatsFeed {
     p90Ms: number | null;
   };
   mods: { distinct: number; edits: number };
-  /** Wonder's autonomy (ADR 0033), from builds that ran the tool loop. */
+  /** Wonder's autonomy (ADR 0034), from builds that ran the tool loop. */
   agent: {
     builds: number;
     /** Mean tool calls per agent build, or null with no agent builds. */
@@ -303,7 +303,7 @@ export type ServerMsg =
   /** A piece of the code Wonder is writing for `command`, as it arrives (ADR 0022). */
   | { kind: "codeStream"; command: string; text: string }
   // Which model answered the router for `command` (ADR 0032): open-weights Spark on Baseten, or hosted Spark.
-  // One finished Wonder tool call (ADR 0033): the pipeline lane shows the loop as it happens.
+  // One finished Wonder tool call (ADR 0034): the pipeline lane shows the loop as it happens.
   | { kind: "agentStep"; command: string; phase: "write" | "fix"; n: number; tool: string; args: string; result: string; ok: boolean; ms: number }
   | { kind: "routed"; command: string; model: string; open: boolean; ms: number; fellBack: boolean }
   | { kind: "timing"; command: string; ms: { route: number; write: number; compile: number; verify: number; total: number } }

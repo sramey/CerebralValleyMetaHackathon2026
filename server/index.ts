@@ -51,7 +51,7 @@ interface ManifestRec {
 }
 
 // Each connection has its own world (ADR 0014): a public server must never mix visitors' mods.
-interface Session { /** Family-test tester index and session id once the page said ?tester=N (ADR 0033). */ tester?: { n: number; sid: string }; manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string>; mood?: MoodSpec; moodMods?: Set<string>; restyled?: Record<string, string> }
+interface Session { /** Family-test tester index and session id once the page said ?tester=N (ADR 0034). */ tester?: { n: number; sid: string }; manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string>; mood?: MoodSpec; moodMods?: Set<string>; restyled?: Record<string, string> }
 const sessions = new WeakMap<WebSocket, Session>();
 function sess(ws: WebSocket): Session {
   let s = sessions.get(ws);

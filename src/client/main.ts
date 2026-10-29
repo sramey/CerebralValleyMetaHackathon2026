@@ -1669,7 +1669,7 @@ function shareUrl(id: string): string {
   return `${location.origin}${location.pathname}?w=${id}`;
 }
 
-// Anonymous family-test metrics, only with ?tester=N (ADR 0033).
+// Anonymous family-test metrics, only with ?tester=N (ADR 0034).
 const tester = createTester(urlFlags, (m) => { if (ws?.readyState === WebSocket.OPEN) { ws.send(JSON.stringify(m)); return true; } return false; });
 let inputVia: "typed" | "voice" = "typed";
 addEventListener("pagehide", () => tester.close());

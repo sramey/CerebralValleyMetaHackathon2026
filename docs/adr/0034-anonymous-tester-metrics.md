@@ -1,4 +1,4 @@
-# 0033: Anonymous family-test metrics (?tester=N)
+# 0034: Anonymous family-test metrics (?tester=N)
 
 - **Status:** Draft
 - **Date:** 2026-10-29

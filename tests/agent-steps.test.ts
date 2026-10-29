@@ -5,7 +5,7 @@ import { statsFeed } from "../server/stats-feed";
 import { chain, stepLine } from "../src/client/agent-steps";
 import type { AgentStepMsg } from "../src/client/agent-steps";
 
-describe("tool-loop steps (ADR 0033)", () => {
+describe("tool-loop steps (ADR 0034)", () => {
   beforeEach(() => { process.env.MODEL_API_KEY = "test-key-not-real"; });
   afterEach(() => { vi.unstubAllGlobals(); });
 

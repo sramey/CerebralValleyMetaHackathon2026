@@ -1,4 +1,4 @@
-// Family-test metrics (bead 3hu.1, ADR 0033). With ?tester=N the client reports a handful of anonymous events and the
+// Family-test metrics (bead 3hu.1, ADR 0034). With ?tester=N the client reports a handful of anonymous events and the
 // server appends them to logs/testers.jsonl (gitignored). `npm run testers` aggregates that file into
 // docs/evidence/user-test.md.
 //

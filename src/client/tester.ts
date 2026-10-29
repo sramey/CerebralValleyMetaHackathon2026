@@ -1,4 +1,4 @@
-// Family-test metrics (bead 3hu.1, ADR 0033): with ?tester=N the page reports a few anonymous events so the owner gets
+// Family-test metrics (bead 3hu.1, ADR 0034): with ?tester=N the page reports a few anonymous events so the owner gets
 // numbers without taking notes. N is an anonymous index (1..99), never a name. Events carry no text at all: only what
 // happened (typed or spoken, landed, rejected, failed, a mood name the game picked) and which command of the session.
 import type { ClientMsg } from "../contract";
