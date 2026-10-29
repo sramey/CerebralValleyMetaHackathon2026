@@ -7,6 +7,15 @@
 // touches the sim beyond reading the camera; the frame loop in main.ts freezes the world
 // while `active()` is true (ADR 0028), so the player draws on a still frame.
 import type { ClientMsg, SketchPoint, SketchStroke, SketchTag } from "../contract";
+import {
+  SKETCH_BUILDING_LABEL,
+  SKETCH_IDLE_MS,
+  SKETCH_PAUSED_LABEL,
+  idleExpired,
+  idleLeft,
+  idleNote,
+  idleUrgent,
+} from "./sketch-idle";
 
 export interface SketchCamera { x: number; y: number }
 
@@ -129,7 +138,7 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
     (btn.querySelector(".glyph") as HTMLElement).textContent = b.glyph;
     (btn.querySelector(".name") as HTMLElement).textContent = b.label;
     btn.title = `${b.label} (${b.tag})`;
-    btn.addEventListener("click", () => selectBrush(b.tag));
+    btn.addEventListener("click", () => { selectBrush(b.tag); touch(); });
     return btn;
   });
   brushes.append(...brushButtons);
@@ -164,6 +173,22 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
   const status = document.createElement("div");
   status.id = "sketch-status";
   root.appendChild(status);
+
+  // The world is genuinely frozen while the overlay is up (ADR 0028), so the chip says
+  // "Paused" and counts the idle guard down (ADR 0030). Top-left: the status line owns the
+  // top centre and the palette the right edge.
+  const chip = document.createElement("div");
+  chip.id = "sketch-chip";
+  chip.hidden = true;
+  const chipDot = document.createElement("span");
+  chipDot.className = "chip-dot";
+  chipDot.setAttribute("aria-hidden", "true");
+  const chipLabel = document.createElement("b");
+  chipLabel.textContent = SKETCH_PAUSED_LABEL;
+  const chipNote = document.createElement("em");
+  chip.append(chipDot, chipLabel, chipNote);
+  root.appendChild(chip);
+
   parent.appendChild(root);
 
   type State = "closed" | "drawing" | "building";
@@ -174,6 +199,9 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
   let ctx: CanvasRenderingContext2D | null = null;
   let settleTimer = 0;
   let watchdog = 0;
+  /** Last time the player touched the sketch; the idle guard measures from here. */
+  let touchedAt = 0;
+  let idleTimer = 0;
 
   function selectBrush(tag: SketchTag): void {
     const b = SKETCH_BRUSHES.find((x) => x.tag === tag);
@@ -186,6 +214,51 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
   function setStatus(text: string, kind: "drawing" | "building" | "error" = "drawing"): void {
     status.textContent = text;
     status.dataset.kind = kind;
+  }
+
+  /** Mark the sketch as used: any brush pick, stroke or hint key pushes the idle guard back. */
+  function touch(): void {
+    touchedAt = Date.now();
+    if (state === "drawing") paintChip();
+  }
+
+  /** The pause chip: what the world is doing, and when an abandoned sketch lets go. */
+  function paintChip(): void {
+    if (state === "closed") { chip.hidden = true; return; }
+    chip.hidden = false;
+    chip.dataset.mode = state;
+    if (state === "building") {
+      chipLabel.textContent = SKETCH_BUILDING_LABEL;
+      chipNote.textContent = "";
+      chip.classList.remove("urgent");
+      return;
+    }
+    chipLabel.textContent = SKETCH_PAUSED_LABEL;
+    const left = idleLeft(touchedAt, Date.now());
+    chipNote.textContent = idleNote(left);
+    chip.classList.toggle("urgent", idleUrgent(left));
+  }
+
+  function startIdleGuard(): void {
+    touchedAt = Date.now();
+    window.clearInterval(idleTimer);
+    idleTimer = window.setInterval(idleTick, 1000);
+    paintChip();
+  }
+
+  /** Once a second while drawing: count down, and let go of a sketch nobody came back to. */
+  function idleTick(): void {
+    if (state !== "drawing") return;
+    if (idleExpired(touchedAt, Date.now())) { cancelIdle(); return; }
+    paintChip();
+  }
+
+  /** Auto-cancel: the world must never stay frozen because a sketch was abandoned. */
+  function cancelIdle(): void {
+    const dropped = strokes.length;
+    close();
+    deps.say(`Sketch closed after ${Math.round(SKETCH_IDLE_MS / 60_000)} minutes with no drawing — the world is running again.`, "done");
+    deps.log?.(`sketch idle-cancelled: ${dropped} stroke(s) dropped`);
   }
 
   function resize(): void {
@@ -273,12 +346,14 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
 
   canvas.addEventListener("pointerdown", (ev) => {
     if (state !== "drawing") return;
+    touch();
     try { canvas.setPointerCapture(ev.pointerId); } catch { /* synthetic pointers have no capture */ }
     live = { tag: brush.tag, color: brush.color, points: [canvasPoint(ev)] };
     ev.preventDefault();
   });
   canvas.addEventListener("pointermove", (ev) => {
     if (!live || state !== "drawing") return;
+    touch();
     const p = canvasPoint(ev);
     const last = live.points[live.points.length - 1];
     if (Math.hypot(p.x - last.x, p.y - last.y) < 2) return; // keep the payload small
@@ -288,6 +363,7 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
   });
   const endStroke = (ev: PointerEvent): void => {
     if (!live) return;
+    touch();
     live.points.push(canvasPoint(ev));
     if (strokes.length >= MAX_STROKES) strokes.shift();
     strokes.push(live);
@@ -297,9 +373,10 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
   canvas.addEventListener("pointerup", endStroke);
   canvas.addEventListener("pointercancel", () => { live = null; redraw(); });
 
-  undoBtn.addEventListener("click", () => { strokes.pop(); redraw(); });
-  clearBtn.addEventListener("click", () => { strokes.length = 0; live = null; redraw(); });
+  undoBtn.addEventListener("click", () => { touch(); strokes.pop(); redraw(); });
+  clearBtn.addEventListener("click", () => { touch(); strokes.length = 0; live = null; redraw(); });
   cancelBtn.addEventListener("click", () => close());
+  hint.addEventListener("input", () => touch());
 
   doneBtn.addEventListener("click", () => {
     if (state !== "drawing") return;
@@ -311,6 +388,7 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
     state = "building";
     root.dataset.state = "building";
     setStatus(STATUS.building, "building");
+    paintChip();
     palette.classList.add("busy");
     deps.send({ kind: "sketch", ...payload });
     deps.say("Reading your sketch...", "building");
@@ -323,6 +401,8 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
       root.dataset.state = "drawing";
       palette.classList.remove("busy");
       setStatus("No answer from the builder — press Done to try again.", "error");
+      touch();
+      paintChip();
     }, 60000);
   });
 
@@ -342,6 +422,7 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
     resize();
     redraw();
     setStatus(STATUS.drawing);
+    startIdleGuard();
     deps.say("Sketch mode: draw the level, then press Done.", "building");
   }
 
@@ -356,12 +437,15 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
   function close(): void {
     window.clearTimeout(settleTimer);
     window.clearTimeout(watchdog);
+    window.clearInterval(idleTimer);
+    idleTimer = 0;
     root.hidden = true;
     root.classList.remove("settle", "building");
     delete root.dataset.state;
     state = "closed";
     strokes.length = 0;
     live = null;
+    paintChip(); // hides the chip
   }
 
   addEventListener("resize", () => { if (state !== "closed") resize(); });
@@ -387,6 +471,8 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
         root.dataset.state = "drawing";
         palette.classList.remove("busy");
         setStatus(msg.detail ? `Didn't build: ${msg.detail}` : "That didn't build — try again.", "error");
+        touch();
+        paintChip();
       }
     },
   };
