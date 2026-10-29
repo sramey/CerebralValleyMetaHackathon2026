@@ -140,6 +140,11 @@ const EFFECT_TOKENS: ReadonlySet<string> = new Set([
   "fire",
   "flame",
   "flames",
+  // Cosmetic appendages and light strings are drawn in code, never sprited.
+  "tail",
+  "tails",
+  "string",
+  "strings",
 ]);
 
 const PROJECTILE_TOKENS: ReadonlySet<string> = new Set([
@@ -1081,6 +1086,23 @@ export function canUseSpriteSheet(input: string | EntityLike): boolean {
 
 export function isTerrainType(input: string | EntityLike): boolean {
   return entityKind(input) === "terrain";
+}
+
+/**
+ * The single art decision for a subject or entity type (ADR 0031). Art never
+ * guesses from its own word lists: the ontology decides.
+ * - `none`      terrain and static structure, effects, projectiles and shapes are drawn in code
+ * - `held-item` weapons, tools and pickups get isolated item art (no character holding them)
+ * - `scenery`   other props get static scenery variants, never character poses
+ * - `sheet`     creatures get an animated pose sheet (the player's sheet ships with the engine)
+ */
+export type ArtPlan = "none" | "held-item" | "scenery" | "sheet";
+
+export function artPlanFor(input: string | EntityLike): ArtPlan {
+  const kind = entityKind(input);
+  if (kind === "creature" || kind === "player") return "sheet";
+  if (kind !== "prop") return "none";
+  return isHeldItemType(typeof input === "string" ? input : input.type) ? "held-item" : "scenery";
 }
 
 export function isPropType(input: string | EntityLike): boolean {
