@@ -1,4 +1,5 @@
 // Wonder system prompt + mod-API reference. Must match src/contract.ts exactly.
+import type { EntityKind } from "../src/contract";
 import { formatLearnedBlock } from "./learn";
 // Mods: export default mod object, no imports, no markdown fences in output.
 
@@ -63,7 +64,8 @@ Rules:
 - COMBAT: Every entity has health (default 100; api.damage(id, amount) destroys at 0 with a burst). Fighters deal damage on contact with a cooldown: only when api.tick() - (e.data.lastHit ?? -999) > 30, call api.damage(other.id, 10) and set e.data.lastHit = api.tick(). Enemies damage the player or heroes; heroes damage hostiles. Non-combat creatures do not deal damage.
 - LOCOMOTION: the engine already frees a walker that keeps pushing into a wall (it hops, then turns around), and floating platforms spawned with data: { oneWay: true } let creatures pass up through them and only land from above. Do not hand-code unstick logic. For friendly/neutral ground creatures set data.casual = true so they hop over the player instead of walking through them; never set it on hostile hunters.
 - Platformer world: x grows right, y grows DOWN. Ground is solid entities. Player type is "player".
-- solid: true + gravityScale: 0 means static terrain (ground/platforms) that never moves. Creatures, players and projectiles that must move/fall: use solid: false (or solid: true WITH gravityScale: 1). color is a NUMBER (hex like 0x57d94d), never a CSS string.`;
+- solid: true + gravityScale: 0 means static terrain (ground/platforms/stairs/walls/blocks) that never moves. Creatures, players and projectiles that must move/fall: use solid: false (or solid: true WITH gravityScale: 1). color is a NUMBER (hex like 0x57d94d), never a CSS string.
+- ENTITY ONTOLOGY: Every entity has a role: terrain (ground, platform, stair, step, wall, block, brick, ledge, ramp), effect (rain, snow, snowflake, fog, smoke, spark, light), projectile (bullet, shot, arrow, fireball, laser, beam), shape (coin, ball, orb, bubble, ring, spikes, star, gem), prop (tree, house, snowman, gift, chest, gun, sword, wand, shield), creature (living/moving characters, enemies, allies, pets, bosses), or player ("player"). Never spawn replacement ground entities when decorating or theming; when giving the player a held weapon/item (like a gun, sword, or wand), either spawn projectiles directly from api.player() on input.shoot or attach a small compact held item prop (w: 22, h: 12, solid: false, gravityScale: 0) at the player's hand, never a full-sized character.`;
 
 export const WONDER_SYSTEM = `You write tiny self-contained TypeScript game mods for a 2D platformer simulation.
 Output ONLY the module code: "export default { ... }" with setup/dispose (and test when useful).
@@ -74,12 +76,13 @@ export interface WorldManifestEntry {
   id: string;
   title: string;
   knobs: Record<string, unknown>;
+  entities?: { type: string; kind: EntityKind }[];
 }
 
 export function formatManifest(mods: WorldManifestEntry[]): string {
   if (mods.length === 0) return "(world is empty — no mods loaded)";
   return mods
-    .map((m) => `- ${m.id} ("${m.title}") knobs=${JSON.stringify(m.knobs)}`)
+    .map((m) => `- ${m.id} ("${m.title}")${m.entities && m.entities.length > 0 ? ` entities=[${m.entities.map((e) => `${e.type}:${e.kind}`).join(", ")}]` : ""} knobs=${JSON.stringify(m.knobs)}`)
     .join("\n");
 }
 
@@ -108,12 +111,12 @@ Reply with ONLY a single JSON object, no markdown, no prose. Schema:
 - "edit": the request changes the BEHAVIOR of an already-loaded mod beyond a knob value (new mechanics, new entities it should own, rule changes — e.g. "make enemies die when I stomp them" for a loaded enemies mod). Set target=mod id. Prefer "edit" over "tweak" when the request adds or changes behavior rather than tuning a number.
 - "undo": the request removes a mod (set target=mod id).
 - For action "new" or "edit" that adds something visible, also set "visual" (what the main new thing looks like):
-  - "shape": a plain geometric or abstract object drawn in code: ball, orb, bubble, bomb, ring, spikes, block, beam, projectile, gem. Set "shape" too (circle for balls/orbs/bubbles/bombs, ring, triangle, spikes, pill for beams/capsules, diamond, star, block).
+  - "shape": a plain geometric or abstract object OR level geometry drawn in code: ball, orb, bubble, bomb, ring, spikes, block, stairs, steps, wall, platform, ledge, ramp, beam, projectile, gem, star. Set "shape" too (circle for balls/orbs/bubbles/bombs, ring, triangle, spikes, pill for beams/capsules, diamond, star, block for stairs/steps/walls/platforms/ledges/ramps/blocks).
   - "effect": weather or atmosphere or particles: rain, fog, mist, smoke, snow, explosion, sparks, lightning, fire glow.
-  - "prop": a still object that deserves pixel art: tree, house, chest, car, statue, castle, sun, cloud.
+  - "prop": a still scenery object, decoration, or held item/weapon that deserves static pixel art (never character poses): tree, house, chest, car, statue, castle, sun, cloud, snowman, gift, present, gun, sword, shield, bow, wand, key, potion.
   - "creature": a living or moving character with limbs: ninja, dragon, turtle, zombie, bird, robot.
   "A bouncing ball" is a shape, never a creature. Omit "visual" for pure rule changes and HUD/UI-only requests (counter, timer, meter, speedometer, banner) — those never need sprites.
-- "mood": the request restyles the WHOLE world's look and atmosphere with a theme or mood ("make it spooky", "make it snowy", "neon", "make everything look like a desert at sunset"). Set mood=the short mood words. One weather effect alone ("make it rain", "add fog") is NOT a mood, and neither is a change to one object: those are "new".
+- "mood": the request restyles the WHOLE world's look and atmosphere with a theme, holiday, time-of-day, or mood ("Make this Christmas themed", "make it christmas themed", "christmas theme", "make it spooky", "make it snowy", "make it daytime", "neon", "make everything look like a desert at sunset"). Set mood=the short mood words (e.g. "christmas", "spooky", "snowy", "daytime", "neon"). One weather effect alone ("make it rain", "add fog") is NOT a mood, and neither is a change to one object: those are "new".
 - "question": anything else — greeting, help, unanswerable (set answer=text to say to the player).`;
 
 /** Prompt for Spark to route a command against the loaded-mod manifest. */

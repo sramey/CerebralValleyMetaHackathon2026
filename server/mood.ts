@@ -3,6 +3,7 @@
 // AI sprite sheet, always edited from the ORIGINAL sheet so characters stay recognizable.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { canUseSpriteSheet } from "../src/ontology";
 import { chat, loadEnv, SPARK } from "./meta";
 import type { MoodSpec } from "../src/contract";
 
@@ -32,11 +33,25 @@ const PRESETS: Record<string, MoodSpec> = {
     skyTop: 0x0a0016, skyBottom: 0x4a0a63, ridgeFar: 0x1d0a3a, ridgeNear: 0x2b0f55, moon: 0xff4fd8, star: 0x00f0ff,
     grass: 0x00f5d4, soil: 0x2a0a4a, tint: 0xff2bd6, grade: 0.25, dim: 1, fog: 0.1, vignette: 0.35, ambient: "sparks",
   },
+  christmas: {
+    name: "christmas",
+    anchor: "festive Christmas holiday winter night: warm red, gold and pine-green accents, snow-frosted surfaces, twinkling holiday lights, cozy festive pixel-art details",
+    skyTop: 0x0b1528, skyBottom: 0x1e3557, ridgeFar: 0x15253d, ridgeNear: 0x1d3b32, moon: 0xfff4cc, star: 0xffe082,
+    grass: 0xf4f9ff, soil: 0x5c2c24, tint: 0xffd8a8, grade: 0.22, dim: 1.0, fog: 0.15, vignette: 0.25, ambient: "snow",
+  },
+  daytime: {
+    name: "daytime",
+    anchor: "bright sunny daytime sky: clear azure blue sky, warm golden sunlight, vibrant green grass, crisp cheerful daylight colors",
+    skyTop: 0x3898ff, skyBottom: 0x9be2ff, ridgeFar: 0x5c8ab8, ridgeNear: 0x3e6b89, moon: 0xfff380, star: 0x7ec8ff,
+    grass: 0x45df68, soil: 0x6b442a, tint: 0xfff5cc, grade: 0.18, dim: 1.15, fog: 0.05, vignette: 0.1, ambient: "none",
+  },
 };
 const ALIASES: Record<string, string> = {
   spooky: "spooky", scary: "spooky", creepy: "spooky", haunted: "spooky", halloween: "spooky", horror: "spooky",
   snowy: "snowy", snow: "snowy", winter: "snowy", icy: "snowy", frozen: "snowy",
   neon: "neon", cyberpunk: "neon", synthwave: "neon", vaporwave: "neon",
+  christmas: "christmas", xmas: "christmas", festive: "christmas", holiday: "christmas", santa: "christmas", yuletide: "christmas",
+  daytime: "daytime", day: "daytime", daylight: "daytime", sunny: "daytime", morning: "daytime", noon: "daytime",
 };
 
 export function moodKey(name: string): string {
@@ -136,6 +151,7 @@ export function cleanWebp(b: Buffer<ArrayBuffer>): Buffer<ArrayBuffer> {
 /** Where a sprite key's ORIGINAL sheet lives, or null when it is not one of ours. */
 export function sheetPath(key: string, root = process.cwd()): string | null {
   if (!/^[a-z0-9-]{1,64}$/.test(key) || key.startsWith("photo") || key.includes("--")) return null;
+  if (key !== "ninja" && !canUseSpriteSheet(key)) return null;
   const p = key === "ninja" ? join(root, "public", "art", "ninja-sheet.webp")
     : key === "chicken" ? join(root, "public", "art", "chicken.webp")
     : join(root, "public", "art", "gen", `${key}.webp`);

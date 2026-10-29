@@ -1,4 +1,5 @@
 import { Texture } from "pixi.js";
+import { canUseSpriteSheet } from "../ontology";
 
 // Loads an AI sprite sheet (flat magenta background), chroma-keys it, splits
 // it into frames by empty columns, trims each frame, and returns Pixi textures
@@ -22,8 +23,10 @@ export function framesFor(
   isPlayer: boolean,
 ): Texture[] {
   if (isPlayer) return framesBySubject["ninja"] ?? [];
+  if (!canUseSpriteSheet(entityType)) return [];
   const lower = entityType.toLowerCase();
   for (const key of Object.keys(framesBySubject).sort()) {
+    if (!canUseSpriteSheet(key)) continue;
     if (lower.includes(key.toLowerCase())) return framesBySubject[key];
   }
   return [];

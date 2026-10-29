@@ -1,4 +1,5 @@
 import { SIM, emptyInput } from "../contract";
+import { entityKind } from "../ontology";
 import type { Entity, HudDef, HudWidget, InputState, Particle, SpawnDef } from "../contract";
 import { createRng } from "./rng";
 
@@ -95,7 +96,7 @@ export class World {
       let idx = this.entities.findIndex((e) => e.owner === owner && e.type !== "player");
       if (idx === -1) {
         idx = this.entities.findIndex(
-          (e) => e.type !== "player" && e.type !== "ground" && e.type !== "platform",
+          (e) => e.type !== "player" && e.type !== "ground" && e.type !== "platform" && e.kind !== "terrain",
         );
       }
       if (idx === -1) idx = this.entities.findIndex((e) => e.type !== "player");
@@ -105,6 +106,7 @@ export class World {
     const e: Entity = {
       id: this.nextId++,
       type: def.type,
+      kind: def.kind ?? entityKind({ type: def.type, solid: def.solid ?? false, gravityScale: def.gravityScale ?? 1, vx: def.vx ?? 0, vy: def.vy ?? 0, data: def.data }),
       x: def.x, y: def.y, w: def.w, h: def.h,
       vx: def.vx ?? 0, vy: def.vy ?? 0,
       color: def.color ?? 0xffffff,

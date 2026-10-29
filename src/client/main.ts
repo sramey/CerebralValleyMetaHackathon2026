@@ -4,6 +4,7 @@ import { Application, Graphics, Sprite, Texture } from "pixi.js";
 import { framesFor, loadSpriteSheet, loadSubjects } from "./sprites";
 import chickenMod from "../mods/chicken";
 import { SIM } from "../contract";
+import { canUseSpriteSheet, entityKind } from "../ontology";
 import type { ClientMsg, Entity, KnobValue, ModDefinition, MoodSpec, ServerMsg } from "../contract";
 import { initVoice } from "./voice";
 import { Fx } from "./fx";
@@ -240,6 +241,8 @@ function drawGround(e: Entity, x: number, y: number): void {
   gfx.rect(x, y, e.w, e.h).fill(e.color);
   const gh = Math.min(8, Math.max(3, e.h * 0.22));
   gfx.rect(x, y, e.w, gh).fill(pal.grass);
+  const snowy = mood?.ambient === "snow" || mood?.name === "christmas" || mood?.name === "snowy" || e.type.toLowerCase().includes("snow") || e.type.toLowerCase().includes("ice");
+  if (snowy) gfx.rect(x, y, e.w, Math.max(2, gh * 0.55)).fill(0xffffff);
   // deterministic speckles from world coords (no per-frame random)
   const base = Math.floor(e.x) * 31 + Math.floor(e.y) * 7;
   const n = Math.floor(e.w / 14);
@@ -249,7 +252,8 @@ function drawGround(e: Entity, x: number, y: number): void {
     const px = x + k * 14 + (hsh % 5);
     const span = e.h - gh - 6;
     const py = y + gh + 3 + (span > 0 ? hsh % span : 0);
-    gfx.rect(px, py, 3, 2).fill(pal.soil);
+    const speckColor = mood?.name === "christmas" && k % 3 === 0 ? (k % 6 === 0 ? 0xd9383a : 0x2e8b57) : pal.soil;
+    gfx.rect(px, py, 3, 2).fill(speckColor);
   }
 }
 
@@ -300,7 +304,7 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   const look = kindOf(t); // code-drawn shapes and engine effects never use sprites or the outline (ADR 0015)
   if (look) { if (look.kind === "shape") drawShape(gfx, e, x, y, look.shape); return; }
   if (framesFor(framesBySubject, t, t === "player").length >= 1) return; // sprite pass below
-  if (t !== "player") {
+  if (t !== "player" && canUseSpriteSheet(e)) {
     for (const k of pendingArt) {
       if (t.includes(k)) { drawDigitize(e, x, y); return; }
     }
@@ -314,7 +318,7 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   }
   if (t.indexOf("coin") >= 0) { drawCoin(e, x, y); return; }
   if (t.indexOf("ground") >= 0 || t.indexOf("platform") >= 0) { drawGround(e, x, y); return; }
-  if (t.indexOf("projectile") >= 0 || t.indexOf("arrow") >= 0 || t.indexOf("fire") >= 0) { drawShot(e, x, y); return; }
+  if (t.indexOf("projectile") >= 0 || t.indexOf("arrow") >= 0 || t.indexOf("fire") >= 0 || entityKind(e) === "projectile") { drawShot(e, x, y); return; }
   if (t.indexOf("slime") >= 0 || t.indexOf("gel") >= 0 || t.indexOf("enemy") >= 0 ||
     t.indexOf("walker") >= 0 || t.indexOf("turtle") >= 0) { drawBlob(e, x, y); return; }
   gfx.rect(x, y, e.w, e.h).fill(e.color);
@@ -629,7 +633,7 @@ function render(): void {
     const moving = Math.abs(e.vx) > 5;
     const subjectKey = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0];
     const frame = frames.length === 1 ? frames[0]
-      : subjectKey !== undefined && scenerySubjects.has(subjectKey) ? frames[e.id % frames.length]
+      : (subjectKey !== undefined && scenerySubjects.has(subjectKey)) || entityKind(e) === "prop" ? frames[e.id % frames.length]
       : !e.onGround && e.gravityScale === 0 && frames.length >= 2 ? frames[Math.floor(world.tickCount / 5) % frames.length]
       : frames.length >= 4 && !e.onGround ? frames[3]
       : moving ? frames[1 + Math.floor(world.tickCount / 8) % Math.min(2, frames.length - 1)]
@@ -650,7 +654,7 @@ function render(): void {
   for (const [id, s] of spritePool) if (!seen.has(id)) s.visible = false;
   const nowMs = performance.now();
   fx.render(world, camX, camYSmooth, W, H, (nowMs - lastRenderAt) / 1000, isEffectType);
-  portal.render(world, camX, camYSmooth, (nowMs - lastRenderAt) / 1000, isEffectType);
+  portal.render(world, camX, camYSmooth, (nowMs - lastRenderAt) / 1000, (t) => isEffectType(t) || !canUseSpriteSheet(t));
   lastRenderAt = nowMs;
   app.stage.position.set(fx.shakeX, fx.shakeY);
   // health bars: single pass after rect and sprite passes (player included)

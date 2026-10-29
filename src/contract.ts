@@ -11,9 +11,12 @@ export interface InputState {
 
 export const emptyInput = (): InputState => ({ left: false, right: false, jump: false, shoot: false });
 
+export type EntityKind = "terrain" | "effect" | "projectile" | "shape" | "prop" | "creature" | "player";
+
 export interface Entity {
   id: number;
   type: string;
+  kind?: EntityKind;
   x: number;
   y: number;
   w: number;
@@ -54,6 +57,7 @@ export interface Particle {
 
 export interface SpawnDef {
   type: string;
+  kind?: EntityKind;
   x: number; y: number; w: number; h: number;
   vx?: number; vy?: number;
   color?: number;
