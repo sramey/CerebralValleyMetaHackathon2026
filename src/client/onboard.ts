@@ -65,7 +65,8 @@ export interface OnboardingHooks {
   submit(text: string): void;
   orbInput: HTMLInputElement;
   mount: HTMLElement;
-  flags: URLSearchParams;
+  /** Anything with a `has` check: the defensive decoder (`UrlFlags`) or a raw `URLSearchParams`. */
+  flags: { has(name: string): boolean };
 }
 
 export interface Onboarding {

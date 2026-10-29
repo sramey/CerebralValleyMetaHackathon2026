@@ -35,6 +35,8 @@ import movingPlatformMod from "../mods/platform-moving";
 import fireArrowMod from "../mods/fire-arrow";
 import parallaxMod from "../mods/parallax";
 import { resolveItemMod, gunMod } from "./items";
+import { parseUrlFlags, shareIssueMessage, urlWithoutWorld } from "./url-flags";
+import type { ShareIssue } from "./url-flags";
 
 const BUILTINS: Record<string, ModDefinition> = {
   player: playerMod, ground: groundMod, enemies: enemyMod, rain: rainMod,
@@ -111,14 +113,14 @@ app.stage.addChild(gfx);
 app.stage.sortableChildren = true;
 gfx.zIndex = -100;
 const fx = new Fx(app.stage);
-const urlFlags = new URLSearchParams(location.search);
+const urlFlags = parseUrlFlags(location.search, location.hash); // strangers' flags, decoded defensively (ADR 0037)
 // Synthesized WebAudio sound (bead 6d3): silent until the first gesture; ?mute starts muted, ?vol=0..1 sets master volume, M toggles mute.
-const sound = new Sound({ muted: urlFlags.has("mute"), volume: urlFlags.has("vol") ? Number(urlFlags.get("vol")) : undefined });
+const sound = new Sound({ muted: urlFlags.mute, volume: urlFlags.volume ?? undefined });
 const unlockSound = (): void => sound.unlock();
 const syncSoundButton = createSoundButton(sound, stageWrapEl, unlockSound);
 addEventListener("pointerdown", unlockSound);
 addEventListener("keydown", unlockSound);
-const feel = new Feel(app.stage, (amp) => fx.kick(amp), !urlFlags.has("noshake"), (ev) => sound.playEvent(ev));
+const feel = new Feel(app.stage, (amp) => fx.kick(amp), !urlFlags.noShake, (ev) => sound.playEvent(ev));
 const portal = new Portal(app.stage); // screen-rip entrance for new entities (bead yzd)
 portal.onRip = () => sound.play("portal");
 let lastRenderAt = performance.now();
@@ -1605,9 +1607,26 @@ cameraConfirm.addEventListener("click", () => {
 const WS_URL: string = import.meta.env.DEV
   ? (import.meta.env.VITE_WS_URL ?? "ws://127.0.0.1:8787")
   : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
-// --- worlds, share links, visitor mode (ADR 0014) ----------------------------
-const worldParam = new URLSearchParams(location.search).get("w");
+// --- worlds, share links, visitor mode (ADR 0014, 0037) ----------------------
+// The `w` id is already validated by the URL decoder: only a current-format id gets this far.
+const worldParam = urlFlags.worldId;
 let worldRequested = false;
+let worldFallbackTimer = 0;
+
+/** A link we could not open: say so in plain words, drop it from the URL, and load the starter instead. */
+function openStarterAfterBadLink(issue: ShareIssue): void {
+  log(`share link not opened: ${issue}`);
+  try { history.replaceState(null, "", `${location.pathname}${urlWithoutWorld(location.search)}`); } catch { /* the starter still loads */ }
+  // The starter's own "materialized" lines come first, so the last word on screen is the explanation.
+  autoLoadStarterOnce();
+  pendingNotice = shareIssueMessage(issue);
+  say(pendingNotice);
+}
+
+// The server greets every connection with a `say`, which would bury the line a bad share link just
+// showed (it arrives milliseconds after load). Keep it and show it once more in place of that
+// greeting, until the visitor does something of their own (ADR 0037).
+let pendingNotice: string | null = null;
 
 async function importMod(compiled: string): Promise<ModDefinition> {
   const url = URL.createObjectURL(new Blob([compiled], { type: "text/javascript" }));
@@ -1695,8 +1714,13 @@ function connect(): void {
   ws.addEventListener("open", () => { serverStatus.textContent = `Server: connected on ${WS_URL}`; voice.onOpen(); tester.onOpen(); sendWorldState();
     if (worldParam && !worldRequested) {
       worldRequested = true;
+      say("Opening the world from that link…");
       send({ kind: "worldLoad", id: worldParam });
-      setTimeout(() => { if (loader.list().length === 0) autoLoadStarterOnce(); }, 8000); // bad link: fall back to the starter world
+      // A well-formed id that no longer exists only fails here: the server's worlds are files.
+      worldFallbackTimer = window.setTimeout(() => {
+        if (loader.list().length > 0) return;
+        openStarterAfterBadLink("invalid");
+      }, 8000);
     }
   });
   ws.addEventListener("close", () => {
@@ -1710,7 +1734,7 @@ function connect(): void {
     theater.onMsg(msg);
     sketch.onServerMsg(msg);
     if (voice.onServerMsg(msg)) return;
-    if (msg.kind === "world") { await applyWorld(msg); return; }
+    if (msg.kind === "world") { clearTimeout(worldFallbackTimer); await applyWorld(msg); return; }
     if (msg.kind === "mood") { onMood(msg.mood); return; }
     if (msg.kind === "restyled") { await onRestyled(msg); return; }
     if (msg.kind === "visitor") { showDemos(msg.demos); return; }
@@ -1722,7 +1746,11 @@ function connect(): void {
       log(`shared world: ${url}`);
       return;
     }
-    if (msg.kind === "say") say(msg.text);
+    if (msg.kind === "say") {
+      // A pending share-link notice outranks the server's generic greeting (ADR 0037).
+      if (pendingNotice) { const notice = pendingNotice; pendingNotice = null; say(notice); }
+      else say(msg.text);
+    }
     else if (msg.kind === "stage") {
       // A non-coder never sees a raw rejection or error: rejected and failed builds are reworded (onboard.ts).
       const shown = msg.stage === "rejected" || msg.stage === "failed" ? plainBuildMessage(msg.stage, msg.detail) : msg.detail;
@@ -1786,6 +1814,7 @@ connect();
 
 function submitCommand(text: string): void {
   if (!text) return;
+  pendingNotice = null; // the visitor's own words outrank a share-link notice
   // "let me draw a level" / "sketch" open the overlay locally (ADR 0028): no AI call,
   // no build slot. Anything else, including "draw a dragon", goes down the normal path.
   const sketchIntent = matchSketchIntent(text);
@@ -1835,9 +1864,19 @@ document.querySelectorAll<HTMLButtonElement>("#chips button").forEach((b) => {
 renderMods();
 say("Say something — or type below. Try “add a player”.");
 const onboarding = createOnboarding({ submit: (t) => submitCommand(t), orbInput: orbInputEl, mount: stageWrapEl, flags: urlFlags });
-if (!worldParam) autoLoadStarterOnce();
+// A share link we could not decode (corrupted, truncated, oversized, old version) never reaches the
+// server: say so and give the visitor the starter world. Works offline, too (ADR 0037).
+if (urlFlags.shareIssue) openStarterAfterBadLink(urlFlags.shareIssue);
+else if (!worldParam) autoLoadStarterOnce();
 
 // Test hooks: deterministic stepping + text view of the world (no DOM reads needed to playtest).
+// QA flag (?tester): what the URL decoder made of this page's flags, so a script can assert it.
+if (urlFlags.tester) {
+  (window as unknown as Record<string, unknown>).__urlFlags = {
+    mute: urlFlags.mute, noShake: urlFlags.noShake, coach: urlFlags.coach, noCoach: urlFlags.noCoach,
+    volume: urlFlags.volume, mood: urlFlags.mood, worldId: urlFlags.worldId, shareIssue: urlFlags.shareIssue,
+  };
+}
 (window as unknown as Record<string, unknown>).advanceTime = (ms: number) => {
   const steps = Math.max(1, Math.round(ms / (SIM.dt * 1000)));
   for (let i = 0; i < steps; i++) world.step();
