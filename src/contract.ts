@@ -110,7 +110,9 @@ export type ClientMsg =
   | { kind: "voiceEnd"; cancel?: boolean }
   // Share links (ADR 0014). The server only ever saves mods it verified itself; the client just says which are loaded.
   | { kind: "worldSave"; mods: { id: string; values: KnobValues }[] }
-  | { kind: "worldLoad"; id: string };
+  | { kind: "worldLoad"; id: string }
+  // Self-improving feedback (ADR 0020): thumbs-up/down on entities or mod cards distills persistent rules & skills.
+  | { kind: "feedback"; modId: string; entityType?: string; vote: "up" | "down"; note: string; fixNow?: boolean };
 
 /** One mod in a saved world: a built-in the client bundles, or a verified AI mod with its source. */
 export type WorldMod =

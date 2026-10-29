@@ -3,10 +3,11 @@
 // Never throws: every failure path returns null (the mod still loads, just
 // without art). Files land under public/art/gen/<key>.webp served at
 // /art/gen/<key>.webp.
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { loadEnv } from "./meta";
 import { logArt } from "./createlog";
+import { loadRules } from "./learn";
 
 const IMAGE_MODEL = "muse-image-1.0";
 const IMAGE_URL = "https://api.meta.ai/v1/images/generations";
@@ -94,6 +95,23 @@ export function isScenerySubject(text: string): boolean {
   return SCENERY_WORDS.some((w) => lower.includes(w));
 }
 
+/** Clear cached sprite sheet in memory and on disk so a bad art sheet can be regenerated or replaced. */
+export function clearCachedArt(keyRaw: string): boolean {
+  try {
+    const key = sanitizeArtKey(keyRaw);
+    if (!key) return false;
+    const hadMem = artCache.delete(key);
+    const file = join(process.cwd(), "public", "art", "gen", `${key}.webp`);
+    if (existsSync(file)) {
+      unlinkSync(file);
+      return true;
+    }
+    return hadMem;
+  } catch {
+    return false;
+  }
+}
+
 export function artUrlForKey(key: string): string {
   return `/art/gen/${key}.webp`;
 }
@@ -145,7 +163,7 @@ export async function generateSubjectArt(subject: string, keyRaw: string, scener
     const res = await fetch(IMAGE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: IMAGE_MODEL, prompt, size: "1024x1024" }),
+      body: JSON.stringify({ model: IMAGE_MODEL, prompt: [prompt, ...loadRules().filter((r) => r.subsystem === "art").slice(-5).map((r) => r.rule)].join(". "), size: "1024x1024" }),
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { data?: { b64_json?: string }[] };

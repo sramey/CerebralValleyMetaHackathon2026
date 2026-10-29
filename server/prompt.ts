@@ -1,4 +1,5 @@
 // Wonder system prompt + mod-API reference. Must match src/contract.ts exactly.
+import { formatLearnedBlock } from "./learn";
 // Mods: export default mod object, no imports, no markdown fences in output.
 
 export const MOD_API_REFERENCE = `MOD API (TypeScript). Your output must be a single self-contained TypeScript module:
@@ -66,12 +67,14 @@ export function formatManifest(mods: WorldManifestEntry[]): string {
 
 /** Prompt for Wonder to write one mod for the given player command. */
 export function buildWonderPrompt(command: string, manifest: string, context = ""): string {
-  return `World mods currently loaded:\n${manifest}\n${context ? `\n${context}\n` : ""}\nPlayer request: "${command}"\n\nWrite ONE self-contained TypeScript mod that fulfills the request. Pick a fresh lowercase-hyphen id not already loaded. Expose tunable values as knobs. Include a small test(t) that steps the sim and expects the key behavior. Output only the module code starting with "export default {".`;
+  const learned = formatLearnedBlock("wonder", command);
+  return `World mods currently loaded:\n${manifest}\n${context ? `\n${context}\n` : ""}${learned ? `\n${learned}\n` : ""}\nPlayer request: "${command}"\n\nWrite ONE self-contained TypeScript mod that fulfills the request. Pick a fresh lowercase-hyphen id not already loaded. Expose tunable values as knobs. Include a small test(t) that steps the sim and expects the key behavior. Output only the module code starting with "export default {".`;
 }
 
 /** Prompt for Wonder to rewrite an already-loaded mod in place (same id). */
 export function buildEditPrompt(command: string, existingSource: string, manifest: string, context = ""): string {
-  return `World mods currently loaded:\n${manifest}\n${context ? `\n${context}\n` : ""}\nPlayer request: "${command}"\n\nThe request changes the behavior of an already-loaded mod. Its current source is:\n${existingSource}\n\nRewrite it and output the FULL corrected module starting with "export default {". Keep the SAME id so the client replaces it. Keep the existing knobs working and add new knobs as needed for the new behavior. Include a small test(t) that steps the sim and expects the key behavior. Output only the module code. No imports, no markdown, no prose.`;
+  const learned = formatLearnedBlock("wonder", command);
+  return `World mods currently loaded:\n${manifest}\n${context ? `\n${context}\n` : ""}${learned ? `\n${learned}\n` : ""}\nPlayer request: "${command}"\n\nThe request changes the behavior of an already-loaded mod. Its current source is:\n${existingSource}\n\nRewrite it and output the FULL corrected module starting with "export default {". Keep the SAME id so the client replaces it. Keep the existing knobs working and add new knobs as needed for the new behavior. Include a small test(t) that steps the sim and expects the key behavior. Output only the module code. No imports, no markdown, no prose.`;
 }
 
 /** Prompt for Wonder to fix a mod that failed verification. */
@@ -96,5 +99,6 @@ Reply with ONLY a single JSON object, no markdown, no prose. Schema:
 
 /** Prompt for Spark to route a command against the loaded-mod manifest. */
 export function buildRouterPrompt(command: string, manifest: string, context = ""): string {
-  return `Loaded mods:\n${manifest}\n${context ? `\n${context}\n` : ""}\nPlayer says: "${command}"\n\nReply with ONLY the JSON routing object.`;
+  const learned = formatLearnedBlock("router", command);
+  return `Loaded mods:\n${manifest}\n${context ? `\n${context}\n` : ""}${learned ? `\n${learned}\n` : ""}\nPlayer says: "${command}"\n\nReply with ONLY the JSON routing object.`;
 }
