@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "stats": "tsx scripts/stats.ts",
+    "testers": "tsx scripts/testers.ts",
     "benchmark": "tsx scripts/benchmark.ts",
     "rehearse": "tsx scripts/rehearse.ts",
     "demo:prep": "tsx scripts/demo-prep.ts",

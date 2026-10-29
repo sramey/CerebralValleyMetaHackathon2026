@@ -115,7 +115,7 @@ export interface BuildStats {
   learn: { count: number; byEvent: { event: string; count: number }[] };
   agent: {
     builds: number; medianTurns: number | null; medianCalls: number | null;
-    /** Autonomy (ADR 0033). */
+    /** Autonomy (ADR 0034). */
     meanCalls: number | null; playtests: number; rejected: number; landed: number; selfCorrected: number;
   };
   perf: { samples: number; medianMsPerFrame: number | null };
