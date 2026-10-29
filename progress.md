@@ -145,3 +145,4 @@ Original prompt: lets setup our project, get oriented, organized, and setup, see
 - 10-29 merged wt/sound (bottom): all sound synthesized in WebAudio (SFX, build chime/rejection thunk, mood swell, per-mood ambience), M mute. Gates 246/246. Levels not yet judged by ear.
 - 10-29 merged wt/openweights (top): router runs on Muse Spark Open via Baseten when BASETEN_API_KEY is set (fallback to hosted Spark, model chip in orb, npm run bench:router). Dormant until the key arrives; model slug unconfirmed. Gates 251/251.
 - 10-29 merged wt/onboard (bottom): first-run coach, rotating known-good ideas, first-build celebration, plain-language rejections, speaker button, enemy-death sound; first build 15.5 s from page load (scripted). Gates 263/263.
+- 10-29 merged wt/agentic (top): Wonder's tool calls stream as steps in the pipeline lane (write → playtest → rejected → fix → pass); stats show tool calls/build, self-corrected %, playtests. Gates green.
