@@ -3,7 +3,7 @@
 // network — the classifier is a mock — so the whole suite is headless and costs nothing.
 import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
-import { generateSubjectArt } from "../server/art";
+import { generateSubjectArt, spritePrompt } from "../server/art";
 import {
   DECLINE,
   DEFAULT_ART_BUDGET_MS,
@@ -122,6 +122,15 @@ describe("local lane: normal requests and innocent readings are untouched", () =
     expect(localUnsafe("add a bloody corpse")).toBe("violence");
     expect(localUnsafe("add a slit throat")).toBe("violence");
     expect(localUnsafe("a mod where I stab myself")).toBe("self-harm");
+  });
+
+  it("passes the real art prompts a weapon subject produces", () => {
+    // The screen reads the exact Muse Image prompt (server/art.ts exports the builder), so a
+    // weapon that passes the command must not lose its art on the second lane.
+    expect(localUnsafe(spritePrompt("flame thrower", { held: true, scenery: false }))).toBeNull();
+    expect(localUnsafe(spritePrompt("gun", { held: true, scenery: false }))).toBeNull();
+    expect(localUnsafe(spritePrompt("exploding boss", { held: false, scenery: false }))).toBeNull();
+    expect(localUnsafe(spritePrompt("a bloody corpse", { held: false, scenery: false }))).toBe("violence");
   });
 
   it("lets a normal request through with the model's permission", async () => {
