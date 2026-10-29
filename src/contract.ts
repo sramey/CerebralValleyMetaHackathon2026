@@ -95,7 +95,11 @@ export type ClientMsg =
   | { kind: "photo"; key: string; image: string; prompt: string }
   | { kind: "photoFind"; key: string; image: string; prompt: string }
   | { kind: "photoBring"; key: string }
-  | { kind: "photoBringLocal"; key: string; prompt: string; aspect: number };
+  | { kind: "photoBringLocal"; key: string; prompt: string; aspect: number }
+  // Voice (ADR 0012). Mic audio itself travels as binary frames: PCM16 mono 16 kHz.
+  | { kind: "voiceWarm" }
+  | { kind: "voiceStart" }
+  | { kind: "voiceEnd"; cancel?: boolean };
 
 export type BuildStage = "routing" | "writing" | "compiling" | "verifying" | "fixing" | "done" | "failed";
 
@@ -107,7 +111,9 @@ export type ServerMsg =
   | { kind: "removed"; modId: string }
   | { kind: "say"; text: string }
   | { kind: "segment"; key: string; box: { x: number; y: number; w: number; h: number } | null }
-  | { kind: "timing"; command: string; ms: { route: number; write: number; compile: number; verify: number; total: number } };
+  | { kind: "timing"; command: string; ms: { route: number; write: number; compile: number; verify: number; total: number } }
+  | { kind: "voiceState"; state: "ready" | "listening" | "error"; detail?: string }
+  | { kind: "transcript"; text: string; final: boolean; ms?: { firstPartial: number; final: number } };
 
 export interface VerifyResult {
   ok: boolean;
