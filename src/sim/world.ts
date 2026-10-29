@@ -91,29 +91,64 @@ export class World {
     if (this.particles.length > 1000) this.particles.splice(0, this.particles.length - 1000);
   }
 
+  /** Ticks each mover has pushed into a wall, for stuck recovery (engine-side, so every creature gets it). */
+  private blocked = new Map<number, number>();
+  private hopCooldown = new Map<number, number>();
+
+  /** A creature grinding into an obstacle hops it, then turns around if that fails. */
+  private unstick(e: Entity, pushing: boolean): void {
+    if (!pushing) { if (this.blocked.has(e.id)) this.blocked.delete(e.id); return; }
+    const n = (this.blocked.get(e.id) ?? 0) + 1;
+    if (n === 6 && e.onGround) e.vy = -380;
+    if (n >= 24) { e.facing = e.facing === 1 ? -1 : 1; this.blocked.delete(e.id); return; }
+    this.blocked.set(e.id, n);
+  }
+
+  /** Casual creatures (data.casual) hop over the player instead of walking through them. */
+  private casualHop(e: Entity, player: Entity | undefined): void {
+    const cd = this.hopCooldown.get(e.id) ?? 0;
+    if (cd > 0) this.hopCooldown.set(e.id, cd - 1);
+    if (!player || e.data.casual !== true || e.vx === 0 || !e.onGround || cd > 0) return;
+    const dx = (player.x + player.w / 2) - (e.x + e.w / 2);
+    const reach = (player.w + e.w) / 2 + 24;
+    const closing = (dx > 0) === (e.vx > 0);
+    if (closing && Math.abs(dx) < reach && Math.abs((player.y + player.h / 2) - (e.y + e.h / 2)) < (player.h + e.h) / 2 + 8) {
+      e.vy = -340;
+      this.hopCooldown.set(e.id, 45);
+    }
+  }
+
   step(): void {
     const dt = SIM.dt;
     this.tickCount++;
     for (const list of [...this.handlers.values()]) for (const fn of [...list]) fn(dt);
 
     const solids = this.entities.filter((e) => e.solid);
+    const player = this.entities.find((e) => e.type === "player");
     for (const e of this.entities) {
       // Static solids (gravityScale 0) never move. A solid with gravity still
       // gets physics: it collides with other solids, it just also blocks them.
       if (e.solid && e.gravityScale === 0) continue;
+      const wantsMove = e.vx !== 0 && e.type !== "player";
+      this.casualHop(e, player);
       e.vy = Math.min(e.vy + SIM.gravity * e.gravityScale * dt, 1100); // terminal velocity
-      // X axis
+      // X axis. One-way platforms (data.oneWay) never block sideways.
       e.x += e.vx * dt;
-      for (const s of solids) if (s !== e && overlap(e, s)) {
+      let blockedX = false;
+      for (const s of solids) if (s !== e && !s.data.oneWay && overlap(e, s)) {
         if (e.vx > 0) e.x = s.x - e.w;
         else if (e.vx < 0) e.x = s.x + s.w;
         else e.x = (e.x + e.w / 2 < s.x + s.w / 2) ? s.x - e.w : s.x + s.w;
         e.vx = 0;
+        blockedX = true;
       }
-      // Y axis
+      this.unstick(e, wantsMove && blockedX);
+      // Y axis. One-way platforms only catch a falling entity that was above them.
+      const prevBottom = e.y + e.h;
       e.y += e.vy * dt;
       e.onGround = false;
       for (const s of solids) if (s !== e && overlap(e, s)) {
+        if (s.data.oneWay && !(e.vy > 0 && prevBottom <= s.y + 0.5)) continue;
         if (e.vy > 0) { e.y = s.y - e.h; e.onGround = true; }
         else if (e.vy < 0) e.y = s.y + s.h;
         else if (e.y + e.h / 2 < s.y + s.h / 2) { e.y = s.y - e.h; e.onGround = true; }
@@ -125,7 +160,6 @@ export class World {
       p.life += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 300 * dt;
     }
     this.particles = this.particles.filter((p) => p.life < p.maxLife);
-    const player = this.entities.find((e) => e.type === "player");
     if (player) {
       this.camera.x = player.x + player.w / 2 - 480;
       this.camera.y = Math.min(0, player.y + player.h / 2 - 270);
