@@ -9,8 +9,8 @@ import type { ClientMsg, Entity, KnobValue, ModDefinition, MoodSpec, ServerMsg }
 import { initVoice } from "./voice";
 import { Fx } from "./fx";
 import { Portal } from "./portal";
-import { drawCliff, drawShape, isCliff, kindOf, registerLook, scale, setGrade } from "./shapes";
-import { computeDesiredCamY, drawContactShadows, drawDistantMountains, drawForegroundDepth, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
+import { drawCliff, drawShape, isCliff, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
+import { celestialPos, computeDesiredCamY, depthFog, drawContactShadows, drawDistantMountains, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
 import { drawFluffyCloud, drawParallaxEntities, isParallaxOrSkyEntity, isSkyOrBackgroundEntity } from "./parallax";
 import { ModLoader } from "../sim/loader";
 import { createGhost } from "./ghost";
@@ -413,6 +413,7 @@ function applyMood(m: MoodSpec | null): void {
     for (let i = 0; i < SKY_BANDS; i++) SKY[i] = mixC((SKY_TOP[0] << 16) | (SKY_TOP[1] << 8) | SKY_TOP[2], (SKY_BOTTOM[0] << 16) | (SKY_BOTTOM[1] << 8) | SKY_BOTTOM[2], i / (SKY_BANDS - 1));
   }
   setGrade(grade);
+  setSnowy(!!m && (m.ambient === "snow" || m.name === "christmas" || m.name === "snowy"));
   fx.setMood(m);
   portal.setMood(m);
 }
@@ -671,8 +672,9 @@ function render(): void {
   // far hill silhouettes + parallax layers + atmospheric horizon mist (bead 1z7 & rm1)
   const horizon = H * 0.62 - camYSmooth * 0.1;
   drawDistantMountains(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
-  drawRidge(ridgeFar, camX, 0.3, horizon, 0, pal.ridgeFar);
-  drawRidge(ridgeNear, camX, 0.55, horizon + 34, 1, pal.ridgeNear);
+  const fog = depthFog(mood?.name);
+  drawRidge(ridgeFar, camX, 0.3, horizon, 0, mixC(pal.ridgeFar, SKY[SKY_BANDS - 1], fog.far));
+  drawRidge(ridgeNear, camX, 0.55, horizon + 34, 1, mixC(pal.ridgeNear, SKY[SKY_BANDS - 1], fog.near));
   drawParallaxEntities(gfx, world.entities, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1], grade);
   drawHorizonMist(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
   // solids-first, then contact shadows on solid surfaces, then dynamic entities
@@ -682,16 +684,15 @@ function render(): void {
   let shadowsDrawn = false;
   for (let i = 0; i < order.length; i++) {
     if (!shadowsDrawn && !order[i].solid) {
-      drawContactShadows(gfx, world.entities, camX, camYSmooth, W, H, isEffectType);
+      drawContactShadows(gfx, world.entities, camX, camYSmooth, W, H, isEffectType, celestialPos(W).x);
       shadowsDrawn = true;
     }
     drawEntity(order[i], camX, camYSmooth);
   }
-  if (!shadowsDrawn) drawContactShadows(gfx, world.entities, camX, camYSmooth, W, H, isEffectType);
+  if (!shadowsDrawn) drawContactShadows(gfx, world.entities, camX, camYSmooth, W, H, isEffectType, celestialPos(W).x);
   for (const p of world.particles) {
     gfx.rect(p.x - camX, p.y - camYSmooth, p.size, p.size).fill({ color: p.color, alpha: Math.max(0, 1 - p.life / p.maxLife) });
   }
-  drawForegroundDepth(gfx, camX, camYSmooth, W, H, pal);
   // Sprite primaries: per owner+subject every entity at >=30% of the group's
   // max area gets the sprite; small assembled sub-parts stay rects under it.
   const seen = new Set<number>();

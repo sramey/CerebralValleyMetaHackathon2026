@@ -147,6 +147,7 @@ export function drawContactShadows(
   W: number,
   H: number,
   isEffect?: (type: string) => boolean,
+  lightX?: number,
 ): number {
   let count = 0;
   for (let i = 0; i < entities.length; i++) {
@@ -155,7 +156,10 @@ export function drawContactShadows(
     const hit = findSurfaceBelow(entities, e, 220);
     if (!hit) continue;
 
-    const sx = e.x + e.w * 0.5 - camX;
+    const cxScreen = e.x + e.w * 0.5 - camX;
+    // The shadow slides away from the sun/moon the higher the entity is above the surface.
+    const lean = lightX === undefined ? 0 : (cxScreen < lightX ? -1 : 1) * Math.min(26, hit.height * 0.18);
+    const sx = cxScreen + lean;
     const sy = hit.y - camY + 1.5;
     if (sx < -80 || sx > W + 80 || sy < -40 || sy > H + 40) continue;
 
@@ -175,6 +179,15 @@ export function drawContactShadows(
     count++;
   }
   return count;
+}
+
+/** The lighter upper surface of a slab: a trapezoid above the front edge, with a dark outline and a darker back edge. */
+function drawTopFace(gfx: Graphics, x: number, y: number, w: number, depth: number, inL: number, grass: number, inR = inL): void {
+  const face = mixColor(grass, 0xffffff, 0.2);
+  gfx.poly([x - 1, y + 0.5, x + inL - 0.5, y - depth - 1.5, x + w - inR + 0.5, y - depth - 1.5, x + w + 1, y + 0.5]).fill(0x0b0e13);
+  gfx.poly([x, y + 0.5, x + inL, y - depth, x + w - inR, y - depth, x + w, y + 0.5]).fill(face);
+  gfx.rect(x + inL, y - depth, Math.max(0, w - inL - inR), 1.2).fill({ color: scaleColor(grass, 0.6), alpha: 0.55 });
+  gfx.rect(x, y - 1.5, w, 1.5).fill({ color: scaleColor(grass, 0.7), alpha: 0.35 });
 }
 
 /**
@@ -243,6 +256,9 @@ export function drawGround25D(
     // 5. AO shadow band directly under the grass overhang
     gfx.rect(x, y + gh, e.w, 2.5).fill({ color: 0x04070a, alpha: 0.52 });
     gfx.rect(x, y + gh + 2.5, e.w, 2).fill({ color: 0x04070a, alpha: 0.22 });
+
+    // 5b. Top face: the slab's upper surface, lighter than the front lip and narrowing towards the back
+    drawTopFace(gfx, x, y, e.w, 5, 3, grassMid);
 
     // 6. Grass lip + overhang scallops + top catch-light
     gfx.rect(x, y, e.w, gh).fill(grassMid);
@@ -333,6 +349,9 @@ export function drawGround25D(
   // 3. Dark ambient-occlusion shadow band directly under the grass overhang (y + gh)
   gfx.rect(vx0, y + gh, vw, 3.5).fill({ color: 0x030609, alpha: 0.58 });
   gfx.rect(vx0, y + gh + 3.5, vw, 2.5).fill({ color: 0x030609, alpha: 0.26 });
+
+  // 3b. Top face: the walkable surface seen slightly from above, so the ground reads as a slab, not a strip
+  drawTopFace(gfx, vx0, y, vw, 11, x >= -10 ? 5 : 0, grassMid, x + e.w <= W + 10 ? 5 : 0);
 
   // 4. Grass turf layer, overhanging turf scallops, grass blades, and top specular catch-light
   gfx.rect(vx0, y, vw, gh).fill(grassMid);
@@ -444,40 +463,6 @@ export function drawHorizonMist(
 }
 
 /**
- * Subtle foreground depth silhouettes along the bottom of the screen (moving at >1.0x camera parallax)
- * so the ground plane reads as a physical 2.5D cross-section.
- */
-export function drawForegroundDepth(
-  gfx: Graphics,
-  camX: number,
-  camY: number,
-  W: number,
-  H: number,
-  pal: DepthPalette,
-): void {
-  const groundScreenY = 400 - camY;
-  // Only frame the bottom when the main ground is near the bottom of the screen
-  if (groundScreenY < H - 220 || groundScreenY > H + 40) return;
-
-  const fgColor = scaleColor(mixColor(pal.soil, 0x05080c, 0.72), 0.65);
-  const rimColor = mixColor(pal.grass, pal.soil, 0.55);
-  const step = 180;
-  const par = 1.24;
-  const offset = ((camX * par) % step + step) % step;
-
-  for (let sx = -offset - step; sx < W + step; sx += step) {
-    const idx = Math.round((sx + camX * par) / step);
-    const hsh = (((idx * 2654435761) >>> 0) % 100) / 100;
-    const mw = 85 + hsh * 65;
-    const mh = 12 + ((idx & 3) * 4);
-    const cx = sx + step * 0.5;
-    const by = H + 4;
-    gfx.ellipse(cx, by, mw * 0.55, mh).fill({ color: fgColor, alpha: 0.55 });
-    gfx.ellipse(cx - 4, by - mh * 0.65, mw * 0.35, 2.5).fill({ color: rimColor, alpha: 0.18 });
-  }
-}
-
-/**
  * Dynamic point lights, celestial bloom/volumetric shafts, player presence rim light,
  * and surface light bounce using Fx's pooled radial gradient sprites.
  */
@@ -573,6 +558,72 @@ export function drawDynamicLighting(
     }
     lightCount++;
   }
+
+  const lightCol = daytime ? 0xfff0c0 : moonColor;
+  drawRimLights(gfx, world.entities, camX, camY, W, lightCol);
+  drawForegroundLayer(gfx, camX, camY, W, H, mixColor(0x04070a, mood?.skyBottom ?? 0x0d1b20, 0.18));
+}
+
+/** A soft light edge on the side of each creature that faces the sun/moon. */
+export function drawRimLights(gfx: Graphics, entities: readonly Entity[], camX: number, camY: number, W: number, color: number): void {
+  const lx = celestialPos(W).x;
+  for (let i = 0; i < entities.length; i++) {
+    const e = entities[i];
+    if (e.solid || !castsContactShadow(e)) continue;
+    const cx = e.x + e.w * 0.5 - camX;
+    if (cx < -60 || cx > W + 60) continue;
+    const cy = e.y + e.h * 0.5 - camY;
+    const side = cx < lx ? 1 : -1;
+    const ex = cx + side * e.w * 0.42;
+    gfx.ellipse(ex, cy, Math.max(2, e.w * 0.14), e.h * 0.4).fill({ color, alpha: 0.07 });
+    gfx.ellipse(ex, cy - e.h * 0.04, Math.max(1.2, e.w * 0.07), e.h * 0.3).fill({ color, alpha: 0.13 });
+  }
+}
+
+/**
+ * Sparse dark silhouettes (grass clusters, rocks) in FRONT of the play plane, sliding faster than the
+ * camera. They stay in the soil strip below the walking surface so they never cover gameplay.
+ */
+export function drawForegroundLayer(gfx: Graphics, camX: number, camY: number, W: number, H: number, base: number): void {
+  const floorTop = 400 - camY + 4;
+  const room = H - floorTop;
+  if (room < 14) return;
+  const step = 150;
+  const par = 1.5;
+  const first = Math.floor((camX * par - 100) / step);
+  const last = Math.ceil((camX * par + W + 100) / step);
+  for (let c = first; c <= last; c++) {
+    const h = ((c * 2654435761) >>> 0) % 1000;
+    if (h < 380) continue; // sparse: most cells are empty
+    const cx = c * step + (h % 90) - camX * par;
+    const maxH = Math.min(room - 2, 90);
+    if (h < 860) {
+      for (let b = 0; b < 9; b++) {
+        const hb = ((h * (b + 3) * 40503) >>> 0) % 100;
+        const bx = cx + b * 6 - 24;
+        const bh = Math.max(14, maxH * (0.4 + hb / 140));
+        const lean = (hb % 2 ? 1 : -1) * (3 + (hb % 5));
+        gfx.poly([bx - 4.5, H + 2, bx + 4.5, H + 2, bx + lean, H - bh]).fill({ color: base, alpha: 1 });
+      }
+    } else {
+      const rw = 34 + (h % 30);
+      const rh = Math.min(maxH * 0.6, 20 + (h % 12));
+      gfx.poly([cx - rw, H + 2, cx - rw * 0.7, H - rh * 0.7, cx - rw * 0.2, H - rh, cx + rw * 0.4, H - rh * 0.8, cx + rw, H + 2]).fill({ color: base, alpha: 0.94 });
+    }
+  }
+  // Darkened bottom edge, as if the camera looks past the near plane
+  for (let i = 0; i < 4; i++) gfx.rect(0, H - 10 - i * 10, W, 10).fill({ color: base, alpha: 0.07 });
+}
+
+/** How much the far and near ridges blend into the sky colour: more haze in moody/low-light worlds. */
+export function depthFog(moodName: string | undefined): { far: number; near: number } {
+  switch (moodName) {
+    case "spooky": return { far: 0.5, near: 0.28 };
+    case "daytime": return { far: 0.42, near: 0.2 };
+    case "christmas": case "snowy": return { far: 0.4, near: 0.2 };
+    case "neon": return { far: 0.18, near: 0.08 };
+    default: return { far: 0.3, near: 0.14 };
+  }
 }
 
 /**
@@ -625,10 +676,13 @@ export function drawSkyAndCelestials(
       gfx.circle(cx, cy, 18).fill(pal.moon || 0xffe042);
       gfx.circle(cx, cy, 12).fill(0xfffae0);
     } else {
-      // Crescent Moon
+      // Crescent Moon in a soft halo, so dark moods have a focal light
+      for (let i = 0; i < 4; i++) gfx.circle(cx, cy, 120 - i * 26).fill({ color: pal.moon, alpha: 0.035 });
       gfx.circle(cx, cy, 24).fill({ color: pal.moon, alpha: 0.15 });
       gfx.circle(cx, cy, 17).fill(pal.moon);
-      gfx.circle(cx - 6, cy - 6, 14).fill(skyColors[1] ?? 0x05070a);
+      // The cutout takes the sky's colour at the moon's height (a flat band colour would show as a dark disc on the halo).
+      const skyAtMoon = mixColor(skyColors[0] ?? 0x05070a, skyColors[skyColors.length - 1] ?? 0x05070a, cy / H);
+      gfx.circle(cx - 6, cy - 6, 14).fill(mixColor(skyAtMoon, pal.moon, 0.1));
     }
   }
 }
