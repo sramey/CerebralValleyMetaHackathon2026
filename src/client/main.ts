@@ -6,6 +6,7 @@ import { SIM } from "../contract";
 import type { ClientMsg, Entity, KnobValue, ModDefinition, MoodSpec, ServerMsg } from "../contract";
 import { initVoice } from "./voice";
 import { Fx } from "./fx";
+import { Portal } from "./portal";
 import { drawCliff, drawShape, isCliff, kindOf, registerLook, setGrade } from "./shapes";
 import { ModLoader } from "../sim/loader";
 import { createGhost } from "./ghost";
@@ -77,6 +78,7 @@ app.stage.addChild(gfx);
 app.stage.sortableChildren = true;
 gfx.zIndex = -100;
 const fx = new Fx(app.stage);
+const portal = new Portal(app.stage); // screen-rip entrance for new entities (bead yzd)
 let lastRenderAt = performance.now();
 const isEffectType = (type: string): boolean => kindOf(type)?.kind === "effect";
 
@@ -353,6 +355,7 @@ function applyMood(m: MoodSpec | null): void {
   }
   setGrade(grade);
   fx.setMood(m);
+  portal.setMood(m);
 }
 function revertMood(): void {
   restoreSheets();
@@ -631,6 +634,7 @@ function render(): void {
   for (const [id, s] of spritePool) if (!seen.has(id)) s.visible = false;
   const nowMs = performance.now();
   fx.render(world, camX, camYSmooth, W, H, (nowMs - lastRenderAt) / 1000, isEffectType);
+  portal.render(world, camX, camYSmooth, (nowMs - lastRenderAt) / 1000, isEffectType);
   lastRenderAt = nowMs;
   app.stage.position.set(fx.shakeX, fx.shakeY);
   // health bars: single pass after rect and sprite passes (player included)
