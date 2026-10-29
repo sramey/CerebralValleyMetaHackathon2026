@@ -37,6 +37,7 @@ import { createStaticHandler } from "./static";
 import { createVoiceHub } from "./voice";
 import { appendTester, sanitizeTester } from "./testers";
 import { runSketchBuild } from "./sketch";
+import { clampKnobValue, gateMessage } from "./validate";
 
 loadEnv();
 const PORT = Number(process.env.PORT ?? 8787);
@@ -1080,17 +1081,12 @@ async function handleFeedback(ws: WebSocket, msg: Extract<ClientMsg, { kind: "fe
 }
 
 function handleMessage(ws: WebSocket, raw: string): void {
-  let msg: ClientMsg;
-  try {
-    msg = JSON.parse(raw) as ClientMsg;
-  } catch {
-    send(ws, { kind: "say", text: "I only speak JSON — try the text box again." });
-    return;
-  }
-  if (!msg || typeof msg !== "object" || typeof (msg as { kind?: unknown }).kind !== "string") {
-    send(ws, { kind: "say", text: "I only speak JSON — try the text box again." });
-    return;
-  }
+  // Every text frame passes the wire validator first (ADR 0036): a bad or hostile message
+  // gets one plain sentence and never reaches a handler, so it cannot spend Meta budget.
+  gateMessage(raw, (msg) => dispatchClientMsg(ws, msg), (reply) => send(ws, { kind: "say", text: reply }));
+}
+
+function dispatchClientMsg(ws: WebSocket, msg: ClientMsg): void {
   if (voiceHub.handle(ws, msg)) return;
   const manifest = sess(ws).manifest;
   if (msg.kind === "worldState") {
@@ -1166,9 +1162,12 @@ function handleMessage(ws: WebSocket, raw: string): void {
     }
   } else if (msg.kind === "knob") {
     const rec = manifest.get(msg.modId);
-    if (rec && msg.knob in rec.knobs) {
-      rec.knobs[msg.knob] = { ...rec.knobs[msg.knob], value: msg.value };
-      send(ws, { kind: "tweak", modId: msg.modId, knob: msg.knob, value: msg.value });
+    // hasOwn, not `in`: "constructor"/"toString" would otherwise hit Object.prototype.
+    const def = rec && Object.prototype.hasOwnProperty.call(rec.knobs, msg.knob) ? rec.knobs[msg.knob] : undefined;
+    if (rec && def) {
+      const value = clampKnobValue(def, msg.value);
+      rec.knobs[msg.knob] = { ...def, value };
+      send(ws, { kind: "tweak", modId: msg.modId, knob: msg.knob, value });
     } else {
       send(ws, { kind: "say", text: "Unknown mod or knob." });
     }
