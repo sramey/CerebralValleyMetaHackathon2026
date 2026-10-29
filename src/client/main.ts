@@ -69,6 +69,14 @@ function say(text: string, state = "idle"): void {
   orbDot.className = `orb ${orbClass}`;
   orbFeedback.textContent = text;
 }
+/** Label which model answered the router (ADR 0032): a small chip next to the orb state. */
+const modelChip = document.createElement("span");
+modelChip.id = "orb-model";
+modelChip.style.cssText = "margin-left:.6em;font-size:.8em;opacity:.7";
+orbState.after(modelChip);
+function routedBy(msg: Extract<ServerMsg, { kind: "routed" }>): void {
+  modelChip.textContent = `routed by ${msg.model}${msg.open ? " (open weights)" : ""}${msg.fellBack ? " (open timed out)" : ""} · ${msg.ms} ms`;
+}
 const builds = createBuilds(orbSay.parentElement ?? document.body, () => {});
 const feedback = initFeedback({
   send: (msg) => send(msg),
@@ -1700,6 +1708,7 @@ function connect(): void {
     else if (msg.kind === "playtest") {
       void ghost.play({ base: loader.list().map((m) => ({ def: m.def, values: m.values })), candidate: msg.mod, replaces: msg.replaces, seed: msg.seed, inputs: msg.inputs, ok: msg.ok, plain: msg.plain });
     }
+    else if (msg.kind === "routed") { routedBy(msg); }
     else if (msg.kind === "timing") { builds.finish(msg.command); log(`timing route ${msg.ms.route}ms write ${msg.ms.write}ms compile ${msg.ms.compile}ms verify ${msg.ms.verify}ms total ${msg.ms.total}ms`); }
     else if (msg.kind === "tweak") tweak(msg.modId, msg.knob, msg.value, "Tweaked.");
     else if (msg.kind === "removed") { loader.unload(msg.modId); renderMods(); }

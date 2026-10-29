@@ -202,6 +202,10 @@ export function createPipeline(host: HTMLElement): Pipeline {
   function onMsg(msg: ServerMsg): void {
     const now = performance.now();
     if (msg.kind === "transcript") lit("voice");
+    else if (msg.kind === "routed") {
+      // Name the model that actually answered on the Spark node (open weights or hosted).
+      nodeEls.get("spark")!.querySelector(".pl-model")!.textContent = msg.open ? `${msg.model} (open weights)` : msg.model;
+    }
     else if (msg.kind === "art") lit("image");
     else if (msg.kind === "segment") lit("sam");
     else if (msg.kind === "mod" && (msg.mod.art || msg.mod.artPending)) lit("image");
