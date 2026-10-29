@@ -26,10 +26,27 @@ ModApi (everything a mod may call — nothing else exists):
   burst(x, y, color, n?): void — particle effect
   rand(): number — seeded RNG in [0,1). NEVER use Math.random.
   tick(): number — current frame count
+  setHud(id: string, def: HudDef): void — create or update a HUD widget (same id updates in place)
+  removeHud(id: string): void — remove one of your widgets
+  hud(id: string): HudWidget | undefined — read a widget back (for tests)
+  hudList(): HudWidget[] — all widgets in creation order
 
 Entity: { id, type, x, y, w, h, vx, vy, color, solid, gravityScale (0=no gravity,1=full), facing (1|-1), onGround, owner, data }
 InputState: { left, right, jump, shoot }
 TestApi: expect(cond, msg), api: ModApi, step(n, input?) — advance n frames with optional input override
+
+HUD widgets (the ONLY way to show the player numbers/text — health bars, score, timers, speedometers; mods never touch the DOM):
+  def: { kind, label?, value?, max?, unit?, icon?, color?, text?, duration?, position?, hidden? }
+  - "bar": { kind:"bar", label:"HP", icon:"❤", value:70, max:100 } — a meter (health, mana, fuel, boss HP). Optional color.
+  - "hearts": { kind:"hearts", value:3, max:5 } — discrete pips: value = filled pips (fraction fills the last pip partly), max = pip count (lives, ammo).
+  - "stat": { kind:"stat", label:"Score", icon:"🪙", value:0, unit:"s" } — counter/readout (score, speed, timer, altitude, combo). max adds a "3/20" readout.
+  - "banner": { kind:"banner", text:"Wave 2", duration:2 } — big callout; duration (sim seconds) auto-removes it, omit to keep it until removeHud.
+  - position: "top-left" (default) | "top-right" | "top-center" | "bottom-left" | "bottom-right" | "bottom-center" | "center".
+  - color is a NUMBER (hex like 0x3fd06a), never a CSS string. icon is one short emoji/glyph.
+  - Update LIVE: call api.setHud again with the SAME id in onTick whenever the value changes (e.g. player health, collected count, elapsed seconds). All your widgets vanish automatically on dispose/undo.
+  - HUD-only mods (speedometer, timer, counter, "show my health as hearts") spawn NO entities: no api.spawn at all.
+  - Test HUD mods through t.api.hud, e.g.:
+      test(t) { t.step(60); const w = t.api.hud("time"); t.expect(!!w && (w.value ?? 0) >= 1, "timer advances"); }
 
 Rules:
 - Everything the mod creates is owned by it and removed on dispose(). Keep references to spawned entities or find them via byType() in dispose() and despawn them. Remove nothing you did not create.
@@ -91,7 +108,7 @@ Reply with ONLY a single JSON object, no markdown, no prose. Schema:
   - "effect": weather or atmosphere or particles: rain, fog, mist, smoke, snow, explosion, sparks, lightning, fire glow.
   - "prop": a still object that deserves pixel art: tree, house, chest, car, statue, castle, sun, cloud.
   - "creature": a living or moving character with limbs: ninja, dragon, turtle, zombie, bird, robot.
-  "A bouncing ball" is a shape, never a creature. Omit "visual" for pure rule changes.
+  "A bouncing ball" is a shape, never a creature. Omit "visual" for pure rule changes and HUD/UI-only requests (counter, timer, meter, speedometer, banner) — those never need sprites.
 - "question": anything else — greeting, help, unanswerable (set answer=text to say to the player).`;
 
 /** Prompt for Spark to route a command against the loaded-mod manifest. */
