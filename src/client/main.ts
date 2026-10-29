@@ -29,7 +29,7 @@ import { createHud } from "./hud";
 import { createSketch } from "./sketch";
 import { CAMERA_LABEL, CAPTURE_LABEL, UPLOAD_LABEL, defaultAction, dialogCssVars, dialogLayout, fitInside, photoFindMessage, photoWorkSize, stageHint, wantsCameraStream } from "./camera-dialog";
 import type { DialogPhase } from "./camera-dialog";
-import { matchSketchIntent } from "./phrases";
+import { matchPaperIntent, matchSketchIntent } from "./phrases";
 import { World } from "../sim/world";
 import playerMod from "../mods/player";
 import groundMod from "../mods/ground";
@@ -1066,6 +1066,7 @@ const cameraStage = $<HTMLDivElement>("#camera-stage");
 const cameraVideo = $<HTMLVideoElement>("#camera-video");
 const cameraPlaceholder = $<HTMLParagraphElement>("#camera-placeholder");
 const cameraLabel = $<HTMLInputElement>("#camera-label");
+const cameraPaper = document.querySelector<HTMLInputElement>("#camera-paper");
 const cameraPixel = document.querySelector<HTMLInputElement>("#camera-pixel");
 const cameraPreview = $<HTMLCanvasElement>("#camera-preview");
 const cameraBg = $<HTMLButtonElement>("#camera-bg");
@@ -1135,6 +1136,12 @@ function setCameraStatus(text: string): void {
   cameraStatus.textContent = text;
 }
 function updateCameraConfirm(): void {
+  if (cameraPaper?.checked) {
+    cameraConfirm.textContent = "Build this level";
+    cameraConfirm.disabled = !pendingCapture;
+    return;
+  }
+  cameraConfirm.textContent = "Bring it into the game";
   cameraConfirm.disabled = !(
     (diffComponents.length > 0 && selectedComponent >= 0) ||
     (wandMask !== null && wandMask.count >= 300) ||
@@ -1241,6 +1248,11 @@ function computeDiff(): void {
   diffComponents = comps.slice(0, 6);
   selectedComponent = diffComponents.length > 0 ? 0 : -1;
   redrawPreview();
+  if (cameraPaper?.checked) {
+    setCameraStatus("Drawing photo ready! Click 'Build this level' to make it playable.");
+    updateCameraConfirm();
+    return;
+  }
   updateCameraConfirm();
   if (diffComponents.length > 0) {
     setCameraStatus(`Found ${diffComponents.length} new thing(s). Click yours if I picked wrong, then Bring it in.`);
@@ -1426,7 +1438,9 @@ function maskCutTexture(key: string, src: HTMLCanvasElement, m: MaskInfo, mode: 
   storeCutTexture(key, cut, texCanvas);
   return texCanvas;
 }
-async function openCameraModal(): Promise<void> {
+async function openCameraModal(paperMode = false): Promise<void> {
+  if (cameraPaper) cameraPaper.checked = paperMode;
+  cameraLabel.placeholder = paperMode ? "Level name (optional, e.g. Sky Castle)" : "What are you holding? e.g. coffee mug";
   pendingCapture = null;
   currentKey = null;
   bgCanvas = null;
@@ -1577,6 +1591,17 @@ function handleSegment(key: string, rawBox: unknown): void {
   if (diffComponents.length === 0 && !wandMask) setCameraStatus("Found it — the green box is what enters the game.");
   updateCameraConfirm();
 }
+cameraPaper?.addEventListener("change", () => {
+  if (cameraPaper.checked) {
+    cameraLabel.placeholder = "Level name (optional, e.g. Sky Castle)";
+    if (pendingCapture) setCameraStatus("Drawing photo ready! Click 'Build this level' to make it playable.");
+    else setCameraStatus("Level drawing mode: upload or capture your paper drawing.");
+  } else {
+    cameraLabel.placeholder = "What are you holding? e.g. coffee mug";
+    setCameraStatus("");
+  }
+  updateCameraConfirm();
+});
 cameraBtn.addEventListener("click", () => { void openCameraModal(); });
 cameraStart.addEventListener("click", () => { if (wantsCameraStream("use-camera")) void startCamera(); }); // the only door to getUserMedia (bead jd1)
 $("#camera-cancel").addEventListener("click", () => closeCameraModal());
@@ -1644,6 +1669,15 @@ cameraPreview.addEventListener("click", (e) => {
   computeWand(fx, fy);
 });
 cameraConfirm.addEventListener("click", () => {
+  if (cameraPaper?.checked) {
+    if (!pendingCapture) return;
+    const image = pendingCapture.dataUrl;
+    const prompt = cameraLabel.value.trim();
+    send({ kind: "paperLevel", image, ...(prompt ? { prompt } : {}) } as unknown as ClientMsg);
+    closeCameraModal(false);
+    say("Reading your paper level drawing...", "building");
+    return;
+  }
   if (!pendingCapture || !currentKey) return;
   const hasMask = (diffComponents.length > 0 && selectedComponent >= 0) || (wandMask !== null && wandMask.count >= 300);
   if (!hasMask && foundBox === null && clickPoint === null) return;
@@ -1933,6 +1967,7 @@ function submitCommand(text: string): void {
   const sketchIntent = matchSketchIntent(text);
   if (sketchIntent === "open") { sketch.open(); return; }
   if (sketchIntent === "close") { sketch.close(); say("Sketch closed — the world is running again."); return; }
+  if (matchPaperIntent(text)) { void openCameraModal(true); return; }
   say(`Building: ${text}`, "building");
   onboarding.event("submit");
   const modsBefore = loader.list().length;

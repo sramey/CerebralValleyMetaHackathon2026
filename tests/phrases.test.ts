@@ -1,7 +1,7 @@
 // Sketch-mode phrase routing (ADR 0028): saying or typing "let me draw a level" opens the
 // sketch overlay with no AI call, while "draw a dragon" still goes to the builder.
 import { describe, expect, it } from "vitest";
-import { matchSketchIntent, normalizePhrase } from "../src/client/phrases";
+import { matchPaperIntent, matchSketchIntent, normalizePhrase } from "../src/client/phrases";
 
 describe("sketch phrase matcher", () => {
   it("opens sketch mode from the phrases the bead names", () => {
@@ -75,5 +75,33 @@ describe("sketch phrase matcher", () => {
     expect(normalizePhrase("  Let me draw a level!  ")).toBe("draw a level");
     expect(normalizePhrase("Sketch mode")).toBe("sketch");
     expect(normalizePhrase("Make it rain")).toBe("make it rain");
+  });
+
+  it("recognizes paper level drawing commands (ADR 0040)", () => {
+    for (const text of [
+      "build my drawing",
+      "Build my drawing!",
+      "can you please build my drawing",
+      "build this drawing",
+      "build our drawing",
+      "make my drawing",
+      "scan my drawing",
+      "photograph my drawing",
+      "build my sketch",
+      "build paper drawing",
+      "build my paper level",
+    ]) {
+      expect(matchPaperIntent(text), text).toBe(true);
+    }
+
+    for (const text of [
+      "build a dragon",
+      "draw a level",
+      "make it rain",
+      "add a player",
+      "don't build my drawing",
+    ]) {
+      expect(matchPaperIntent(text), text).toBe(false);
+    }
   });
 });
