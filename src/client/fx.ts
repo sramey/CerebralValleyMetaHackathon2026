@@ -5,6 +5,7 @@
 import { Container, Graphics, Sprite, Texture } from "pixi.js";
 import type { Entity, MoodSpec, Particle } from "../contract";
 import type { World } from "../sim/world";
+import { drawDynamicLighting } from "./depth";
 
 const FIRE_RAMP = [0xfff6c8, 0xffd34d, 0xff8a1f, 0xd8321f, 0x4a3030];
 
@@ -16,7 +17,7 @@ function ramp(t: number): number {
   return (mix(16) << 16) | (mix(8) << 8) | mix(0);
 }
 
-function puffTexture(): Texture {
+function puffTexture(): Texture { if (typeof document === "undefined") return Texture.EMPTY;
   const c = document.createElement("canvas");
   c.width = c.height = 128;
   const ctx = c.getContext("2d")!;
@@ -29,7 +30,7 @@ function puffTexture(): Texture {
   return Texture.from(c);
 }
 
-function vignetteTexture(): Texture {
+function vignetteTexture(): Texture { if (typeof document === "undefined") return Texture.EMPTY;
   const c = document.createElement("canvas");
   c.width = c.height = 256;
   const ctx = c.getContext("2d")!;
@@ -112,6 +113,18 @@ export class Fx {
     this.g.clear();
 
     this.ambience(W, H);
+    drawDynamicLighting(
+      this.g,
+      (x, y, r, color, alpha, add) => this.puff(x, y, r, color, alpha, add),
+      world,
+      camX,
+      camY,
+      W,
+      H,
+      this.clock,
+      this.mood,
+      this.mood?.moon ?? 0xf2ead0,
+    );
     this.detectBursts(world);
     const drops = this.entities(world, W, H, isEffect);
     this.drawMist(drops, world, W, H);
@@ -129,12 +142,12 @@ export class Fx {
   /** Mood overlay: wash, vignette, and slow ambient motion (fog banks, snow, embers, neon sparks). */
   private ambience(W: number, H: number): void {
     const m = this.mood;
-    this.vig.visible = !!m && m.vignette > 0;
+    this.vig.visible = true;
+    this.vig.width = W; this.vig.height = H;
+    this.vig.alpha = m ? m.vignette : 0.24;
     if (!m) return;
     const g = this.g;
     if (m.grade > 0) g.rect(0, 0, W, H).fill({ color: m.tint, alpha: m.grade * 0.22 });
-    this.vig.width = W; this.vig.height = H;
-    this.vig.alpha = m.vignette;
     const t = this.clock;
     if (m.fog > 0 || m.ambient === "fog") {
       const n = Math.min(10, 4 + Math.round(m.fog * 8));
@@ -155,7 +168,7 @@ export class Fx {
     }
   }
 
-  /** Rain streaks and fog puffs. Returns how many rain drops are on screen. */
+  /** Weather effects (rain, snow), atmospheric fog, and particle effects. Returns count of active weather drops. */
   private entities(world: World, W: number, H: number, isEffect: (type: string) => boolean): number {
     const g = this.g;
     let drops = 0;
@@ -163,13 +176,75 @@ export class Fx {
     for (const e of world.entities) {
       if (!isEffect(e.type)) continue;
       const t = e.type.toLowerCase();
+      const isWeather = t.includes("rain") || t.includes("drop") || t.includes("snow") || t.includes("blizzard");
+
+      // Cull weather effects completely if underground (y >= 400)
+      if (isWeather && e.y >= 400) continue;
+
       const x = e.x - this.camX, y = e.y - this.camY;
       if (x + e.w < -200 || x > W + 200 || y + e.h < -200 || y > H + 200) continue;
+
       if (t.includes("rain") || t.includes("drop")) {
         drops++;
         const cx = x + e.w / 2;
-        g.moveTo(cx - e.vx * 0.03, y - e.vy * 0.03).lineTo(cx, y + e.h).stroke({ width: 1.6, color: 0xbfe6ff, alpha: 0.55, cap: "round" });
-        now.set(e.id, { x: e.x + e.w / 2, y: e.y + e.h });
+        const groundScreenY = 400 - this.camY;
+        const endY = Math.min(y + e.h, groundScreenY);
+        if (endY > y - e.vy * 0.03) {
+          g.moveTo(cx - e.vx * 0.03, y - e.vy * 0.03).lineTo(cx, endY).stroke({ width: 1.6, color: 0xbfe6ff, alpha: 0.55, cap: "round" });
+        }
+        now.set(e.id, { x: e.x + e.w / 2, y: Math.min(e.y + e.h, 400) });
+      } else if (t.includes("snow") || t.includes("blizzard")) {
+        drops++;
+        const cx = x + e.w * 0.5;
+        const cy = y + e.h * 0.5;
+        const sizeSeed = ((e.id * 17 + 7) % 5);
+        const sz = 2.0 + sizeSeed * 0.6; // 2.0 .. 4.4px
+        const alpha = 0.72 + (sizeSeed % 3) * 0.12;
+        const color = e.color || 0xffffff;
+
+        // Soft additive aura on larger snowflakes
+        if (sz >= 3.6) {
+          this.puff(cx, cy, sz * 3.2, 0xffffff, 0.12, true);
+        }
+
+        // 4-point snowflake crystal
+        const arm = sz * 0.85;
+        g.moveTo(cx - arm, cy).lineTo(cx + arm, cy).stroke({ width: 1.2, color, alpha, cap: "round" });
+        g.moveTo(cx, cy - arm).lineTo(cx, cy + arm).stroke({ width: 1.2, color, alpha, cap: "round" });
+        g.rect(cx - 0.7, cy - 0.7, 1.4, 1.4).fill({ color, alpha });
+
+        // Soft snow puff & accumulation when touching ground
+        if (e.onGround || e.y + e.h >= 396) {
+          const groundScreenY = 400 - this.camY;
+          this.puff(cx, groundScreenY - 1, 7 + sizeSeed * 2, 0xffffff, 0.18, false);
+          g.ellipse(cx, groundScreenY, 4 + sizeSeed, 1.4).fill({ color: 0xffffff, alpha: 0.65 });
+        }
+        now.set(e.id, { x: e.x + e.w * 0.5, y: Math.min(e.y + e.h, 400) });
+      } else if (t.includes("spark") || t.includes("ember") || t.includes("firefly")) {
+        const cx = x + e.w * 0.5;
+        const cy = y + e.h * 0.5;
+        if (t.includes("firefly")) {
+          const pulse = 0.5 + 0.5 * Math.sin(this.clock * 4.5 + e.id * 2.3);
+          const col = e.color || 0xd4ff59;
+          this.puff(cx, cy, 18, col, 0.18 * pulse, true);
+          g.circle(cx, cy, 2.2).fill({ color: col, alpha: 0.65 + 0.35 * pulse });
+        } else {
+          const isEmber = t.includes("ember");
+          const col = e.color || (isEmber ? 0xff7b24 : 0xffea60);
+          const sz = Math.max(1.8, Math.min(4.5, Math.max(e.w, e.h) * 0.6));
+          if (Math.abs(e.vx) > 10 || Math.abs(e.vy) > 10) {
+            g.moveTo(cx - e.vx * 0.025, cy - e.vy * 0.025).lineTo(cx, cy).stroke({ width: sz * 0.8, color: col, alpha: 0.85, cap: "round" });
+          } else {
+            g.circle(cx, cy, sz).fill({ color: col, alpha: 0.85 });
+          }
+          this.puff(cx, cy, sz * 4, col, 0.14, true);
+        }
+      } else if (t.includes("explosion") || t.includes("blast") || t.includes("shockwave")) {
+        const cx = x + e.w * 0.5;
+        const cy = y + e.h * 0.5;
+        const r = Math.max(16, Math.max(e.w, e.h) * 0.6);
+        g.circle(cx, cy, r).stroke({ width: 2, color: e.color || 0xffe9b0, alpha: 0.7 });
+        this.puff(cx, cy, r * 1.2, e.color || 0xffaa40, 0.25, true);
       } else if (t.includes("fog") || t.includes("mist") || t.includes("haze") || t.includes("smoke")) {
         this.fogPuffs(e, x, y, t.includes("smoke"));
       }
@@ -215,7 +290,8 @@ export class Fx {
       s.age += dt;
       const q = s.age / SPLASH_LIFE;
       if (q >= 1) continue;
-      const x = s.x - this.camX, y = s.y - this.camY;
+      const syClamped = Math.min(s.y, 400);
+      const x = s.x - this.camX, y = syClamped - this.camY;
       g.ellipse(x, y, 3 + q * 9, 1.2 + q * 3).stroke({ width: 1, color: 0xdff3ff, alpha: (1 - q) * 0.7 });
       for (const vx of [-34, 0, 34]) {
         const a = s.age;

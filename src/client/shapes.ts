@@ -24,13 +24,14 @@ const SHAPE_WORDS: [ShapeName, RegExp][] = [
   ["circle", /ball|orb|bubble|sphere|circle|marble|pearl|bomb/],
 ];
 const EFFECT_RE = /rain|fog|mist|haze|smoke|snow|explosion|blast|shockwave|spark|ember/;
+const PROJECTILE_RE = /bullet|shot|projectile|arrow|fireball|laser|bolt|pellet|plasma/i;
 
 export type Kind = { kind: "shape"; shape: ShapeName } | { kind: "effect" };
 
 /** The code-drawn kind of an entity type, or undefined for sprites and the engine's own looks. */
 export function kindOf(type: string): Kind | undefined {
   const t = type.toLowerCase();
-  if (t === "player" || t === "ground" || t.includes("platform") || t.includes("coin")) return undefined;
+  if (t === "player" || t === "ground" || t.includes("platform") || t.includes("coin") || PROJECTILE_RE.test(t)) return undefined;
   for (const l of looks) {
     if (l.types.some((x) => t.includes(x))) return l.visual === "effect" ? { kind: "effect" } : { kind: "shape", shape: l.shape ?? "circle" };
   }
@@ -129,57 +130,93 @@ export function isCliff(e: Entity): boolean {
   return e.type.toLowerCase().includes("platform") && e.h >= 300 && e.w >= 120;
 }
 
-/** A hanging rock mass with strata, cracks and a jagged underside. Draws only inside the collision box. */
+/** A 2.5D stone cliff archway & overhang with full-height masonry courses, recessed tunnel pillars, and mossy arch lintel. */
 export function drawCliff(g: Graphics, e: Entity, x: number, y: number): void {
   const k = gradeFn;
   const w = e.w, h = e.h;
   const bottom = y + h;
-  const teeth = 22;
+  const teeth = 18;
+
+  // 1. Recessed background archway pillars & shadowed tunnel interior below the overhang (y + h down to ground y = 400)
+  const tunnelH = 104;
+  const pillarW = Math.min(28, Math.max(18, Math.round(w * 0.13)));
+  // Deep shadowed tunnel backdrop (drawn before dynamic entities so the player walks through the archway in front of it)
+  g.rect(x + 4, bottom - teeth, w - 8, tunnelH + teeth).fill({ color: 0x05070a, alpha: 0.52 });
+  // Recessed left & right stone support columns connecting the overhang to the ground
+  for (const px of [x + 2, x + w - pillarW - 2]) {
+    g.rect(px - 1.5, bottom - teeth, pillarW + 3, tunnelH + teeth).fill(OUTLINE);
+    g.rect(px, bottom - teeth, pillarW, tunnelH + teeth).fill(k(0x3a2f25));
+    g.rect(px, bottom - teeth, 3, tunnelH + teeth).fill({ color: k(0x6e5a47), alpha: 0.45 });
+    g.rect(px + pillarW - 4, bottom - teeth, 4, tunnelH + teeth).fill({ color: 0x080a0e, alpha: 0.55 });
+    for (let row = 0; row < 5; row++) {
+      const by = bottom + row * 20;
+      g.rect(px, by, pillarW, 2).fill({ color: k(0x1f1812), alpha: 0.65 });
+    }
+  }
+  // Inner arch corbels under the lintel corners
+  g.poly([x + pillarW + 2, bottom - 2, x + pillarW + 24, bottom - 2, x + pillarW + 2, bottom + 22]).fill(k(0x2f251d));
+  g.poly([x + w - pillarW - 2, bottom - 2, x + w - pillarW - 24, bottom - 2, x + w - pillarW - 2, bottom + 22]).fill(k(0x271f18));
+
+  // 2. Main cliff overhang body & full-height masonry courses (no hardcoded 760px screen-Y cutoff!)
   g.rect(x - 2, y - 2, w + 4, h - teeth + 2).fill(OUTLINE);
-  g.rect(x, y, w, h - teeth).fill(k(0x5b4a3a));
-  // irregular rock blocks, anchored to the world so they stay put as the camera moves
+  g.rect(x, y, w, h - teeth).fill(k(0x524336));
   const hash = (a: number, b: number) => (((a * 73856093) ^ (b * 19349663)) >>> 0) % 1000 / 1000;
-  const cell = 30;
+  const cell = 28;
   const first = Math.max(0, Math.floor((Math.max(y, -40) - y) / cell));
   for (let r = first; r * cell < h - teeth; r++) {
     const ry = y + r * cell;
-    if (ry > 760) break;
+    if (ry > bottom - teeth || ry > 2400) break;
     const rh = Math.min(cell, h - teeth - r * cell);
     let cx = 0;
     while (cx < w) {
       const hv = hash(r + 7, Math.floor(cx / 10) + 3);
-      const bw = Math.min(w - cx, 26 + Math.floor(hv * 44));
-      const tone = hv < 0.33 ? k(0x66523f) : hv < 0.66 ? k(0x5b4a3a) : k(0x51402f);
+      const bw = Math.min(w - cx, 26 + Math.floor(hv * 42));
+      const tone = hv < 0.33 ? k(0x635040) : hv < 0.66 ? k(0x564537) : k(0x4a3b2e);
       g.rect(x + cx, ry, bw, rh).fill(tone);
-      g.rect(x + cx, ry, bw, 2).fill({ color: k(0x8a7258), alpha: 0.4 });
-      g.rect(x + cx, ry + rh - 2, bw, 2).fill({ color: k(0x2a2018), alpha: 0.5 });
-      g.rect(x + cx + bw - 1.5, ry, 1.5, rh).fill({ color: k(0x2a2018), alpha: 0.6 });
+      g.rect(x + cx, ry, bw, 2).fill({ color: k(0x8c755c), alpha: 0.42 });
+      g.rect(x + cx, ry + rh - 2, bw, 2).fill({ color: k(0x241b14), alpha: 0.55 });
+      g.rect(x + cx + bw - 1.5, ry, 1.5, rh).fill({ color: k(0x241b14), alpha: 0.62 });
       cx += bw;
     }
   }
-  // lit left face, shaded right face
-  g.rect(x, y, 7, h - teeth).fill({ color: k(0x9b8264), alpha: 0.45 });
-  g.rect(x + w - 10, y, 10, h - teeth).fill({ color: k(0x2a2018), alpha: 0.5 });
-  // deterministic cracks
+
+  // 3. 2.5D side bevels: sunlit left face, deep ambient-occluded right face, and bottom arch lintel beam
+  g.rect(x, y, 8, h - teeth).fill({ color: k(0x9e8568), alpha: 0.45 });
+  g.rect(x + w - 12, y, 12, h - teeth).fill({ color: k(0x1f1710), alpha: 0.55 });
+  const lintelY = bottom - teeth - 14;
+  g.rect(x - 1, lintelY, w + 2, 14).fill(k(0x46382c));
+  g.rect(x, lintelY, w, 2).fill({ color: k(0x9e8568), alpha: 0.55 });
+  g.rect(x, bottom - teeth - 3, w, 3).fill({ color: 0x080b10, alpha: 0.55 });
+
+  // 4. Deterministic weathering cracks
   for (let i = 0; i < 4; i++) {
     const cx = x + 22 + i * 44 + (Math.floor(e.x) % 7);
     let py = Math.max(y, bottom - 260) + i * 17;
     let px = cx;
-    for (let s = 0; s < 6 && py < bottom - teeth - 8; s++) {
+    for (let s = 0; s < 6 && py < lintelY - 4; s++) {
       const nx = px + (s % 2 === 0 ? 5 : -4), ny = py + 18 + ((i + s) % 3) * 4;
-      g.moveTo(px, py).lineTo(nx, ny).stroke({ width: 1.5, color: k(0x2a2018), alpha: 0.7 });
+      g.moveTo(px, py).lineTo(nx, ny).stroke({ width: 1.5, color: k(0x241b14), alpha: 0.68 });
       px = nx; py = ny;
     }
   }
-  // jagged underside: stalactite teeth inside the box
-  const n = Math.max(3, Math.round(w / 26));
+
+  // 5. Archway keystone teeth & hanging moss overgrowth along the tunnel lip
+  const n = Math.max(4, Math.round(w / 24));
   const tw = w / n;
   for (let i = 0; i < n; i++) {
     const tx = x + i * tw;
-    const th = teeth - ((i * 5) % 4);
+    // Shorter teeth near the center so the underside curves slightly like a natural stone arch
+    const archCurve = Math.sin(((i + 0.5) / n) * Math.PI);
+    const th = Math.max(6, Math.round(teeth * (1 - 0.38 * archCurve)));
     g.poly([tx - 1.5, bottom - teeth - 1, tx + tw + 1.5, bottom - teeth - 1, tx + tw / 2, bottom - teeth + th + 1.5]).fill(OUTLINE);
-    g.poly([tx, bottom - teeth, tx + tw, bottom - teeth, tx + tw / 2, bottom - teeth + th]).fill(i % 2 ? k(0x4a3b2d) : k(0x5b4a3a));
+    g.poly([tx, bottom - teeth, tx + tw, bottom - teeth, tx + tw / 2, bottom - teeth + th]).fill(i % 2 ? k(0x46382b) : k(0x574637));
   }
-  // drip of moss at the lip so it reads as a ledge, not a wall
-  g.rect(x, bottom - teeth - 4, w, 3).fill({ color: k(0x3fd06a), alpha: 0.5 });
+  // Moss turf & hanging vine droplets along the arch lintel
+  g.rect(x, lintelY - 3, w, 4).fill({ color: k(0x3fd06a), alpha: 0.68 });
+  g.rect(x, lintelY - 3, w, 1.5).fill({ color: k(0x8ff2a7), alpha: 0.55 });
+  for (let i = 0; i < n * 2; i++) {
+    const vx = x + 6 + i * (w / (n * 2));
+    const vh = 4 + ((i * 7) % 9);
+    g.rect(vx, lintelY + 1, 2.5, vh).fill({ color: k(0x34ad58), alpha: 0.65 });
+  }
 }

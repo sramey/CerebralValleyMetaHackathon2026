@@ -186,6 +186,11 @@ export class World {
       // Static solids (gravityScale 0) never move. A solid with gravity still
       // gets physics: it collides with other solids, it just also blocks them.
       if (e.solid && e.gravityScale === 0) continue;
+      if (typeof e.data.parallax === "number" || /^(cloud|sky|day-sky|night-sky|background|parallax)/i.test(e.type)) {
+        e.x += e.vx * dt;
+        e.y += e.vy * dt;
+        continue;
+      }
       const wantsMove = e.vx !== 0 && e.type !== "player";
       this.casualHop(e, player);
       e.vy = Math.min(e.vy + SIM.gravity * e.gravityScale * dt, 1100); // terminal velocity
@@ -203,6 +208,7 @@ export class World {
             continue;
           }
         }
+        if (!e.solid && s.y === 400) continue;
         if (e.vx > 0) e.x = s.x - e.w;
         else if (e.vx < 0) e.x = s.x + s.w;
         else e.x = (e.x + e.w / 2 < s.x + s.w / 2) ? s.x - e.w : s.x + s.w;
@@ -216,7 +222,7 @@ export class World {
       e.onGround = false;
       for (const s of solids) if (s !== e && overlap(e, s)) {
         if (s.data.oneWay && !(e.vy > 0 && prevBottom <= s.y + 0.5)) continue;
-        if (e.vy > 0) { e.y = s.y - e.h; e.onGround = true; }
+        if (!e.solid && s.y === 400) { e.y = s.y - e.h; e.onGround = true; } else if (e.vy > 0) { e.y = s.y - e.h; e.onGround = true; }
         else if (e.vy < 0) e.y = s.y + s.h;
         else if (e.y + e.h / 2 < s.y + s.h / 2) { e.y = s.y - e.h; e.onGround = true; }
         else e.y = s.y + s.h;

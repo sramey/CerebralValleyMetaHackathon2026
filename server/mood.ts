@@ -14,7 +14,7 @@ type Ambient = MoodSpec["ambient"];
 const AMBIENTS: Ambient[] = ["none", "fog", "snow", "embers", "sparks"];
 
 /** Hand-tuned looks for the moods we expect on stage; anything else is designed by Spark. */
-const PRESETS: Record<string, MoodSpec> = {
+export const PRESETS: Record<string, MoodSpec> = {
   spooky: {
     name: "spooky",
     anchor: "spooky moonlit night: desaturated purple-gray tones, pale cyan ghostly glow, eerie twilight shadows, moonlit fog",
@@ -41,9 +41,15 @@ const PRESETS: Record<string, MoodSpec> = {
   },
   daytime: {
     name: "daytime",
-    anchor: "bright sunny daytime sky: clear azure blue sky, warm golden sunlight, vibrant green grass, crisp cheerful daylight colors",
-    skyTop: 0x3898ff, skyBottom: 0x9be2ff, ridgeFar: 0x5c8ab8, ridgeNear: 0x3e6b89, moon: 0xfff380, star: 0x7ec8ff,
-    grass: 0x45df68, soil: 0x6b442a, tint: 0xfff5cc, grade: 0.18, dim: 1.15, fog: 0.05, vignette: 0.1, ambient: "none",
+    anchor: "bright sunny daytime: clear cerulean blue sky, warm golden sunlight, vibrant green grass, crisp sunlit pixel art",
+    skyTop: 0x2f80ed, skyBottom: 0x9be2ff, ridgeFar: 0x4a8c6f, ridgeNear: 0x357a5b, moon: 0xffe042, star: 0xffffff,
+    grass: 0x45d66b, soil: 0x7a5230, tint: 0xfff4d6, grade: 0.08, dim: 1.05, fog: 0.08, vignette: 0.05, ambient: "none",
+  },
+  sunset: {
+    name: "sunset",
+    anchor: "warm golden-hour sunset: deep violet-indigo zenith to glowing amber-orange horizon, warm purple-amber hills, golden rim light",
+    skyTop: 0x2c1654, skyBottom: 0xff7b42, ridgeFar: 0x47294c, ridgeNear: 0x2d1832, moon: 0xff9e3d, star: 0xffd2a6,
+    grass: 0x5ca85b, soil: 0x47281e, tint: 0xff8a3d, grade: 0.22, dim: 0.96, fog: 0.18, vignette: 0.22, ambient: "embers",
   },
 };
 const ALIASES: Record<string, string> = {
@@ -51,7 +57,8 @@ const ALIASES: Record<string, string> = {
   snowy: "snowy", snow: "snowy", winter: "snowy", icy: "snowy", frozen: "snowy",
   neon: "neon", cyberpunk: "neon", synthwave: "neon", vaporwave: "neon",
   christmas: "christmas", xmas: "christmas", festive: "christmas", holiday: "christmas", santa: "christmas", yuletide: "christmas",
-  daytime: "daytime", day: "daytime", daylight: "daytime", sunny: "daytime", morning: "daytime", noon: "daytime",
+  daytime: "daytime", day: "daytime", sunny: "daytime", morning: "daytime", noon: "daytime", bright: "daytime", clear: "daytime", sunshine: "daytime",
+  sunset: "sunset", dusk: "sunset", evening: "sunset", golden: "sunset", twilight: "sunset", dawn: "sunset", sunrise: "sunset",
 };
 
 export function moodKey(name: string): string {

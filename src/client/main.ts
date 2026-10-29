@@ -1,7 +1,7 @@
 import { createBuilds } from "./builds";
 import { initFeedback } from "./feedback";
 import { Application, Graphics, Sprite, Texture } from "pixi.js";
-import { framesFor, loadSpriteSheet, loadSubjects } from "./sprites";
+import { computePrimaries, framesFor, isProjectileType, loadSpriteSheet, loadSubjects } from "./sprites";
 import chickenMod from "../mods/chicken";
 import { SIM } from "../contract";
 import { canUseSpriteSheet, entityKind } from "../ontology";
@@ -10,6 +10,8 @@ import { initVoice } from "./voice";
 import { Fx } from "./fx";
 import { Portal } from "./portal";
 import { drawCliff, drawShape, isCliff, kindOf, registerLook, scale, setGrade } from "./shapes";
+import { computeDesiredCamY, drawContactShadows, drawDistantMountains, drawForegroundDepth, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
+import { drawFluffyCloud, drawParallaxEntities, isParallaxOrSkyEntity, isSkyOrBackgroundEntity } from "./parallax";
 import { ModLoader } from "../sim/loader";
 import { createGhost } from "./ghost";
 import { createPipeline } from "./pipeline";
@@ -23,11 +25,12 @@ import rainMod from "../mods/rain";
 import coinsMod from "../mods/coins";
 import movingPlatformMod from "../mods/platform-moving";
 import fireArrowMod from "../mods/fire-arrow";
+import parallaxMod from "../mods/parallax";
 
 const BUILTINS: Record<string, ModDefinition> = {
   player: playerMod, ground: groundMod, enemies: enemyMod, rain: rainMod,
   coins: coinsMod, "moving-platform": movingPlatformMod, "fire-arrow": fireArrowMod,
-  chicken: chickenMod,
+  chicken: chickenMod, parallax: parallaxMod,
 };
 
 const world = new World(1337);
@@ -177,8 +180,13 @@ function drawRidge(pts: number[], camX: number, par: number, baseY: number, seed
   for (let sx = -step; sx <= W + step; sx += step) {
     pts.push(sx, baseY - ridgeY(sx + camX * par, seed));
   }
+  const topCount = pts.length;
   pts.push(W + step, H, -step, H);
   gfx.poly(pts).fill(color);
+  const rim = mixC(color, pal.moon, 0.22);
+  for (let i = 0; i + 3 < topCount; i += 2) {
+    gfx.moveTo(pts[i], pts[i + 1]).lineTo(pts[i + 2], pts[i + 3]).stroke({ width: 1.5, color: rim, alpha: 0.30 });
+  }
 }
 
 function squash(e: Entity): { bw: number; bh: number } {
@@ -255,23 +263,7 @@ function drawStair(e: Entity, x: number, y: number): void {
 }
 
 function drawGround(e: Entity, x: number, y: number): void {
-  gfx.rect(x, y, e.w, e.h).fill(e.color);
-  const gh = Math.min(8, Math.max(3, e.h * 0.22));
-  gfx.rect(x, y, e.w, gh).fill(pal.grass);
-  const snowy = mood?.ambient === "snow" || mood?.name === "christmas" || mood?.name === "snowy" || e.type.toLowerCase().includes("snow") || e.type.toLowerCase().includes("ice");
-  if (snowy) gfx.rect(x, y, e.w, Math.max(2, gh * 0.55)).fill(0xffffff);
-  // deterministic speckles from world coords (no per-frame random)
-  const base = Math.floor(e.x) * 31 + Math.floor(e.y) * 7;
-  const n = Math.floor(e.w / 14);
-  for (let k = 0; k < n; k++) {
-    const hsh = ((base + k * 57) % 11 + 11) % 11;
-    if (hsh % 2 !== 0) continue;
-    const px = x + k * 14 + (hsh % 5);
-    const span = e.h - gh - 6;
-    const py = y + gh + 3 + (span > 0 ? hsh % span : 0);
-    const speckColor = mood?.name === "christmas" && k % 3 === 0 ? (k % 6 === 0 ? 0xd9383a : 0x2e8b57) : pal.soil;
-    gfx.rect(px, py, 3, 2).fill(speckColor);
-  }
+  drawGround25D(gfx, e, x, y, pal, app.screen.width, app.screen.height, grade);
 }
 
 function drawShot(e: Entity, x: number, y: number): void {
@@ -310,7 +302,18 @@ function drawHealthBar(e: Entity, x: number, y: number): void {
   gfx.rect(x, y - 9, e.w * health / 100, 4).fill(color);
 }
 
+let lastPrimariesTick = -1;
+let cachedPrimaries = new Set<number>();
+function getActivePrimaries(): Set<number> {
+  if (lastPrimariesTick !== world.tickCount) {
+    lastPrimariesTick = world.tickCount;
+    cachedPrimaries = computePrimaries(world.entities, framesBySubject, (type) => !!kindOf(type));
+  }
+  return cachedPrimaries;
+}
+
 function drawEntityRaw(e: Entity, camX: number, camY: number): void {
+  if (isParallaxOrSkyEntity(e)) return;
   const x = e.x - camX;
   const y = e.y - camY;
   const W = app.screen.width;
@@ -320,13 +323,19 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   if (morph.size > 0 && isMorphing(e)) { drawDigitize(e, x, y); return; } // a restyled sheet is about to swap in (ADR 0017)
   const look = kindOf(t); // code-drawn shapes and engine effects never use sprites or the outline (ADR 0015)
   if (look) { if (look.kind === "shape") drawShape(gfx, e, x, y, look.shape); return; }
-  if (framesFor(framesBySubject, t, t === "player").length >= 1) return; // sprite pass below
+  if (getActivePrimaries().has(e.id)) return; // sprite pass below
   if (t !== "player" && canUseSpriteSheet(e)) {
     for (const k of pendingArt) {
       if (t.includes(k)) { drawDigitize(e, x, y); return; }
     }
   }
+  if (t === "sun" || /\bsun\b/i.test(t)) { drawSunEntity(gfx, e, x, y); return; }
+  if (t.includes("cloud") || t.includes("cumulus")) {
+    drawFluffyCloud(gfx, x, y, e.w, e.h, e.color, pal.moon, SKY[SKY_BANDS - 1], e.id);
+    return;
+  }
   if (isCliff(e)) { drawCliff(gfx, e, x, y); return; }
+  if (t.indexOf("ground") >= 0 || t.indexOf("platform") >= 0 || /floor|bridge/i.test(t)) { drawGround(e, x, y); return; }
   // dark outline behind every code-drawn entity
   gfx.rect(x - 1.5, y - 1.5, e.w + 3, e.h + 3).fill(OUTLINE);
   if (t === "player") {
@@ -334,9 +343,8 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
     return;
   }
   if (t.indexOf("coin") >= 0) { drawCoin(e, x, y); return; }
-  if (t.indexOf("ground") >= 0 || t.indexOf("platform") >= 0) { drawGround(e, x, y); return; }
   if (t.indexOf("stair") >= 0 || t.indexOf("step") >= 0 || t.indexOf("wall") >= 0 || t.indexOf("block") >= 0 || t.indexOf("brick") >= 0 || t.indexOf("pillar") >= 0 || t.indexOf("ledge") >= 0 || t.indexOf("ramp") >= 0 || entityKind(e) === "terrain") { drawStair(e, x, y); return; }
-  if (t.indexOf("projectile") >= 0 || t.indexOf("arrow") >= 0 || t.indexOf("fire") >= 0 || entityKind(e) === "projectile") { drawShot(e, x, y); return; }
+  if (isProjectileType(t) || entityKind(e) === "projectile" || t.indexOf("arrow") >= 0 || t.indexOf("fire") >= 0) { drawShot(e, x, y); return; }
   if (t.indexOf("slime") >= 0 || t.indexOf("gel") >= 0 || t.indexOf("enemy") >= 0 ||
     t.indexOf("walker") >= 0 || t.indexOf("turtle") >= 0) { drawBlob(e, x, y); return; }
   gfx.rect(x, y, e.w, e.h).fill(e.color);
@@ -446,7 +454,7 @@ function desiredCamXFor(w: number): number {
 }
 function desiredCamYFor(h: number): number {
   const playerForCam = world.entities.find((e) => e.type === "player");
-  return playerForCam ? playerForCam.y + playerForCam.h - h * 0.90 : world.camera.y;
+  return computeDesiredCamY(playerForCam, h, world.camera.y);
 }
 function fitRenderer(): void {
   const rect = stageWrapEl.getBoundingClientRect();
@@ -477,9 +485,20 @@ const RADIAL_PAD_BOTTOM = 128;
 function formatRadialLabel(type: string): string {
   return type.replace(/^photo-\d+-?/, "").replace(/[-_]+/g, " ").trim() || type;
 }
+const scaleOverride = new Map<number, number>();
+
+function visualHeightOf(e: Entity): number {
+  const frames = framesFor(framesBySubject, e.type, e.type === "player");
+  if (frames.length >= 1 && !kindOf(e.type)) {
+    return e.type === "player" ? 56 * (e.h / 34) : Math.min(630, Math.max(34, e.h * 1.5));
+  }
+  return e.h;
+}
+
 function positionRadialMenu(e: Entity, camX: number, camY: number): void {
+  const visH = visualHeightOf(e);
   const rawX = e.x - camX + e.w / 2;
-  const rawY = e.y - camY + e.h / 2;
+  const rawY = e.y - camY + e.h - visH / 2;
   const w = app.screen.width || stageWrapEl.clientWidth;
   const h = app.screen.height || stageWrapEl.clientHeight;
   const x = w > RADIAL_PAD_X * 2 ? Math.min(w - RADIAL_PAD_X, Math.max(RADIAL_PAD_X, rawX)) : w / 2;
@@ -490,7 +509,7 @@ function positionRadialMenu(e: Entity, camX: number, camY: number): void {
   radialMenu.style.top = `${Math.round(y)}px`;
   radialMenu.style.setProperty("--ring-dx", `${Math.round(rawX - x)}px`);
   radialMenu.style.setProperty("--ring-dy", `${Math.round(rawY - y)}px`);
-  radialMenu.style.setProperty("--ring-size", `${Math.round(Math.min(110, Math.max(44, Math.hypot(e.w, e.h) + 12)))}px`);
+  radialMenu.style.setProperty("--ring-size", `${Math.round(Math.min(140, Math.max(44, Math.hypot(e.w, visH) + 12)))}px`);
 }
 function closeRadialMenu(): void {
   radialTargetId = null;
@@ -560,6 +579,13 @@ document.querySelectorAll<HTMLButtonElement>("#radial-menu [data-action]").forEa
       e.x -= (nw - e.w) / 2;
       e.y -= (nh - e.h);
       e.w = nw; e.h = nh;
+      const currentScale = (scaleOverride.get(e.id) ?? 1) * factor;
+      scaleOverride.set(e.id, currentScale);
+      if (e.data) {
+        e.data.scale = currentScale;
+        e.data.targetW = nw;
+        e.data.targetH = nh;
+      }
       positionRadialMenu(e, camXSmooth ?? world.camera.x, camYSmooth ?? world.camera.y);
     } else if (action === "front") {
       layerOverride.set(e.id, 5);
@@ -568,6 +594,7 @@ document.querySelectorAll<HTMLButtonElement>("#radial-menu [data-action]").forEa
     } else if (action === "remove") {
       world.despawn(e.id);
       layerOverride.delete(e.id);
+      scaleOverride.delete(e.id);
       closeRadialMenu();
     } else if (action === "thumbs-up" || action === "thumbs-down") {
       const modTitle = loader.list().find((m) => m.id === e.owner)?.title ?? formatRadialLabel(e.type);
@@ -594,32 +621,60 @@ function render(): void {
     if (!target) closeRadialMenu();
     else positionRadialMenu(target, camX, camYSmooth);
   }
-  // vertical sky gradient via stacked bands
-  const bandH = Math.ceil(H / SKY_BANDS);
-  for (let i = 0; i < SKY_BANDS; i++) {
-    gfx.rect(0, i * bandH, W, bandH + 1).fill(SKY[i]);
+  const isDaytime = isDaytimeSky(mood, world.entities, SKY[0]);
+  const sunEntity = world.entities.find((e) => {
+    const t = e.type.toLowerCase();
+    return t === "sun" || /\bsun\b/.test(t);
+  });
+  const skyEntity = world.entities.find((e) => isSkyOrBackgroundEntity(e) && typeof e.color === "number" && e.color > 0);
+  const skyEntityCol = (!mood && skyEntity) ? skyEntity.color : undefined;
+
+  drawSkyAndCelestials(
+    gfx,
+    W,
+    H,
+    camX,
+    SKY_BANDS,
+    SKY,
+    pal,
+    isDaytime,
+    Boolean(sunEntity),
+    skyEntityCol,
+  );
+
+  if (isDaytime && !world.entities.some((e) => e.type.toLowerCase().includes("cloud"))) {
+    const skyBottomCol = SKY[SKY_BANDS - 1];
+    const c1x = ((140 - camX * 0.08) % (W + 220) + W + 220) % (W + 220) - 110;
+    drawFluffyCloud(gfx, c1x, 38, 120, 36, 0xffffff, pal.moon, skyBottomCol, 1);
+    const c2x = ((W * 0.48 - camX * 0.12) % (W + 260) + W + 260) % (W + 260) - 130;
+    drawFluffyCloud(gfx, c2x, 62, 150, 42, 0xffffff, pal.moon, skyBottomCol, 2);
+    const c3x = ((W * 0.82 - camX * 0.06) % (W + 200) + W + 200) % (W + 200) - 100;
+    drawFluffyCloud(gfx, c3x, 28, 95, 30, 0xffffff, pal.moon, skyBottomCol, 3);
   }
-  // stars (parallax markers)
-  for (let i = 0; i < 14; i++) {
-    const sx = ((i * 173 - camX * 0.3) % (W + 80) + W + 80) % (W + 80) - 40;
-    gfx.rect(sx, 40 + (i % 5) * 22, 3, 3).fill(pal.star);
-  }
-  // moon, fixed top-right
-  gfx.circle(W - 70, 60, 24).fill({ color: pal.moon, alpha: 0.15 });
-  gfx.circle(W - 70, 60, 17).fill(pal.moon);
-  gfx.circle(W - 76, 54, 14).fill(SKY[1]);
-  // far hill silhouettes
+  // far hill silhouettes + parallax layers + atmospheric horizon mist (bead 1z7 & rm1)
   const horizon = H * 0.62 - camYSmooth * 0.1;
+  drawDistantMountains(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
   drawRidge(ridgeFar, camX, 0.3, horizon, 0, pal.ridgeFar);
   drawRidge(ridgeNear, camX, 0.55, horizon + 34, 1, pal.ridgeNear);
-  // solids-first, reuse scratch array
+  drawParallaxEntities(gfx, world.entities, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1], grade);
+  drawHorizonMist(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
+  // solids-first, then contact shadows on solid surfaces, then dynamic entities
   order.length = 0;
   for (let i = 0; i < world.entities.length; i++) order.push(world.entities[i]);
   order.sort((a, b) => Number(b.solid) - Number(a.solid));
-  for (let i = 0; i < order.length; i++) drawEntity(order[i], camX, camYSmooth);
+  let shadowsDrawn = false;
+  for (let i = 0; i < order.length; i++) {
+    if (!shadowsDrawn && !order[i].solid) {
+      drawContactShadows(gfx, world.entities, camX, camYSmooth, W, H, isEffectType);
+      shadowsDrawn = true;
+    }
+    drawEntity(order[i], camX, camYSmooth);
+  }
+  if (!shadowsDrawn) drawContactShadows(gfx, world.entities, camX, camYSmooth, W, H, isEffectType);
   for (const p of world.particles) {
     gfx.rect(p.x - camX, p.y - camYSmooth, p.size, p.size).fill({ color: p.color, alpha: Math.max(0, 1 - p.life / p.maxLife) });
   }
+  drawForegroundDepth(gfx, camX, camYSmooth, W, H, pal);
   // Sprite primaries: per owner+subject every entity at >=30% of the group's
   // max area gets the sprite; small assembled sub-parts stay rects under it.
   const seen = new Set<number>();
@@ -627,6 +682,7 @@ function render(): void {
   {
     const groups = new Map<string, { maxArea: number; items: { id: number; area: number }[] }>();
     for (const e of world.entities) {
+      if (isParallaxOrSkyEntity(e)) continue;
       const frames = framesFor(framesBySubject, e.type, e.type === "player");
       if (frames.length < 1 || kindOf(e.type)) continue;
       const subject = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0] ?? e.type;
@@ -645,6 +701,7 @@ function render(): void {
   }
   const spriteDraw: { e: Entity; frame: Texture; subjectKey: string | undefined }[] = [];
   for (const e of world.entities) {
+    if (isParallaxOrSkyEntity(e)) continue;
     const frames = framesFor(framesBySubject, e.type, e.type === "player");
     if (frames.length < 1 || !primaries.has(e.id) || kindOf(e.type) || (morph.size > 0 && isMorphing(e))) continue;
     seen.add(e.id);
@@ -661,7 +718,7 @@ function render(): void {
   spriteDraw.sort((a, b) => layerOf(a.e, a.subjectKey) - layerOf(b.e, b.subjectKey));
   for (const { e, frame, subjectKey } of spriteDraw) {
     const s = spriteFor(e.id);
-    const targetH = e.type === "player" ? 56 : Math.min(240, Math.max(34, e.h * 1.5));
+    const targetH = visualHeightOf(e);
     const scale = targetH / frame.height;
     s.texture = frame;
     s.scale.set(scale * e.facing, scale);
@@ -669,7 +726,7 @@ function render(): void {
     s.zIndex = layerOf(e, subjectKey);
     s.visible = true;
   }
-  for (const [id, s] of spritePool) if (!seen.has(id)) s.visible = false;
+  for (const [id, s] of spritePool) if (!seen.has(id)) { s.visible = false; scaleOverride.delete(id); }
   const nowMs = performance.now();
   fx.render(world, camX, camYSmooth, W, H, (nowMs - lastRenderAt) / 1000, isEffectType);
   portal.render(world, camX, camYSmooth, (nowMs - lastRenderAt) / 1000, (t) => isEffectType(t) || !canUseSpriteSheet(t));
@@ -682,12 +739,6 @@ function render(): void {
     if (x + e.w < -40 || x > W + 40 || y + e.h < -40 || y > H + 40) continue;
     drawHealthBar(e, x, y);
   }
-  // subtle vignette: 4 edge rects
-  const V = 26;
-  gfx.rect(0, 0, W, V).fill({ color: 0x000000, alpha: 0.28 });
-  gfx.rect(0, H - V, W, V).fill({ color: 0x000000, alpha: 0.28 });
-  gfx.rect(0, 0, V, H).fill({ color: 0x000000, alpha: 0.22 });
-  gfx.rect(W - V, 0, V, H).fill({ color: 0x000000, alpha: 0.22 });
   hud.render(world);
 }
 
@@ -701,6 +752,19 @@ function frame(now: number): void {
   const stepMs = SIM.dt * 1000;
   while (acc >= stepMs) {
     world.step(); acc -= stepMs;
+    for (const [id, mult] of scaleOverride) {
+      const ent = world.entities.find((x) => x.id === id);
+      if (ent && ent.data?.targetW && ent.data?.targetH) {
+        const tw = Number(ent.data.targetW);
+        const th = Number(ent.data.targetH);
+        if (ent.w !== tw || ent.h !== th) {
+          ent.x -= (tw - ent.w) / 2;
+          ent.y -= (th - ent.h);
+          ent.w = tw;
+          ent.h = th;
+        }
+      }
+    }
     if (!loader.has("player") || world.entities.some((e) => e.type === "player")) noPlayerTicks = 0;
     else if (++noPlayerTicks > 90) { noPlayerTicks = 0; loadLocal(playerMod); say("Knocked out — you're back in!", "done"); }
   }
@@ -840,6 +904,7 @@ function handleLocal(text: string): boolean {
   if (n === "coin" || n === "coins") { loadLocal(coinsMod); return true; }
   if (n === "moving platform") { loadLocal(movingPlatformMod); return true; }
   if (n === "fire arrow" || n === "fire arrows" || n === "arrow" || n === "arrows" || n === "shoot fire arrows") { loadLocal(fireArrowMod); return true; }
+  if (n === "parallax" || n === "parallax background" || n === "parallax forest" || n === "parallax vista") { loadLocal(parallaxMod); return true; }
   if (n === "chicken") { loadLocal(chickenMod); return true; }
   if (t.includes("jump higher")) { tweak("player", "jump", 880, "Jump raised."); return true; }
   if (t.includes("faster")) {
@@ -1699,4 +1764,9 @@ if (!worldParam) autoLoadStarterOnce();
       max: h.max, text: h.text, position: h.position,
     })),
   });
+};
+(window as unknown as Record<string, unknown>).openRadialOn = (type: string): boolean => {
+  const ent = world.entities.find((e) => e.type === type);
+  if (ent) { openRadialMenu(ent); return true; }
+  return false;
 };

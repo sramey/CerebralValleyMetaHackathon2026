@@ -1,7 +1,7 @@
 // Short-term memory per session (ADR 0016): the last commands and the mods
-import { detectMoodCommand, isPlayerAbilityCommand, isPlayerCommand } from "../src/ontology";
 // most recently created or touched, so "make them faster" and "make it huge"
 // resolve to the thing the player just meant.
+import { detectMoodCommand, isPlayerAbilityCommand, isPlayerCommand } from "../src/ontology";
 
 export interface Recent { commands: string[]; touched: string[] }
 
