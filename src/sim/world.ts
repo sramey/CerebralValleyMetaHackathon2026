@@ -30,6 +30,8 @@ export class World {
 
   /** Create or update a HUD widget owned by `owner` (same id = in-place update). */
   setHud(owner: string, id: string, def: HudDef): void {
+    const val = (v: unknown): number | string | undefined =>
+      typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" ? v : undefined;
     const num = (v: unknown): number | undefined =>
       typeof v === "number" && Number.isFinite(v) ? v : undefined;
     const w: HudWidget = {
@@ -37,7 +39,7 @@ export class World {
       owner,
       kind: HUD_KINDS.has(def.kind) ? def.kind : "stat",
       label: typeof def.label === "string" ? def.label : undefined,
-      value: num(def.value),
+      value: val(def.value),
       max: num(def.max),
       unit: typeof def.unit === "string" ? def.unit : undefined,
       icon: typeof def.icon === "string" ? def.icon : undefined,
