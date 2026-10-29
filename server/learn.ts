@@ -491,6 +491,9 @@ export async function learnFromFix(
 ): Promise<LearnedRule | null> {
   try {
     if (!errors || errors.length === 0) return null;
+    // A "too big to fit" playtest rejection means the level did its job on what the player asked for (ADR 0023). Learning "keep it small"
+    // from it would make Wonder pre-empt the verifier, shrink what the player asked for, and hide the rejection.
+    if (errors.every((e) => e.startsWith("playtest:") && /too big|fit through|headroom/i.test(e))) return null;
     const errText = errors.join("; ").slice(0, 400);
     let ruleText = "";
     try {
