@@ -625,10 +625,13 @@ export function drawSkyAndCelestials(
       gfx.circle(cx, cy, 18).fill(pal.moon || 0xffe042);
       gfx.circle(cx, cy, 12).fill(0xfffae0);
     } else {
-      // Crescent Moon
+      // Crescent Moon in a soft halo, so dark moods have a focal light
+      for (let i = 0; i < 4; i++) gfx.circle(cx, cy, 120 - i * 26).fill({ color: pal.moon, alpha: 0.035 });
       gfx.circle(cx, cy, 24).fill({ color: pal.moon, alpha: 0.15 });
       gfx.circle(cx, cy, 17).fill(pal.moon);
-      gfx.circle(cx - 6, cy - 6, 14).fill(skyColors[1] ?? 0x05070a);
+      // The cutout takes the sky's colour at the moon's height (a flat band colour would show as a dark disc on the halo).
+      const skyAtMoon = mixColor(skyColors[0] ?? 0x05070a, skyColors[skyColors.length - 1] ?? 0x05070a, cy / H);
+      gfx.circle(cx - 6, cy - 6, 14).fill(mixColor(skyAtMoon, pal.moon, 0.1));
     }
   }
 }

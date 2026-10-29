@@ -7,6 +7,9 @@ const OUTLINE = 0x0b0e13;
 /** The active mood's color grade (ADR 0017); identity when no mood is on. */
 let gradeFn: (c: number) => number = (c) => c;
 export function setGrade(f: (c: number) => number): void { gradeFn = f; }
+let snowyWorld = false;
+/** Snowy moods frost the overhang's moss instead of leaving it grass green. */
+export function setSnowy(b: boolean): void { snowyWorld = b; }
 
 /** What Spark said about each type this session (server `look`), so the word fallback below only covers router misses. */
 const looks: Look[] = [];
@@ -213,11 +216,14 @@ export function drawCliff(g: Graphics, e: Entity, x: number, y: number): void {
     g.poly([tx, bottom - teeth, tx + tw, bottom - teeth, tx + tw / 2, bottom - teeth + th]).fill(i % 2 ? k(0x46382b) : k(0x574637));
   }
   // Moss turf & hanging vine droplets along the arch lintel
-  g.rect(x, lintelY - 3, w, 4).fill({ color: k(0x3fd06a), alpha: 0.68 });
-  g.rect(x, lintelY - 3, w, 1.5).fill({ color: k(0x8ff2a7), alpha: 0.55 });
+  const mossA = snowyWorld ? 0xdfeaf5 : 0x3fd06a;
+  const mossB = snowyWorld ? 0xffffff : 0x8ff2a7;
+  const vine = snowyWorld ? 0xb9d2e8 : 0x34ad58;
+  g.rect(x, lintelY - 3, w, 4).fill({ color: k(mossA), alpha: snowyWorld ? 0.95 : 0.68 });
+  g.rect(x, lintelY - 3, w, 1.5).fill({ color: k(mossB), alpha: snowyWorld ? 0.9 : 0.55 });
   for (let i = 0; i < n * 2; i++) {
     const vx = x + 6 + i * (w / (n * 2));
     const vh = 4 + ((i * 7) % 9);
-    g.rect(vx, lintelY + 1, 2.5, vh).fill({ color: k(0x34ad58), alpha: 0.65 });
+    g.rect(vx, lintelY + 1, 2.5, vh).fill({ color: k(vine), alpha: 0.65 });
   }
 }
