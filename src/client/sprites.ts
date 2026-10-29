@@ -16,6 +16,12 @@ export async function loadSubjects(map: Record<string, string>): Promise<Record<
   return out;
 }
 
+export const PROJECTILE_PATTERN = /bullet|shot|projectile|arrow|fireball|laser|bolt|pellet|plasma/i;
+
+export function isProjectileType(type: string): boolean {
+  return PROJECTILE_PATTERN.test(type);
+}
+
 export function framesFor(
   framesBySubject: Record<string, Texture[]>,
   entityType: string,
@@ -23,10 +29,37 @@ export function framesFor(
 ): Texture[] {
   if (isPlayer) return framesBySubject["ninja"] ?? [];
   const lower = entityType.toLowerCase();
+  if (isProjectileType(lower)) return [];
   for (const key of Object.keys(framesBySubject).sort()) {
     if (lower.includes(key.toLowerCase())) return framesBySubject[key];
   }
   return [];
+}
+
+export function computePrimaries(
+  entities: { id: number; owner?: string; type: string; w: number; h: number }[],
+  framesBySubject: Record<string, Texture[]>,
+  hasCustomLook?: (type: string) => boolean,
+): Set<number> {
+  const primaries = new Set<number>();
+  const groups = new Map<string, { maxArea: number; items: { id: number; area: number }[] }>();
+  for (const e of entities) {
+    const frames = framesFor(framesBySubject, e.type, e.type === "player");
+    if (frames.length < 1 || (hasCustomLook && hasCustomLook(e.type))) continue;
+    const subject = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0] ?? e.type;
+    const gk = `${e.owner ?? ""}|${subject}`;
+    const area = e.w * e.h;
+    let g = groups.get(gk);
+    if (!g) { g = { maxArea: area, items: [] }; groups.set(gk, g); }
+    if (area > g.maxArea) g.maxArea = area;
+    g.items.push({ id: e.id, area });
+  }
+  for (const g of groups.values()) {
+    for (const item of g.items) {
+      if (item.area >= 0.3 * g.maxArea) primaries.add(item.id);
+    }
+  }
+  return primaries;
 }
 
 export async function loadSpriteSheet(url: string): Promise<Texture[]> {

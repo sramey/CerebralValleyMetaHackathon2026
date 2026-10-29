@@ -1,7 +1,7 @@
 import { createBuilds } from "./builds";
 import { initFeedback } from "./feedback";
 import { Application, Graphics, Sprite, Texture } from "pixi.js";
-import { framesFor, loadSpriteSheet, loadSubjects } from "./sprites";
+import { computePrimaries, framesFor, isProjectileType, loadSpriteSheet, loadSubjects } from "./sprites";
 import chickenMod from "../mods/chicken";
 import { SIM } from "../contract";
 import type { ClientMsg, Entity, KnobValue, ModDefinition, MoodSpec, ServerMsg } from "../contract";
@@ -289,6 +289,16 @@ function drawHealthBar(e: Entity, x: number, y: number): void {
   gfx.rect(x, y - 9, e.w * health / 100, 4).fill(color);
 }
 
+let lastPrimariesTick = -1;
+let cachedPrimaries = new Set<number>();
+function getActivePrimaries(): Set<number> {
+  if (lastPrimariesTick !== world.tickCount) {
+    lastPrimariesTick = world.tickCount;
+    cachedPrimaries = computePrimaries(world.entities, framesBySubject, (type) => !!kindOf(type));
+  }
+  return cachedPrimaries;
+}
+
 function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   const x = e.x - camX;
   const y = e.y - camY;
@@ -299,7 +309,7 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   if (morph.size > 0 && isMorphing(e)) { drawDigitize(e, x, y); return; } // a restyled sheet is about to swap in (ADR 0017)
   const look = kindOf(t); // code-drawn shapes and engine effects never use sprites or the outline (ADR 0015)
   if (look) { if (look.kind === "shape") drawShape(gfx, e, x, y, look.shape); return; }
-  if (framesFor(framesBySubject, t, t === "player").length >= 1) return; // sprite pass below
+  if (getActivePrimaries().has(e.id)) return; // sprite pass below
   if (t !== "player") {
     for (const k of pendingArt) {
       if (t.includes(k)) { drawDigitize(e, x, y); return; }
@@ -314,7 +324,7 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   }
   if (t.indexOf("coin") >= 0) { drawCoin(e, x, y); return; }
   if (t.indexOf("ground") >= 0 || t.indexOf("platform") >= 0) { drawGround(e, x, y); return; }
-  if (t.indexOf("projectile") >= 0 || t.indexOf("arrow") >= 0 || t.indexOf("fire") >= 0) { drawShot(e, x, y); return; }
+  if (isProjectileType(t) || t.indexOf("arrow") >= 0 || t.indexOf("fire") >= 0) { drawShot(e, x, y); return; }
   if (t.indexOf("slime") >= 0 || t.indexOf("gel") >= 0 || t.indexOf("enemy") >= 0 ||
     t.indexOf("walker") >= 0 || t.indexOf("turtle") >= 0) { drawBlob(e, x, y); return; }
   gfx.rect(x, y, e.w, e.h).fill(e.color);
