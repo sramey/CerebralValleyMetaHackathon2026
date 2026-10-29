@@ -329,15 +329,40 @@ drawerToggle.addEventListener("click", () => {
   setTimeout(fitRenderer, 400);
 });
 addEventListener("resize", fitRenderer);
+const RADIAL_PAD_X = 104;
+const RADIAL_PAD_TOP = 134;
+const RADIAL_PAD_BOTTOM = 104;
+function formatRadialLabel(type: string): string {
+  return type.replace(/^photo-\d+-?/, "").replace(/[-_]+/g, " ").trim() || type;
+}
+function positionRadialMenu(e: Entity, camX: number, camY: number): void {
+  const rawX = e.x - camX + e.w / 2;
+  const rawY = e.y - camY + e.h / 2;
+  const w = app.screen.width || stageWrapEl.clientWidth;
+  const h = app.screen.height || stageWrapEl.clientHeight;
+  const x = w > RADIAL_PAD_X * 2 ? Math.min(w - RADIAL_PAD_X, Math.max(RADIAL_PAD_X, rawX)) : w / 2;
+  const y = h > RADIAL_PAD_TOP + RADIAL_PAD_BOTTOM
+    ? Math.min(h - RADIAL_PAD_BOTTOM, Math.max(RADIAL_PAD_TOP, rawY))
+    : h / 2;
+  radialMenu.style.left = `${Math.round(x)}px`;
+  radialMenu.style.top = `${Math.round(y)}px`;
+  radialMenu.style.setProperty("--ring-dx", `${Math.round(rawX - x)}px`);
+  radialMenu.style.setProperty("--ring-dy", `${Math.round(rawY - y)}px`);
+  radialMenu.style.setProperty("--ring-size", `${Math.round(Math.min(110, Math.max(44, Math.hypot(e.w, e.h) + 12)))}px`);
+}
 function closeRadialMenu(): void {
   radialTargetId = null;
   radialMenu.hidden = true;
 }
 function openRadialMenu(e: Entity): void {
+  const switched = radialTargetId !== null && radialTargetId !== e.id && !radialMenu.hidden;
   radialTargetId = e.id;
-  radialCenter.textContent = e.type;
-  radialMenu.style.left = `${e.x - (camXSmooth ?? world.camera.x) + e.w / 2}px`;
-  radialMenu.style.top = `${e.y - (camYSmooth ?? world.camera.y) + e.h / 2}px`;
+  radialCenter.textContent = formatRadialLabel(e.type);
+  positionRadialMenu(e, camXSmooth ?? world.camera.x, camYSmooth ?? world.camera.y);
+  if (switched) {
+    radialMenu.hidden = true;
+    void radialMenu.offsetWidth;
+  }
   radialMenu.hidden = false;
 }
 function entityAt(wx: number, wy: number): Entity | undefined {
@@ -393,6 +418,7 @@ document.querySelectorAll<HTMLButtonElement>("#radial-menu [data-action]").forEa
       e.x -= (nw - e.w) / 2;
       e.y -= (nh - e.h);
       e.w = nw; e.h = nh;
+      positionRadialMenu(e, camXSmooth ?? world.camera.x, camYSmooth ?? world.camera.y);
     } else if (action === "front") {
       layerOverride.set(e.id, 5);
     } else if (action === "back") {
@@ -420,10 +446,7 @@ function render(): void {
   if (radialTargetId !== null) {
     const target = world.entities.find((e) => e.id === radialTargetId);
     if (!target) closeRadialMenu();
-    else {
-      radialMenu.style.left = `${target.x - camX + target.w / 2}px`;
-      radialMenu.style.top = `${target.y - camYSmooth + target.h / 2}px`;
-    }
+    else positionRadialMenu(target, camX, camYSmooth);
   }
   // vertical sky gradient via stacked bands
   const bandH = Math.ceil(H / SKY_BANDS);
