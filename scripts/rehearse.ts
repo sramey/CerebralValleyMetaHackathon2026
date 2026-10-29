@@ -1,5 +1,6 @@
 // Repeat the demo script against a live server, one fresh starter world per run.
-// Usage: npm run rehearse -- [--runs N] [--only "make me huge"] [--port 8796]
+// Usage: npm run rehearse -- [--runs N] [--only "make me huge"] [--port 8796] [--file rehearse-aware.json]
+// The default set (rehearse.json) is exactly the demo commands from docs/DEMO.md; rehearse-aware.json is the world-awareness set.
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -124,6 +125,7 @@ interface Options {
   runs: number;
   only?: string;
   port: number;
+  file: string;
 }
 
 function integerArg(value: string | undefined, flag: string, min: number, max: number): number {
@@ -135,12 +137,16 @@ function integerArg(value: string | undefined, flag: string, min: number, max: n
 }
 
 function parseArgs(argv: readonly string[], defaultPort: number): Options {
-  const options: Options = { runs: 1, port: defaultPort };
+  const options: Options = { runs: 1, port: defaultPort, file: "rehearse.json" };
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     if (flag === "--runs") options.runs = integerArg(argv[++i], flag, 1, 1000);
     else if (flag === "--port") options.port = integerArg(argv[++i], flag, 1, 65535);
-    else if (flag === "--only") {
+    else if (flag === "--file") {
+      const file = argv[++i]?.trim();
+      if (!file || !/^[\w.-]+\.json$/.test(file)) throw new Error("--file needs a .json file name inside scripts/");
+      options.file = file;
+    } else if (flag === "--only") {
       const only = argv[++i]?.trim();
       if (!only) throw new Error("--only needs a command from scripts/rehearse.json");
       options.only = only;
@@ -180,8 +186,8 @@ export function parseCommandList(parsed: unknown, only?: string): RehearsalSpec[
   return selected;
 }
 
-function readCommands(only?: string): RehearsalSpec[] {
-  const parsed: unknown = JSON.parse(readFileSync(new URL("./rehearse.json", import.meta.url), "utf8"));
+function readCommands(file: string, only?: string): RehearsalSpec[] {
+  const parsed: unknown = JSON.parse(readFileSync(new URL(`./${file}`, import.meta.url), "utf8"));
   return parseCommandList(parsed, only);
 }
 
@@ -307,7 +313,7 @@ function printTable(rows: readonly RehearsalRow[]): void {
 async function main(): Promise<void> {
   loadEnv();
   const options = parseArgs(process.argv.slice(2), integerArg(process.env.PORT ?? "8787", "PORT", 1, 65535));
-  const commands = readCommands(options.only);
+  const commands = readCommands(options.file, options.only);
   const rows: RehearsalRow[] = [];
   mkdirSync(join(process.cwd(), "logs"), { recursive: true });
   console.log(`Rehearsing ${commands.length} command(s), ${options.runs} run(s), ws://127.0.0.1:${options.port}`);
