@@ -33,3 +33,13 @@ Post a camera-import clip on X **now**, a voice clip when voice lands, the "it c
 
 ## Judging facts (CV office hours, 2026-10-29)
 Judges review the repo, the 3-minute video and the live product; a hosted version is optional. **Every judging stage requires a working demo that runs from the repo setup instructions** (CV #judging, 10-28). They run the integration with their own key, so the README setup must work cold. Building started when kickoff ended, Oct 26 12:24 PM ET. Keep keys out of the repo.
+- **Deadline:** Wed Nov 4, 9:00 PM ET = **02:00 UTC Thu Nov 5**. Submit at cerebralvalley.ai/e/meta-ai-developer-hackathon/hackathon/submit.
+- **Video:** judges stop at **3:00** exactly. Submit an unlisted YouTube link with anyone-with-the-link access.
+- **Coding tools** (Claude Code etc.) are allowed and needn't be disclosed. **Every model called at runtime must be Meta.**
+- **Open-weights bonus ($10K):** serving Muse Spark Open through Baseten qualifies (no self-hosting needed). The demo must explain where and how the open model is used. Bonuses stack and are opted into via the submission and demo; there's no separate form.
+- **Finals:** Mon Nov 9, 12 PM ET, top 5 per track, at the closing ceremony.
+- **Theme fit:** both problem statements apply. We pitch **Push the Frontier** ("tackle challenges in software… give a machine a new capability": software that rewrites itself live and is verified by agents before any change lands), with the Build-for-Your-World impact story (anyone makes a game by talking). The form asks for the track (Indie), not the theme.
+- **Most Viral:** only the **one X post linked in the submission** counts (likes + reposts + comments through Nov 8 EOD; views don't). Earlier posts are warm-up. Post the hero clip as soon as voice + "it can't break" both land, and link that post.
+- **Best Agentic** is judged on autonomy, effectiveness at the task, and practical usefulness: the verifier agent, the auto-fix loop and parallel builds are the evidence.
+- **Video rules:** label speed-ups; show the product, **not slides** (make the closing architecture beat an in-app view, not a slide card); English; 3:00.
+- **Assets:** we must hold rights to every asset. AI-generated art is ours; check any font or sound effect. Put recordings and anything needed to verify the demo in the repo (e.g. a GitHub release).

@@ -7,6 +7,7 @@ import { initVoice } from "./voice";
 import { Fx } from "./fx";
 import { drawShape, kindOf, registerLook } from "./shapes";
 import { ModLoader } from "../sim/loader";
+import { createGhost } from "./ghost";
 import { World } from "../sim/world";
 import playerMod from "../mods/player";
 import groundMod from "../mods/ground";
@@ -24,6 +25,8 @@ const BUILTINS: Record<string, ModDefinition> = {
 
 const world = new World(1337);
 const loader = new ModLoader(world);
+const ghost = createGhost(document.getElementById("stage-wrap")!);
+let rejectedAt = 0;
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
 
 const stageEl = $("#stage");
@@ -1366,12 +1369,25 @@ function connect(): void {
       return;
     }
     if (msg.kind === "say") say(msg.text);
-    else if (msg.kind === "stage") { say(msg.detail, msg.stage === "failed" ? "failed" : "building"); log(`${msg.stage}: ${msg.detail}`); }
+    else if (msg.kind === "stage") {
+      log(`${msg.stage}: ${msg.detail}`);
+      if (msg.stage === "rejected") { rejectedAt = performance.now(); say(msg.detail, "failed"); }
+      else if (msg.stage === "fixing") {
+        // Keep the red "why" on screen long enough to read before the fix status replaces it.
+        const wait = Math.max(0, 2200 - (performance.now() - rejectedAt));
+        window.setTimeout(() => say("Fixing it: Wonder is replaying the playtest…", "building"), wait);
+      } else say(msg.detail, msg.stage === "failed" ? "failed" : "building");
+      if (msg.stage === "done" || msg.stage === "failed") ghost.hideSoon();
+    }
+    else if (msg.kind === "playtest") {
+      void ghost.play({ base: loader.list().map((m) => ({ def: m.def, values: m.values })), candidate: msg.mod, replaces: msg.replaces, seed: msg.seed, inputs: msg.inputs, ok: msg.ok, plain: msg.plain });
+    }
     else if (msg.kind === "timing") log(`timing route ${msg.ms.route}ms write ${msg.ms.write}ms compile ${msg.ms.compile}ms verify ${msg.ms.verify}ms total ${msg.ms.total}ms`);
     else if (msg.kind === "tweak") tweak(msg.modId, msg.knob, msg.value, "Tweaked.");
     else if (msg.kind === "removed") { loader.unload(msg.modId); renderMods(); }
     else if (msg.kind === "mod") {
       try {
+        await ghost.idle(); // let the playtest replay finish before the mod lands
         const blob = new Blob([msg.mod.compiled], { type: "text/javascript" });
         const url = URL.createObjectURL(blob);
         const loaded = (await import(/* @vite-ignore */ url)) as { default: ModDefinition };
@@ -1408,6 +1424,7 @@ function submitCommand(text: string): void {
   if (!text) return;
   say(`Building: ${text}`, "building");
   if (!handleLocal(text)) {
+    if (ws?.readyState === WebSocket.OPEN) send({ kind: "worldState", mods: loader.list().map((m) => ({ id: m.id, values: m.values })) });
     if (ws?.readyState === WebSocket.OPEN) send({ kind: "command", text });
     else say("That needs the AI server. Start it with: npm run server — local builds above still work.", "failed");
   }

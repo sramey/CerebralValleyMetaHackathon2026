@@ -18,7 +18,7 @@ function hasNaN(world: World): boolean {
 }
 
 /** Load the compiled ESM js and extract its default export. Throws on failure. */
-async function importMod(compiledJs: string): Promise<ModDefinition> {
+export async function importMod(compiledJs: string): Promise<ModDefinition> {
   const url = `data:text/javascript;base64,${Buffer.from(compiledJs, "utf8").toString("base64")}#m${Date.now()}_${importSeq++}`;
   const ns = (await import(url)) as { default?: unknown };
   const def = ns.default as ModDefinition;

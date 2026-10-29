@@ -94,3 +94,10 @@ Original prompt: lets setup our project, get oriented, organized, and setup, see
 - Spend guard: per-IP per-UTC-day caps (20 builds, 8 images, 6 SAM, 8 voice min) and global caps (400 builds, 120 images, 100 SAM, 120 voice min); warm voice sessions capped at 30, freed after 2 min idle; `AI_KILL_SWITCH=1`; no key → visitor mode with demo worlds.
 - Verified on main: tsc clean, 59/59 tests, build green; production server on a spare port served /, /?w=demo-bouncy and /healthz, rejected a `..%2f.env` traversal (404), and `scripts/deploy-check.ts` passed 8/8 live (3 AI mods built, saved, reopened byte-identical, remixed, isolated per visitor).
 - Not done: docker build (Docker daemon not running locally). Worlds, counters and runtime art live in DATA_DIR / public/art/gen and need a volume on the host. Going live = bead 2m4 (owner picks host).
+
+## Status update — 2026-10-29 (visible verifier merged)
+
+- Visible verifier merged (bead kp5, ADR 0013): every Wonder mod is playtested by a scripted bot in a copy of the player's world (client sends `worldState` before each command; 3 seeds × 2 worlds × 360 frames, 1–6 ms). The ghost PiP replays the real run from recorded inputs. Failure → `rejected` stage with a plain reason → Wonder fixes it as a tool agent (`run_playtest`, bounded rounds) → re-playtest → lands.
+- Starter level gained a knob-controlled overhang (`ground.overhang`) so "make me huge" fails honestly.
+- Verified on main: tsc clean, 70/70 tests, build green; live "make me huge" 2/2 rejected ("too big to fit through the gap") then fixed and landed in 17–18 s (write ~6–7 s, fix ~8–10 s). Lease runs: 5/5 landed, 4/5 caught first (one write was a ~2× size that honestly fits).
+- Rough: Wonder sometimes renames the mod on edit (client shows a brief rename); fix round is slow; overhang is a plain slab (visuals lease to style it); the bot doesn't prove goal reachability. Demo: rehearse a fallback phrasing ("make me giant") for the 1-in-5 honest pass.

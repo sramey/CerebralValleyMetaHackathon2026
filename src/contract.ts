@@ -102,6 +102,8 @@ export type ClientMsg =
   | { kind: "photoFind"; key: string; image: string; prompt: string }
   | { kind: "photoBring"; key: string }
   | { kind: "photoBringLocal"; key: string; prompt: string; aspect: number }
+  /** The mods in the player's world right now, in load order, sent before each command so the playtest runs in a copy of it (ADR 0013). */
+  | { kind: "worldState"; mods: { id: string; values: Record<string, KnobValue> }[] }
   // Voice (ADR 0012). Mic audio itself travels as binary frames: PCM16 mono 16 kHz.
   | { kind: "voiceWarm" }
   | { kind: "voiceStart" }
@@ -117,7 +119,7 @@ export type WorldMod =
 
 export interface DemoWorld { id: string; title: string; blurb: string }
 
-export type BuildStage = "routing" | "writing" | "compiling" | "verifying" | "fixing" | "done" | "failed";
+export type BuildStage = "routing" | "writing" | "compiling" | "verifying" | "rejected" | "fixing" | "done" | "failed";
 
 export type ServerMsg =
   | { kind: "stage"; stage: BuildStage; detail: string; command?: string }
@@ -127,6 +129,8 @@ export type ServerMsg =
   | { kind: "removed"; modId: string }
   | { kind: "say"; text: string }
   | { kind: "segment"; key: string; box: { x: number; y: number; w: number; h: number } | null }
+  /** One bot playtest. The client replays `inputs` (RLE of input masks) in a copy of its own world plus `mod`. */
+  | { kind: "playtest"; command: string; attempt: number; ok: boolean; plain: string; seed: number; frames: number; inputs: number[]; mod: { id: string; compiled: string }; replaces?: string; ms: number }
   | { kind: "timing"; command: string; ms: { route: number; write: number; compile: number; verify: number; total: number } }
   | { kind: "voiceState"; state: "ready" | "listening" | "error"; detail?: string }
   | { kind: "transcript"; text: string; final: boolean; ms?: { firstPartial: number; final: number } }
