@@ -13,7 +13,9 @@
     "test": "vitest run",
     "stats": "tsx scripts/stats.ts",
     "benchmark": "tsx scripts/benchmark.ts",
-    "rehearse": "tsx scripts/rehearse.ts"
+    "rehearse": "tsx scripts/rehearse.ts",
+    "demo:prep": "tsx scripts/demo-prep.ts",
+    "bench:router": "tsx scripts/bench-router.ts"
   },
   "dependencies": {
     "esbuild": "^0.25.0",

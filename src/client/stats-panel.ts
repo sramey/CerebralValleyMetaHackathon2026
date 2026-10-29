@@ -50,6 +50,13 @@ const TILES = [
   { key: "total", label: "builds logged" },
 ] as const;
 
+// Wonder's autonomy (ADR 0033): what the agent did on its own, from the same log.
+const AUTO_TILES = [
+  { key: "calls", label: "tool calls / build" },
+  { key: "selfFix", label: "self-corrected" },
+  { key: "playtests", label: "playtests run" },
+] as const;
+
 export function createStatsPanel(): StatsPanel {
   const root = document.createElement("section");
   root.className = "st-panel";
@@ -61,6 +68,9 @@ export function createStatsPanel(): StatsPanel {
     </div>
     <div class="st-tiles">
       ${TILES.map((t) => `<div class="st-tile" data-k="${t.key}"><b data-big>–</b><span>${t.label}</span><i data-sub></i></div>`).join("")}
+    </div>
+    <div class="st-tiles st-auto">
+      ${AUTO_TILES.map((t) => `<div class="st-tile" data-k="${t.key}"><b data-big>–</b><span>${t.label}</span><i data-sub></i></div>`).join("")}
     </div>`;
 
   const big = (key: string) => root.querySelector<HTMLElement>(`[data-k="${key}"] [data-big]`)!;
@@ -90,6 +100,13 @@ export function createStatsPanel(): StatsPanel {
     sub("median").textContent = b.p90Ms === null ? "" : `p90 ${msText(b.p90Ms)}`;
     big("total").textContent = num(b.total);
     sub("total").textContent = feed.window.days > 0 ? `${feed.lines} log lines · ${feed.window.days} day${feed.window.days === 1 ? "" : "s"}` : `${feed.lines} log lines`;
+    const a = feed.agent;
+    big("calls").textContent = a.callsPerBuild === null ? "–" : String(a.callsPerBuild);
+    sub("calls").textContent = a.builds > 0 ? `over ${a.builds} agent build${a.builds === 1 ? "" : "s"}` : "no agent builds yet";
+    big("selfFix").textContent = pct(a.selfCorrectedPct);
+    sub("selfFix").textContent = a.selfCorrected > 0 ? `${a.selfCorrected} landed after a rejection` : "none needed a correction yet";
+    big("playtests").textContent = num(a.playtests);
+    sub("playtests").textContent = a.playtests > 0 ? `${a.rejected} said no, Wonder fixed them` : "Wonder has not playtested yet";
     note.dataset.state = "ok";
     note.textContent = b.total === 0 ? "build log is empty — build something" : "source: this machine's build log (GET /api/stats)";
   }

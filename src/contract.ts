@@ -269,6 +269,19 @@ export interface StatsFeed {
     p90Ms: number | null;
   };
   mods: { distinct: number; edits: number };
+  /** Wonder's autonomy (ADR 0033), from builds that ran the tool loop. */
+  agent: {
+    builds: number;
+    /** Mean tool calls per agent build, or null with no agent builds. */
+    callsPerBuild: number | null;
+    /** Playtests Wonder ran on its own drafts, and how many said no. */
+    playtests: number;
+    rejected: number;
+    /** Landed builds that needed a correction (a rejected playtest or the fix round). */
+    selfCorrected: number;
+    /** selfCorrected / agent builds that landed, 0..1, or null when none landed. */
+    selfCorrectedPct: number | null;
+  };
 }
 
 export type BuildStage = "routing" | "writing" | "compiling" | "verifying" | "rejected" | "fixing" | "done" | "failed";
@@ -287,6 +300,10 @@ export type ServerMsg =
   | { kind: "playtest"; command: string; attempt: number; ok: boolean; plain: string; seed: number; frames: number; inputs: number[]; mod: { id: string; compiled: string }; replaces?: string; ms: number }
   /** A piece of the code Wonder is writing for `command`, as it arrives (ADR 0022). */
   | { kind: "codeStream"; command: string; text: string }
+  // Which model answered the router for `command` (ADR 0032): open-weights Spark on Baseten, or hosted Spark.
+  // One finished Wonder tool call (ADR 0033): the pipeline lane shows the loop as it happens.
+  | { kind: "agentStep"; command: string; phase: "write" | "fix"; n: number; tool: string; args: string; result: string; ok: boolean; ms: number }
+  | { kind: "routed"; command: string; model: string; open: boolean; ms: number; fellBack: boolean }
   | { kind: "timing"; command: string; ms: { route: number; write: number; compile: number; verify: number; total: number } }
   | { kind: "voiceState"; state: "ready" | "listening" | "error"; detail?: string }
   | { kind: "transcript"; text: string; final: boolean; ms?: { firstPartial: number; final: number } }

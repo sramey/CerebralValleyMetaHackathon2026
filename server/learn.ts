@@ -54,6 +54,9 @@ export interface DistilledFeedbackRule {
 export const DEFAULT_LEARNED_DIR = join(process.cwd(), "server", "learned");
 export const MAX_RULES = 24;
 
+/** DEMO_FREEZE_LEARNING=1: the learner reads rules and skills but writes none (recording day, so rehearsals and takes cannot change what ships). */
+export const learningFrozen = (): boolean => process.env.DEMO_FREEZE_LEARNING === "1";
+
 let overrideLearnedDir: string | null = null;
 
 /** Override the learned directory (used by unit tests to stay isolated). */
@@ -189,6 +192,7 @@ export function loadRules(dir?: string): LearnedRule[] {
 }
 
 export function saveRules(rules: LearnedRule[], dir?: string): void {
+  if (learningFrozen()) return;
   try {
     const targetDir = resolveLearnedDir(dir);
     mkdirSync(targetDir, { recursive: true });
@@ -468,6 +472,7 @@ export async function learnSkillFromFeedback(input: FeedbackInput, dir?: string)
   };
 
   try {
+    if (learningFrozen()) throw new Error("learning frozen");
     const sdir = skillsDirPath(dir);
     mkdirSync(sdir, { recursive: true });
     writeFileSync(join(sdir, `${slug}.md`), renderSkillMarkdown(skill), "utf8");
