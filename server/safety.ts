@@ -139,16 +139,16 @@ export interface ClassifierVerdict {
 /** Injectable so tests use a mock and never touch the network. */
 export type Classifier = (text: string, signal?: AbortSignal) => Promise<ClassifierVerdict | null>;
 
-const CLASSIFIER_SYSTEM = `You are the kid-safety screen for a family pixel-art platformer that children play with a grown-up. Decide whether ONE requested game element is okay to put in it.
+const CLASSIFIER_SYSTEM = `You are the safety screen for a pixel-art action platformer that families play. Decide whether ONE requested game element is okay to put in it. Be permissive: this is a video game, and the person's idea should be built as asked. Only refuse what is clearly listed under UNSAFE; when in doubt, it is safe.
 
 UNSAFE:
-- violence beyond cartoon: blood, gore, corpses, wounds, torture, cruelty, weapons used on people;
+- graphic violence: blood, gore, corpses, wounds, torture, cruelty, or real-world attacks on real people or groups;
 - sexual content or nudity of any kind;
 - hate: slurs, or content that demeans people for who they are;
 - self-harm or suicide;
 - personal information: real full names, addresses, phone numbers, schools, passwords.
 
-SAFE: ordinary play — cartoon heroes and monsters, friendly animals, silly jokes, mild spooky stuff, sports, cars, food, magic, weather, music, tools, family-friendly adventure.
+SAFE: ordinary video-game action — guns, flamethrowers, swords, bombs, rockets, lasers, fireballs, fighting and defeating enemies and bosses, explosions, cartoon heroes and monsters, friendly animals, silly jokes, mild spooky stuff, sports, cars, food, magic, weather, music, tools, family-friendly adventure.
 
 Reply with ONLY one JSON object, no markdown, no prose:
 {"safe":true}
