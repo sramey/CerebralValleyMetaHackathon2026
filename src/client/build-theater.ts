@@ -6,12 +6,14 @@
 // replays a canned build through the same path for review without any API calls.
 import "./build-theater.css";
 import type { ServerMsg } from "../contract";
+import { chain } from "./agent-steps";
+import type { AgentStepMsg } from "./agent-steps";
 
 const STEPS = ["Route", "Forge", "Compile", "Playtest", "Live"] as const;
 const STAGE_STEP: Record<string, number> = { routing: 0, writing: 1, fixing: 1, compiling: 2, verifying: 3, rejected: 3, done: 4 };
-const MAX_LINES = 22;
-const BASE_CPS = 90; // characters per second when there is no backlog
-const LINGER_MS = 1600;
+const MAX_LINES = 16;
+const BASE_CPS = 110; // characters per second when there is no backlog
+const LINGER_MS = 1800;
 
 const TOKEN = /(\/\/.*$)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)|\b(export|default|const|let|function|return|if|else|for|of|new|true|false|null|undefined|import|type|as)\b|\b(\d+(?:\.\d+)?)\b/g;
 
@@ -65,13 +67,31 @@ export function createTheater(host: HTMLElement, sink: (v: TheaterView) => void,
   const stream = document.createElement("div");
   stream.className = "bt-stream";
   stream.setAttribute("aria-hidden", "true");
+
+  const card = document.createElement("div");
+  card.className = "bt-card";
+
+  const head = document.createElement("div");
+  head.className = "bt-head";
+
   const label = document.createElement("div");
   label.className = "bt-label";
+
+  const status = document.createElement("div");
+  status.className = "bt-status";
+
+  const stepsEl = document.createElement("div");
+  stepsEl.className = "bt-steps";
+
   const code = document.createElement("div");
   code.className = "bt-code";
+
   const tail = document.createElement("div");
   tail.className = "bt-line bt-tail";
-  stream.append(label, code);
+
+  head.append(label, status, stepsEl);
+  card.append(head, code);
+  stream.append(card);
   host.appendChild(stream);
 
   const stepper = document.createElement("div");
@@ -91,6 +111,8 @@ export function createTheater(host: HTMLElement, sink: (v: TheaterView) => void,
   let partial = "";
   let focus = ""; // command whose stream is on screen
   let running = new Set<string>();
+  let steps: AgentStepMsg[] = [];
+  let currentDetail = "";
   let step = -1;
   let raf = 0;
   let last = 0;
@@ -101,6 +123,32 @@ export function createTheater(host: HTMLElement, sink: (v: TheaterView) => void,
   function show(active: boolean): void {
     stream.classList.toggle("on", active);
     stepper.classList.toggle("on", active);
+  }
+
+  function paintSteps(): void {
+    stepsEl.replaceChildren();
+    const chips = chain(steps);
+    if (chips.length === 0 && (currentDetail.includes("writing") || currentDetail.includes("world") || currentDetail.includes("playtest"))) {
+      const chip = document.createElement("span");
+      chip.className = "bt-chip write active";
+      chip.textContent = "write …";
+      stepsEl.appendChild(chip);
+    } else {
+      for (const c of chips) {
+        const chip = document.createElement("span");
+        chip.className = `bt-chip ${c.kind}`;
+        chip.textContent = c.label;
+        stepsEl.appendChild(chip);
+      }
+    }
+    if (currentDetail) {
+      status.textContent = `Wonder · ${currentDetail}`;
+    } else if (steps.length > 0) {
+      const last = steps[steps.length - 1];
+      status.textContent = `${last.tool} → ${last.result}`;
+    } else {
+      status.textContent = "";
+    }
   }
 
   function paintLines(): void {
@@ -125,7 +173,14 @@ export function createTheater(host: HTMLElement, sink: (v: TheaterView) => void,
         buffer = buffer.slice(n);
         const parts = (partial + piece).split("\n");
         partial = parts.pop() ?? "";
-        if (parts.length) { lines.push(...parts); if (lines.length > MAX_LINES) lines = lines.slice(-MAX_LINES); paintLines(); } else { tail.textContent = partial; sink({ lines, partial, active: true }); }
+        if (parts.length) {
+          lines.push(...parts);
+          if (lines.length > MAX_LINES) lines = lines.slice(-MAX_LINES);
+          paintLines();
+        } else {
+          tail.textContent = partial;
+          sink({ lines, partial, active: true });
+        }
       }
     }
     if (buffer.length > 0 || running.size > 0) raf = requestAnimationFrame(pump);
@@ -176,14 +231,33 @@ export function createTheater(host: HTMLElement, sink: (v: TheaterView) => void,
     window.clearTimeout(hideTimer);
     hideTimer = window.setTimeout(() => {
       flushing = false;
-      if (running.size === 0 && buffer.length === 0) { show(false); lines = []; partial = ""; paintLines(); }
+      if (running.size === 0 && buffer.length === 0) {
+        show(false);
+        lines = [];
+        partial = "";
+        steps = [];
+        currentDetail = "";
+        paintLines();
+        paintSteps();
+      }
     }, LINGER_MS);
   }
 
   function begin(command: string): void {
     window.clearTimeout(hideTimer);
     flushing = false;
-    if (running.size === 0) { reset(); lines = []; partial = ""; buffer = ""; focus = ""; paintLines(); }
+    if (running.size === 0) {
+      reset();
+      lines = [];
+      partial = "";
+      buffer = "";
+      focus = command;
+      label.textContent = command;
+      steps = [];
+      currentDetail = "routing your command";
+      paintLines();
+      paintSteps();
+    }
     running.add(command);
     show(true);
     kick();
@@ -192,9 +266,24 @@ export function createTheater(host: HTMLElement, sink: (v: TheaterView) => void,
   function onMsg(msg: ServerMsg): void {
     if (msg.kind === "stage" && msg.command) {
       if (!running.has(msg.command)) begin(msg.command);
+      if (msg.command !== focus) {
+        focus = msg.command;
+        label.textContent = msg.command;
+      }
+      currentDetail = msg.detail || msg.stage;
+      paintSteps();
       const i = STAGE_STEP[msg.stage];
       if (i !== undefined && i > step) { step = i; advance(i); }
       if (msg.stage === "done" || msg.stage === "failed") end(msg.command);
+    } else if (msg.kind === "agentStep" && msg.command) {
+      if (!running.has(msg.command)) begin(msg.command);
+      if (msg.command !== focus) {
+        focus = msg.command;
+        label.textContent = msg.command;
+      }
+      steps.push(msg);
+      currentDetail = msg.tool === "inspect_world" ? "looking at world" : msg.tool === "run_playtest" ? (msg.ok ? "playtest passed" : "playtest rejected") : `${msg.tool} done`;
+      paintSteps();
     } else if (msg.kind === "codeStream") {
       if (!running.has(msg.command)) begin(msg.command);
       if (msg.command !== focus) {
@@ -211,8 +300,12 @@ export function createTheater(host: HTMLElement, sink: (v: TheaterView) => void,
     const command = "preview: add an ember drake";
     const at = (ms: number, m: ServerMsg) => window.setTimeout(() => feed(m), ms);
     at(0, { kind: "stage", stage: "routing", detail: "routing your command", command });
-    at(700, { kind: "stage", stage: "writing", detail: "writing the mod", command });
-    for (let i = 0, t = 900; i < PREVIEW_CODE.length; i += 38, t += 330) at(t, { kind: "codeStream", command, text: PREVIEW_CODE.slice(i, i + 38) });
+    at(700, { kind: "stage", stage: "writing", detail: "looking at the world", command });
+    at(850, { kind: "agentStep", command, phase: "write", n: 1, tool: "inspect_world", args: "{}", result: "1 mod, 1 player", ok: true, ms: 120 });
+    at(1100, { kind: "stage", stage: "writing", detail: "writing the mod", command });
+    for (let i = 0, t = 1200; i < PREVIEW_CODE.length; i += 38, t += 240) at(t, { kind: "codeStream", command, text: PREVIEW_CODE.slice(i, i + 38) });
+    at(3800, { kind: "stage", stage: "writing", detail: "playtesting a draft", command });
+    at(4100, { kind: "agentStep", command, phase: "write", n: 2, tool: "run_playtest", args: "source", result: "passed", ok: true, ms: 280 });
     at(4300, { kind: "stage", stage: "compiling", detail: "compiling the mod", command });
     at(4700, { kind: "stage", stage: "verifying", detail: "verifying the mod", command });
     at(5500, { kind: "stage", stage: "done", detail: "loaded ember-drake (600 frames OK)", command });

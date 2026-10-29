@@ -66,6 +66,15 @@ const inputEl = $<HTMLInputElement>("#command");
 const orbDot = $("#orb-dot");
 const orbFeedback = $("#orb-feedback");
 const orbInputEl = $<HTMLInputElement>("#orb-input");
+const toastEl = $("#toast");
+let toastTimer = 0;
+function showToast(text: string, icon = "↩"): void {
+  if (!toastEl) return;
+  toastEl.textContent = `${icon} ${text}`;
+  toastEl.classList.add("show");
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => toastEl.classList.remove("show"), 2600);
+}
 
 function say(text: string, state = "idle"): void {
   orbSay.textContent = text;
@@ -74,6 +83,9 @@ function say(text: string, state = "idle"): void {
   const orbClass = state === "building" ? "building" : state === "failed" ? "failed" : state === "done" ? "done" : "listening";
   orbDot.className = `orb ${orbClass}`;
   orbFeedback.textContent = text;
+  orbFeedback.title = text;
+  orbSay.title = text;
+  if (text.startsWith("Back to normal")) showToast(text);
 }
 /** Label which model answered the router (ADR 0032): a small chip next to the orb state. */
 const modelChip = document.createElement("span");
@@ -956,7 +968,7 @@ function handleLocal(text: string): boolean {
     if (mood && t.includes("undo") && loader.list().length === moodModCount) { send({ kind: "undo", modId: "mood" }); revertMood(); say("Back to normal.", "done"); return true; }
     const mods = loader.list();
     const last = mods[mods.length - 1];
-    if (last) { loader.unload(last.id); say(`${last.title} removed.`, "done"); renderMods(); }
+    if (last) { loader.unload(last.id); say(`${last.title} removed.`, "done"); showToast(`${last.title} removed.`); renderMods(); }
     else say("Nothing to undo.");
     return true;
   }

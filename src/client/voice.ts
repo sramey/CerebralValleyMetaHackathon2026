@@ -140,6 +140,7 @@ export function initVoice(deps: VoiceDeps) {
     paint("live");
     micDenied = false; // an explicit press may re-ask
     deps.feedback.textContent = "Listening…";
+    deps.feedback.title = "Listening…";
     deps.sendJson({ kind: "voiceStart" });
     // A hold longer than any utterance is a stuck key: cancel it and send nothing.
     holdCap = setTimeout(() => {
@@ -147,6 +148,7 @@ export function initVoice(deps: VoiceDeps) {
       deps.sendJson({ kind: "voiceEnd", cancel: true });
       reset();
       deps.feedback.textContent = "Hold Shift only while you speak.";
+      deps.feedback.title = "Hold Shift only while you speak.";
     }, HOLD_MAX_MS);
     void ensureMic().then((ok) => {
       if (phase !== "holding") return;
@@ -170,7 +172,9 @@ export function initVoice(deps: VoiceDeps) {
       const first = !micReady;
       deps.sendJson({ kind: "voiceEnd", cancel: true });
       reset();
-      deps.feedback.textContent = first ? "Mic ready — hold Shift and speak." : "Hold Shift and speak.";
+      const prompt = first ? "Mic ready — hold Shift and speak." : "Hold Shift and speak.";
+      deps.feedback.textContent = prompt;
+      deps.feedback.title = prompt;
       return;
     }
     capturing = false;
@@ -192,7 +196,10 @@ export function initVoice(deps: VoiceDeps) {
     if (phase === "idle") return true; // late message from a cancelled turn
     if (!msg.final) {
       if (firstPartialAt < 0 && msg.text) firstPartialAt = performance.now();
-      if (msg.text) deps.feedback.textContent = `“${msg.text}”`;
+      if (msg.text) {
+        deps.feedback.textContent = `“${msg.text}”`;
+        deps.feedback.title = msg.text;
+      }
       return true;
     }
     if (phase !== "transcribing") return true;
