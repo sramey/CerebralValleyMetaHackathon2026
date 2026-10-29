@@ -47,3 +47,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0014](0014-deploy-share-spend-visitor.md) | Deploy: single-port server, per-session worlds, share links, spend guard, visitor mode | Draft |
 | [0013](0013-visible-verifier.md) | Visible verifier: bot playtest in a copy of the player's world, ghost replay, Wonder `run_playtest` agent fix | Draft |
 | [0015](0015-spark-visual-kind-shapes-fx.md) | Spark picks each entity's visual kind in the router call; shapes and effects drawn in code | Draft |
+| [0016](0016-parallel-agentic-builds.md) | Parallel build pool, Wonder as a Meta tool-calling agent, pronoun memory | Draft |
