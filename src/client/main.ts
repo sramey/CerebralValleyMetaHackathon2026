@@ -1712,3 +1712,8 @@ if (!worldParam) autoLoadStarterOnce();
     })),
   });
 };
+(window as unknown as Record<string, unknown>).openRadialOn = (type: string): boolean => {
+  const ent = world.entities.find((e) => e.type === type);
+  if (ent) { openRadialMenu(ent); return true; }
+  return false;
+};
