@@ -38,3 +38,8 @@ Judges review the repo, the 3-minute video and the live product; a hosted versio
 - **Coding tools** (Claude Code etc.) are allowed and needn't be disclosed. **Every model called at runtime must be Meta.**
 - **Open-weights bonus ($10K):** serving Muse Spark Open through Baseten qualifies (no self-hosting needed). The demo must explain where and how the open model is used. Bonuses stack and are opted into via the submission and demo; there's no separate form.
 - **Finals:** Mon Nov 9, 12 PM ET, top 5 per track, at the closing ceremony.
+- **Theme fit:** both problem statements apply. We pitch **Push the Frontier** ("tackle challenges in software… give a machine a new capability": software that rewrites itself live and is verified by agents before any change lands), with the Build-for-Your-World impact story (anyone makes a game by talking). The form asks for the track (Indie), not the theme.
+- **Most Viral:** only the **one X post linked in the submission** counts (likes + reposts + comments through Nov 8 EOD; views don't). Earlier posts are warm-up. Post the hero clip as soon as voice + "it can't break" both land, and link that post.
+- **Best Agentic** is judged on autonomy, effectiveness at the task, and practical usefulness: the verifier agent, the auto-fix loop and parallel builds are the evidence.
+- **Video rules:** label speed-ups; show the product, **not slides** (make the closing architecture beat an in-app view, not a slide card); English; 3:00.
+- **Assets:** we must hold rights to every asset. AI-generated art is ours; check any font or sound effect. Put recordings and anything needed to verify the demo in the repo (e.g. a GitHub release).
