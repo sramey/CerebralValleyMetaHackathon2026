@@ -4,6 +4,10 @@ import type { Entity, Look, ShapeName } from "../contract";
 
 const OUTLINE = 0x0b0e13;
 
+/** The active mood's color grade (ADR 0017); identity when no mood is on. */
+let gradeFn: (c: number) => number = (c) => c;
+export function setGrade(f: (c: number) => number): void { gradeFn = f; }
+
 /** What Spark said about each type this session (server `look`), so the word fallback below only covers router misses. */
 const looks: Look[] = [];
 export function registerLook(look: Look | undefined): void {
@@ -127,11 +131,12 @@ export function isCliff(e: Entity): boolean {
 
 /** A hanging rock mass with strata, cracks and a jagged underside. Draws only inside the collision box. */
 export function drawCliff(g: Graphics, e: Entity, x: number, y: number): void {
+  const k = gradeFn;
   const w = e.w, h = e.h;
   const bottom = y + h;
   const teeth = 22;
   g.rect(x - 2, y - 2, w + 4, h - teeth + 2).fill(OUTLINE);
-  g.rect(x, y, w, h - teeth).fill(0x5b4a3a);
+  g.rect(x, y, w, h - teeth).fill(k(0x5b4a3a));
   // irregular rock blocks, anchored to the world so they stay put as the camera moves
   const hash = (a: number, b: number) => (((a * 73856093) ^ (b * 19349663)) >>> 0) % 1000 / 1000;
   const cell = 30;
@@ -144,17 +149,17 @@ export function drawCliff(g: Graphics, e: Entity, x: number, y: number): void {
     while (cx < w) {
       const hv = hash(r + 7, Math.floor(cx / 10) + 3);
       const bw = Math.min(w - cx, 26 + Math.floor(hv * 44));
-      const tone = hv < 0.33 ? 0x66523f : hv < 0.66 ? 0x5b4a3a : 0x51402f;
+      const tone = hv < 0.33 ? k(0x66523f) : hv < 0.66 ? k(0x5b4a3a) : k(0x51402f);
       g.rect(x + cx, ry, bw, rh).fill(tone);
-      g.rect(x + cx, ry, bw, 2).fill({ color: 0x8a7258, alpha: 0.4 });
-      g.rect(x + cx, ry + rh - 2, bw, 2).fill({ color: 0x2a2018, alpha: 0.5 });
-      g.rect(x + cx + bw - 1.5, ry, 1.5, rh).fill({ color: 0x2a2018, alpha: 0.6 });
+      g.rect(x + cx, ry, bw, 2).fill({ color: k(0x8a7258), alpha: 0.4 });
+      g.rect(x + cx, ry + rh - 2, bw, 2).fill({ color: k(0x2a2018), alpha: 0.5 });
+      g.rect(x + cx + bw - 1.5, ry, 1.5, rh).fill({ color: k(0x2a2018), alpha: 0.6 });
       cx += bw;
     }
   }
   // lit left face, shaded right face
-  g.rect(x, y, 7, h - teeth).fill({ color: 0x9b8264, alpha: 0.45 });
-  g.rect(x + w - 10, y, 10, h - teeth).fill({ color: 0x2a2018, alpha: 0.5 });
+  g.rect(x, y, 7, h - teeth).fill({ color: k(0x9b8264), alpha: 0.45 });
+  g.rect(x + w - 10, y, 10, h - teeth).fill({ color: k(0x2a2018), alpha: 0.5 });
   // deterministic cracks
   for (let i = 0; i < 4; i++) {
     const cx = x + 22 + i * 44 + (Math.floor(e.x) % 7);
@@ -162,7 +167,7 @@ export function drawCliff(g: Graphics, e: Entity, x: number, y: number): void {
     let px = cx;
     for (let s = 0; s < 6 && py < bottom - teeth - 8; s++) {
       const nx = px + (s % 2 === 0 ? 5 : -4), ny = py + 18 + ((i + s) % 3) * 4;
-      g.moveTo(px, py).lineTo(nx, ny).stroke({ width: 1.5, color: 0x2a2018, alpha: 0.7 });
+      g.moveTo(px, py).lineTo(nx, ny).stroke({ width: 1.5, color: k(0x2a2018), alpha: 0.7 });
       px = nx; py = ny;
     }
   }
@@ -173,8 +178,8 @@ export function drawCliff(g: Graphics, e: Entity, x: number, y: number): void {
     const tx = x + i * tw;
     const th = teeth - ((i * 5) % 4);
     g.poly([tx - 1.5, bottom - teeth - 1, tx + tw + 1.5, bottom - teeth - 1, tx + tw / 2, bottom - teeth + th + 1.5]).fill(OUTLINE);
-    g.poly([tx, bottom - teeth, tx + tw, bottom - teeth, tx + tw / 2, bottom - teeth + th]).fill(i % 2 ? 0x4a3b2d : 0x5b4a3a);
+    g.poly([tx, bottom - teeth, tx + tw, bottom - teeth, tx + tw / 2, bottom - teeth + th]).fill(i % 2 ? k(0x4a3b2d) : k(0x5b4a3a));
   }
   // drip of moss at the lip so it reads as a ledge, not a wall
-  g.rect(x, bottom - teeth - 4, w, 3).fill({ color: 0x3fd06a, alpha: 0.5 });
+  g.rect(x, bottom - teeth - 4, w, 3).fill({ color: k(0x3fd06a), alpha: 0.5 });
 }

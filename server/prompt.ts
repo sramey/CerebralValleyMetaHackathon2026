@@ -82,7 +82,7 @@ export function buildFixPrompt(command: string, source: string, errors: string[]
 
 export const ROUTER_SYSTEM = `You route a player's text command for a 2D platformer game to exactly one action.
 Reply with ONLY a single JSON object, no markdown, no prose. Schema:
-{"action":"new"|"tweak"|"edit"|"undo"|"question","target?":string,"knob?":string,"value?":number|string|boolean,"answer?":string,"visual?":"shape"|"effect"|"prop"|"creature","shape?":"circle"|"ring"|"triangle"|"spikes"|"pill"|"diamond"|"star"|"block"}
+{"action":"new"|"tweak"|"edit"|"undo"|"mood"|"question","target?":string,"knob?":string,"value?":number|string|boolean,"answer?":string,"mood?":string,"visual?":"shape"|"effect"|"prop"|"creature","shape?":"circle"|"ring"|"triangle"|"spikes"|"pill"|"diamond"|"star"|"block"}
 - "new": the request adds new behavior or a new entity (needs fresh mod code).
 - "tweak": the request ONLY adjusts a knob value of an already-loaded mod (set target=mod id, knob, value). Use ONLY when the target mod and knob both exist in the loaded-mods list.
 - "edit": the request changes the BEHAVIOR of an already-loaded mod beyond a knob value (new mechanics, new entities it should own, rule changes — e.g. "make enemies die when I stomp them" for a loaded enemies mod). Set target=mod id. Prefer "edit" over "tweak" when the request adds or changes behavior rather than tuning a number.
@@ -93,6 +93,7 @@ Reply with ONLY a single JSON object, no markdown, no prose. Schema:
   - "prop": a still object that deserves pixel art: tree, house, chest, car, statue, castle, sun, cloud.
   - "creature": a living or moving character with limbs: ninja, dragon, turtle, zombie, bird, robot.
   "A bouncing ball" is a shape, never a creature. Omit "visual" for pure rule changes.
+- "mood": the request restyles the WHOLE world's look and atmosphere with a theme or mood ("make it spooky", "make it snowy", "neon", "make everything look like a desert at sunset"). Set mood=the short mood words. One weather effect alone ("make it rain", "add fog") is NOT a mood, and neither is a change to one object: those are "new".
 - "question": anything else — greeting, help, unanswerable (set answer=text to say to the player).`;
 
 /** Prompt for Spark to route a command against the loaded-mod manifest. */

@@ -3,10 +3,10 @@ import { Application, Graphics, Sprite, Texture } from "pixi.js";
 import { framesFor, loadSpriteSheet, loadSubjects } from "./sprites";
 import chickenMod from "../mods/chicken";
 import { SIM } from "../contract";
-import type { ClientMsg, Entity, KnobValue, ModDefinition, ServerMsg } from "../contract";
+import type { ClientMsg, Entity, KnobValue, ModDefinition, MoodSpec, ServerMsg } from "../contract";
 import { initVoice } from "./voice";
 import { Fx } from "./fx";
-import { drawCliff, drawShape, isCliff, kindOf, registerLook } from "./shapes";
+import { drawCliff, drawShape, isCliff, kindOf, registerLook, setGrade } from "./shapes";
 import { ModLoader } from "../sim/loader";
 import { createGhost } from "./ghost";
 import { createPipeline } from "./pipeline";
@@ -126,6 +126,8 @@ const OUTLINE = 0x0b0e13;
 const AMBER = 0xffc94d;
 const GRASS = 0x3fd06a;
 const SOIL_DARK = 0x1d3320;
+// Mood palette (ADR 0017): defaults here, overridden while a mood is on.
+const pal = { grass: GRASS, soil: SOIL_DARK, ridgeFar: 0x0a1418, ridgeNear: 0x0d1b20, moon: 0xf2ead0, star: 0x33404f };
 const GOLD = 0xffd34d;
 const SHINE = 0xfff2c0;
 const TRAIL = 0xff8c2e;
@@ -223,7 +225,7 @@ function drawCoin(e: Entity, x: number, y: number): void {
 function drawGround(e: Entity, x: number, y: number): void {
   gfx.rect(x, y, e.w, e.h).fill(e.color);
   const gh = Math.min(8, Math.max(3, e.h * 0.22));
-  gfx.rect(x, y, e.w, gh).fill(GRASS);
+  gfx.rect(x, y, e.w, gh).fill(pal.grass);
   // deterministic speckles from world coords (no per-frame random)
   const base = Math.floor(e.x) * 31 + Math.floor(e.y) * 7;
   const n = Math.floor(e.w / 14);
@@ -233,7 +235,7 @@ function drawGround(e: Entity, x: number, y: number): void {
     const px = x + k * 14 + (hsh % 5);
     const span = e.h - gh - 6;
     const py = y + gh + 3 + (span > 0 ? hsh % span : 0);
-    gfx.rect(px, py, 3, 2).fill(SOIL_DARK);
+    gfx.rect(px, py, 3, 2).fill(pal.soil);
   }
 }
 
@@ -273,13 +275,14 @@ function drawHealthBar(e: Entity, x: number, y: number): void {
   gfx.rect(x, y - 9, e.w * health / 100, 4).fill(color);
 }
 
-function drawEntity(e: Entity, camX: number, camY: number): void {
+function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   const x = e.x - camX;
   const y = e.y - camY;
   const W = app.screen.width;
   const H = app.screen.height;
   if (x + e.w < -40 || x > W + 40 || y + e.h < -40 || y > H + 40) return; // off-screen cull
   const t = e.type;
+  if (morph.size > 0 && isMorphing(e)) { drawDigitize(e, x, y); return; } // a restyled sheet is about to swap in (ADR 0017)
   const look = kindOf(t); // code-drawn shapes and engine effects never use sprites or the outline (ADR 0015)
   if (look) { if (look.kind === "shape") drawShape(gfx, e, x, y, look.shape); return; }
   if (framesFor(framesBySubject, t, t === "player").length >= 1) return; // sprite pass below
@@ -301,6 +304,97 @@ function drawEntity(e: Entity, camX: number, camY: number): void {
   if (t.indexOf("slime") >= 0 || t.indexOf("gel") >= 0 || t.indexOf("enemy") >= 0 ||
     t.indexOf("walker") >= 0 || t.indexOf("turtle") >= 0) { drawBlob(e, x, y); return; }
   gfx.rect(x, y, e.w, e.h).fill(e.color);
+}
+
+// --- mood: one sentence restyles the whole world (ADR 0017) ------------------
+let mood: MoodSpec | null = null;
+let moodModCount = 0; // mods loaded when the mood was applied; more later means the mood is no longer the latest change
+const origFrames = new Map<string, Texture[]>(); // sheets as they were before the mood, restored on undo
+const morph = new Map<string, number>(); // sprite key -> digitize-until (ms)
+let restyleLeft = 0;
+let restyleOk = 0;
+function noteRestyled(ok: boolean): void {
+  if (ok) restyleOk++;
+  if (--restyleLeft === 0 && mood) say(`It's ${mood.name} now: ${restyleOk} sprites restyled.`, "done");
+}
+
+function mixC(a: number, b: number, t: number): number {
+  const m = (s: number) => Math.round(((a >> s) & 255) * (1 - t) + ((b >> s) & 255) * t);
+  return (m(16) << 16) | (m(8) << 8) | m(0);
+}
+/** The mood's palette swap for any code-drawn color: wash toward the tint, then brightness. */
+function grade(c: number): number {
+  if (!mood) return c;
+  const w = mixC(c, mood.tint, mood.grade);
+  const f = (s: number) => Math.min(255, Math.round(((w >> s) & 255) * mood!.dim));
+  return (f(16) << 16) | (f(8) << 8) | f(0);
+}
+function isMorphing(e: Entity): boolean {
+  const t = e.type.toLowerCase();
+  for (const k of morph.keys()) if (e.type === "player" ? k === "ninja" : t.includes(k)) return true;
+  return false;
+}
+function setSky(top: number, bottom: number): void {
+  for (let i = 0; i < SKY_BANDS; i++) SKY[i] = mixC(top, bottom, i / (SKY_BANDS - 1));
+}
+function restoreSheets(): void {
+  for (const [k, frames] of origFrames) framesBySubject[k] = frames;
+  origFrames.clear();
+  morph.clear();
+}
+function applyMood(m: MoodSpec | null): void {
+  mood = m;
+  if (m) {
+    pal.grass = m.grass; pal.soil = m.soil; pal.ridgeFar = m.ridgeFar; pal.ridgeNear = m.ridgeNear; pal.moon = m.moon; pal.star = m.star;
+    setSky(m.skyTop, m.skyBottom);
+  } else {
+    pal.grass = GRASS; pal.soil = SOIL_DARK; pal.ridgeFar = 0x0a1418; pal.ridgeNear = 0x0d1b20; pal.moon = 0xf2ead0; pal.star = 0x33404f;
+    for (let i = 0; i < SKY_BANDS; i++) SKY[i] = mixC((SKY_TOP[0] << 16) | (SKY_TOP[1] << 8) | SKY_TOP[2], (SKY_BOTTOM[0] << 16) | (SKY_BOTTOM[1] << 8) | SKY_BOTTOM[2], i / (SKY_BANDS - 1));
+  }
+  setGrade(grade);
+  fx.setMood(m);
+}
+function revertMood(): void {
+  restoreSheets();
+  applyMood(null);
+  renderMods();
+}
+/** Server designed a mood: repaint the code-drawn world now, then ask for each AI sheet to be edited toward it. */
+function onMood(m: MoodSpec | null): void {
+  if (!m) { revertMood(); say("Back to normal.", "done"); return; }
+  if (mood && mood.name === m.name) return; // duplicate of the mood already on
+  restoreSheets();
+  applyMood(m);
+  moodModCount = loader.list().length;
+  renderMods();
+  // Only sheets something in the world actually uses (no image spend on art nobody can see).
+  const used = new Set<string>();
+  for (const e of world.entities) { const k = subjectKeyFor(e); if (k) used.add(k); }
+  const keys = [...used].filter((k) => !k.startsWith("photo") && !origFrames.has(k) && framesBySubject[k].length > 0);
+  restyleLeft = keys.length; restyleOk = 0;
+  if (keys.length > 0) { say(`Making it ${m.name}: restyling ${keys.length} sprites…`, "building"); send({ kind: "restyle", mood: m.name, keys }); }
+  else say(`It's ${m.name} now.`, "done");
+}
+async function onRestyled(msg: Extract<ServerMsg, { kind: "restyled" }>): Promise<void> {
+  if (mood && mood.name === msg.mood) noteRestyled(msg.url !== null);
+  if (!msg.url || !mood || mood.name !== msg.mood) return;
+  const frames = await loadSpriteSheet(msg.url);
+  if (frames.length < 1 || !mood || mood.name !== msg.mood) return;
+  morph.set(msg.key, performance.now() + 1000);
+  setTimeout(() => {
+    morph.delete(msg.key);
+    if (!mood || mood.name !== msg.mood) return;
+    if (!origFrames.has(msg.key)) origFrames.set(msg.key, framesBySubject[msg.key]);
+    framesBySubject[msg.key] = frames;
+  }, 1000);
+}
+
+function drawEntity(e: Entity, camX: number, camY: number): void {
+  if (!mood) { drawEntityRaw(e, camX, camY); return; }
+  const c = e.color;
+  e.color = grade(c);
+  drawEntityRaw(e, camX, camY);
+  e.color = c;
 }
 
 // --- drawer + radial menu ---------------------------------------------------
@@ -467,16 +561,16 @@ function render(): void {
   // stars (parallax markers)
   for (let i = 0; i < 14; i++) {
     const sx = ((i * 173 - camX * 0.3) % (W + 80) + W + 80) % (W + 80) - 40;
-    gfx.rect(sx, 40 + (i % 5) * 22, 3, 3).fill(0x33404f);
+    gfx.rect(sx, 40 + (i % 5) * 22, 3, 3).fill(pal.star);
   }
   // moon, fixed top-right
-  gfx.circle(W - 70, 60, 24).fill({ color: 0xf2ead0, alpha: 0.15 });
-  gfx.circle(W - 70, 60, 17).fill(0xf2ead0);
+  gfx.circle(W - 70, 60, 24).fill({ color: pal.moon, alpha: 0.15 });
+  gfx.circle(W - 70, 60, 17).fill(pal.moon);
   gfx.circle(W - 76, 54, 14).fill(SKY[1]);
   // far hill silhouettes
   const horizon = H * 0.62 - camYSmooth * 0.1;
-  drawRidge(ridgeFar, camX, 0.3, horizon, 0, 0x0a1418);
-  drawRidge(ridgeNear, camX, 0.55, horizon + 34, 1, 0x0d1b20);
+  drawRidge(ridgeFar, camX, 0.3, horizon, 0, pal.ridgeFar);
+  drawRidge(ridgeNear, camX, 0.55, horizon + 34, 1, pal.ridgeNear);
   // solids-first, reuse scratch array
   order.length = 0;
   for (let i = 0; i < world.entities.length; i++) order.push(world.entities[i]);
@@ -511,7 +605,7 @@ function render(): void {
   const spriteDraw: { e: Entity; frame: Texture; subjectKey: string | undefined }[] = [];
   for (const e of world.entities) {
     const frames = framesFor(framesBySubject, e.type, e.type === "player");
-    if (frames.length < 1 || !primaries.has(e.id) || kindOf(e.type)) continue;
+    if (frames.length < 1 || !primaries.has(e.id) || kindOf(e.type) || (morph.size > 0 && isMorphing(e))) continue;
     seen.add(e.id);
     const moving = Math.abs(e.vx) > 5;
     const subjectKey = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0];
@@ -592,6 +686,20 @@ function syncInput(): void {
 function renderMods(): void {
   modsEl.innerHTML = "";
   const mods = loader.list();
+  if (mood) {
+    const li = document.createElement("li");
+    const head = document.createElement("div");
+    head.className = "title";
+    const name = document.createElement("span");
+    name.textContent = `Mood: ${mood.name}`;
+    const undo = document.createElement("button");
+    undo.className = "undo";
+    undo.textContent = "Undo";
+    undo.addEventListener("click", () => { send({ kind: "undo", modId: "mood" }); revertMood(); say("Back to normal.", "done"); });
+    head.append(name, undo);
+    li.appendChild(head);
+    modsEl.appendChild(li);
+  }
   if (mods.length === 0) {
     const li = document.createElement("li");
     li.textContent = "Empty world. The orb is waiting.";
@@ -659,6 +767,8 @@ function autoLoadStarterOnce(): void {
 function handleLocal(text: string): boolean {
   const t = text.toLowerCase();
   if (t.includes("undo") || t.startsWith("remove")) {
+    // A mood is the latest change until a mod is added after it (ADR 0017): bare "undo" puts the world back first.
+    if (mood && t.includes("undo") && loader.list().length === moodModCount) { send({ kind: "undo", modId: "mood" }); revertMood(); say("Back to normal.", "done"); return true; }
     const mods = loader.list();
     const last = mods[mods.length - 1];
     if (last) { loader.unload(last.id); say(`${last.title} removed.`, "done"); renderMods(); }
@@ -1395,6 +1505,8 @@ function connect(): void {
     pipeline.onMsg(msg);
     if (voice.onServerMsg(msg)) return;
     if (msg.kind === "world") { await applyWorld(msg); return; }
+    if (msg.kind === "mood") { onMood(msg.mood); return; }
+    if (msg.kind === "restyled") { await onRestyled(msg); return; }
     if (msg.kind === "visitor") { showDemos(msg.demos); return; }
     if (msg.kind === "worldSaved") {
       const url = shareUrl(msg.id);

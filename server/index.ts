@@ -1,14 +1,15 @@
 // WebSocket game server on port 8787 (override with PORT). Route (Spark) -> write (Wonder) ->
 // compile -> verify -> one auto-fix -> hot-load message. Never crashes on a
 // bad mod or a missing MODEL_API_KEY (answers with say in that case).
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
 import { SIM } from "../src/contract";
+import { moodKey, moodSpecFor, pool, restyleSheet, sheetPath } from "./mood";
 import { fallbackVisual, lookFor, parseShape, parseVisual } from "./visual";
 import type { Visual } from "./visual";
-import type { ClientMsg, KnobDefs, Look, ShapeName, KnobValue, ServerMsg, WorldMod } from "../src/contract";
+import type { ClientMsg, KnobDefs, Look, MoodSpec, ShapeName, KnobValue, ServerMsg, WorldMod } from "../src/contract";
 import { chat, hasApiKey, loadEnv, SPARK, WONDER } from "./meta";
 import { compileMod } from "./compile";
 import { importMod, verifyMod } from "./verify";
@@ -44,7 +45,7 @@ interface ManifestRec {
 }
 
 // Each connection has its own world (ADR 0014): a public server must never mix visitors' mods.
-interface Session { manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string> }
+interface Session { manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string>; mood?: MoodSpec; moodMods?: Set<string> }
 const sessions = new WeakMap<WebSocket, Session>();
 function sess(ws: WebSocket): Session {
   let s = sessions.get(ws);
@@ -156,13 +157,14 @@ async function deliverMod(ws: WebSocket, command: string, source: string, routeL
   }
 }
 
-type RouteAction = "new" | "tweak" | "edit" | "undo" | "question";
+type RouteAction = "new" | "tweak" | "edit" | "undo" | "mood" | "question";
 interface Route {
   action: RouteAction;
   target?: string;
   knob?: string;
   value?: KnobValue;
   answer?: string;
+  mood?: string;
   visual?: Visual;
   shape?: ShapeName;
 }
@@ -367,7 +369,7 @@ function parseRoute(text: string): Route | null {
   try {
     const obj = JSON.parse(text.slice(start, end + 1)) as Record<string, unknown>;
     const action = obj.action as RouteAction;
-    if (!["new", "tweak", "edit", "undo", "question"].includes(action)) return null;
+    if (!["new", "tweak", "edit", "undo", "mood", "question"].includes(action)) return null;
     const r: Route = { action };
     if (typeof obj.target === "string") r.target = obj.target;
     if (typeof obj.knob === "string") r.knob = obj.knob;
@@ -375,6 +377,7 @@ function parseRoute(text: string): Route | null {
       r.value = obj.value as KnobValue;
     }
     if (typeof obj.answer === "string") r.answer = obj.answer;
+    if (typeof obj.mood === "string") r.mood = obj.mood.slice(0, 60);
     const visual = parseVisual(obj.visual);
     if (visual) r.visual = visual;
     const shape = parseShape(obj.shape);
@@ -470,6 +473,9 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
       console.log(`[route] fallback to new for: ${command}`);
       route = { action: "new" };
     }
+    // Safety net: a whole-world mood phrase Spark routed as a build is still a mood (ADR 0017).
+    const moodWord = /^(?:please\s+)?(?:make|turn|set|change)\s+(?:it|everything|the\s+(?:world|game|level|map|place|scene))(?:\s+look(?:\s+like)?)?(?:\s+(?:more|so|very))?\s+(spooky|scary|creepy|haunted|halloween|snowy|wintry|winter|neon|cyberpunk|synthwave)/i.exec(command.trim());
+    if (route && route.action === "new" && moodWord) route = { action: "mood", mood: moodWord[1].toLowerCase() };
     // Pronoun commands ("make it bigger") act on the mod touched last, not on a fresh build.
     const pronounTarget = resolvePronoun(command, sess(ws).recent);
     if (route && pronounTarget && manifest.has(pronounTarget) && route.action === "new") {
@@ -477,7 +483,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
       route = { action: "edit", target: pronounTarget };
     }
     // Guard: "add/make/create ..." is always a build, never a tweak/question.
-    if (route && !(pronounTarget && route.action === "tweak") && /^(add|make|create|spawn|build)\b/i.test(command.trim()) && route.action !== "new" && route.action !== "edit" && route.action !== "undo") {
+    if (route && !(pronounTarget && route.action === "tweak") && /^(add|make|create|spawn|build)\b/i.test(command.trim()) && route.action !== "new" && route.action !== "edit" && route.action !== "undo" && route.action !== "mood") {
       console.log(`[route] coerced ${route.action} -> new for: ${command}`);
       route = { action: "new" };
     }
@@ -507,8 +513,24 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     logBuild({ command, route: "question", outcome: "say", timings: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) }, fixAttempted: false });
     return;
   }
+  if (route.action === "mood") {
+    await handleMood(ws, route.mood ?? command.replace(/^(make|turn|set)\s+(it|everything|the\s+\w+)\s+/i, ""));
+    send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
+    return;
+  }
   if (route.action === "undo") {
     const id = route.target ?? "";
+    // "undo" with nothing (or the mood's name) to remove while a mood is on puts the world back.
+    // A bare "undo" reverts the latest change, and the mood is the latest when no mod was added since it.
+    const moodLatest = [...manifest.keys()].every((k) => sess(ws).moodMods?.has(k));
+    const bare = /^\s*(undo|undo (that|it|this)|revert( it)?|go back|put it back|back to normal)\W*$/i.test(command);
+    if (sess(ws).mood && ((!id || !manifest.has(id)) || (bare && moodLatest)) && (!id || bare || /mood|style|theme|look|atmosphere/i.test(id) || id.toLowerCase() === sess(ws).mood!.name)) {
+      sess(ws).mood = undefined;
+      send(ws, { kind: "mood", mood: null });
+      send(ws, { kind: "say", text: "Back to normal." });
+      send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
+      return;
+    }
     if (id && manifest.has(id)) {
       manifest.delete(id);
       forget(sess(ws).recent, id);
@@ -811,6 +833,32 @@ function spend(ws: WebSocket, kind: Kind): boolean {
 
 const BUILTIN_IDS: ReadonlySet<string> = new Set(BUILTINS.map((b) => b.id));
 
+/** "make it spooky": Spark routed here. Design the mood, tell the client to repaint, then it asks for the sprite edits (ADR 0017). */
+async function handleMood(ws: WebSocket, moodWords: string): Promise<void> {
+  const words = moodWords.trim() || "spooky";
+  send(ws, { kind: "say", text: `Making it ${words}...` });
+  const spec = await moodSpecFor(words);
+  sess(ws).mood = spec;
+  sess(ws).moodMods = new Set(sess(ws).manifest.keys()); // to tell whether the mood is still the latest change
+  send(ws, { kind: "mood", mood: spec });
+}
+
+/** Edit each sprite sheet the client lists toward the mood anchor, a few at a time; every image counts against the spend guard. */
+async function handleRestyle(ws: WebSocket, msg: Extract<ClientMsg, { kind: "restyle" }>): Promise<void> {
+  const spec = sess(ws).mood;
+  if (!spec || spec.name !== moodKey(String(msg.mood))) return;
+  const keys = (Array.isArray(msg.keys) ? msg.keys : []).filter((k): k is string => typeof k === "string").slice(0, 12);
+  await pool(keys, 6, async (key) => {
+    if (sess(ws).mood !== spec) return;
+    const skip = () => send(ws, { kind: "restyled", mood: spec.name, key, url: null });
+    if (!sheetPath(key)) { skip(); return; }
+    const cached = existsSync(join(process.cwd(), "public", "art", "gen", `${key}--${moodKey(spec.name)}.webp`));
+    if (!cached && !spend(ws, "image")) { skip(); return; }
+    const r = await restyleSheet(key, spec);
+    if (sess(ws).mood === spec) send(ws, { kind: "restyled", mood: spec.name, key, url: r ? r.url : null });
+  });
+}
+
 function handleWorldSave(ws: WebSocket, msg: Extract<ClientMsg, { kind: "worldSave" }>): void {
   const requested = Array.isArray(msg.mods) ? msg.mods.filter((m) => m && typeof m.id === "string") : [];
   const saved = worlds.save(snapshotWorld(requested, sess(ws).manifest, BUILTIN_IDS));
@@ -876,8 +924,12 @@ function handleMessage(ws: WebSocket, raw: string): void {
     handlePhotoBringLocal(ws, msg).catch((err) => {
       send(ws, { kind: "say", text: `Photo failed: ${err instanceof Error ? err.message : String(err)}` });
     });
+  } else if (msg.kind === "restyle") {
+    handleRestyle(ws, msg).catch(() => {});
   } else if (msg.kind === "undo") {
-    if (manifest.has(msg.modId)) {
+    if (msg.modId === "mood") {
+      sess(ws).mood = undefined;
+    } else if (manifest.has(msg.modId)) {
       manifest.delete(msg.modId);
       send(ws, { kind: "removed", modId: msg.modId });
     } else {
