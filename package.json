@@ -15,6 +15,7 @@
     "testers": "tsx scripts/testers.ts",
     "benchmark": "tsx scripts/benchmark.ts",
     "rehearse": "tsx scripts/rehearse.ts",
+    "safety:rehearse": "tsx scripts/safety-rehearse.ts",
     "demo:prep": "tsx scripts/demo-prep.ts",
     "bench:router": "tsx scripts/bench-router.ts"
   },
