@@ -11,6 +11,7 @@ import { ModLoader } from "../sim/loader";
 import { createGhost } from "./ghost";
 import { createPipeline } from "./pipeline";
 import { createTheater } from "./build-theater";
+import { createHud } from "./hud";
 import { World } from "../sim/world";
 import playerMod from "../mods/player";
 import groundMod from "../mods/ground";
@@ -31,6 +32,8 @@ const loader = new ModLoader(world);
 const ghost = createGhost(document.getElementById("stage-wrap")!);
 const pipeline = createPipeline(document.getElementById("stage-wrap")!);
 const theater = createTheater(document.getElementById("stage-wrap")!, (v) => pipeline.setCode(v.lines, v.partial, v.active), (m) => { pipeline.onMsg(m); theater.onMsg(m); });
+// Declarative mod HUD overlay (ADR 0019): renders world.hud each frame.
+const hud = createHud(document.getElementById("stage-wrap")!);
 let rejectedAt = 0;
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
 
@@ -648,6 +651,7 @@ function render(): void {
   gfx.rect(0, H - V, W, V).fill({ color: 0x000000, alpha: 0.28 });
   gfx.rect(0, 0, V, H).fill({ color: 0x000000, alpha: 0.22 });
   gfx.rect(W - V, 0, V, H).fill({ color: 0x000000, alpha: 0.22 });
+  hud.render(world);
 }
 
 // fixed-step loop: sim never reads wall-clock, accumulator only paces steps
@@ -1631,5 +1635,10 @@ if (!worldParam) autoLoadStarterOnce();
     player: p ? { x: Math.round(p.x), y: Math.round(p.y), vx: Math.round(p.vx), vy: Math.round(p.vy), onGround: p.onGround } : null,
     entities: world.entities.slice(0, 30).map((e) => ({ type: e.type, x: Math.round(e.x), y: Math.round(e.y), vx: Math.round(e.vx), hp: Math.round(e.health), hostile: e.data.hostile === true, hero: e.data.hero === true })),
     particles: world.particles.length,
+    hud: world.hudList().map((h) => ({
+      id: h.id, owner: h.owner, kind: h.kind, label: h.label,
+      value: h.value === undefined ? undefined : Math.round(h.value * 10) / 10,
+      max: h.max, text: h.text, position: h.position,
+    })),
   });
 };

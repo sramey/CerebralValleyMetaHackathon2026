@@ -25,6 +25,10 @@ export class ModLoader {
       burst: (x, y, color, n) => w.burst(x, y, color, n),
       rand: () => w.rand(),
       tick: () => w.tickCount,
+      setHud: (id, def) => w.setHud(owner, id, def),
+      removeHud: (id) => w.removeHud(owner, id),
+      hud: (id) => w.hud.get(id),
+      hudList: () => w.hudList(),
     };
   }
 
@@ -84,6 +88,10 @@ export function runModTest(def: ModDefinition): { ok: boolean; errors: string[] 
           burst: (x, y, c, n) => world.burst(x, y, c, n),
           rand: () => world.rand(),
           tick: () => world.tickCount,
+          setHud: (hid, hdef) => world.setHud(def.id, hid, hdef),
+          removeHud: (hid) => world.removeHud(def.id, hid),
+          hud: (hid) => world.hud.get(hid),
+          hudList: () => world.hudList(),
         },
         step: (n, input) => {
           const prev = world.input;

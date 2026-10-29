@@ -1,8 +1,16 @@
 import { SIM, emptyInput } from "../contract";
-import type { Entity, InputState, Particle, SpawnDef } from "../contract";
+import type { Entity, HudDef, HudWidget, InputState, Particle, SpawnDef } from "../contract";
 import { createRng } from "./rng";
 
 type TickHandler = (dt: number) => void;
+
+/** HUD widget kinds the sim stores; anything else falls back to "stat". */
+const HUD_KINDS = new Set(["bar", "hearts", "stat", "banner"]);
+const HUD_POSITIONS = new Set([
+  "top-left", "top-right", "top-center",
+  "bottom-left", "bottom-right", "bottom-center",
+  "center",
+]);
 
 export class World {
   tickCount = 0;
@@ -10,12 +18,57 @@ export class World {
   entities: Entity[] = [];
   particles: Particle[] = [];
   camera = { x: 0, y: 0 };
+  /** Declarative HUD widgets in creation order (ADR 0019). Pure data: the client renders. */
+  hud = new Map<string, HudWidget>();
   private nextId = 1;
   private handlers = new Map<string, TickHandler[]>();
   private rng: () => number;
 
   constructor(seed = 1337) {
     this.rng = createRng(seed);
+  }
+
+  /** Create or update a HUD widget owned by `owner` (same id = in-place update). */
+  setHud(owner: string, id: string, def: HudDef): void {
+    const num = (v: unknown): number | undefined =>
+      typeof v === "number" && Number.isFinite(v) ? v : undefined;
+    const w: HudWidget = {
+      id,
+      owner,
+      kind: HUD_KINDS.has(def.kind) ? def.kind : "stat",
+      label: typeof def.label === "string" ? def.label : undefined,
+      value: num(def.value),
+      max: num(def.max),
+      unit: typeof def.unit === "string" ? def.unit : undefined,
+      icon: typeof def.icon === "string" ? def.icon : undefined,
+      color: num(def.color),
+      text: typeof def.text === "string" ? def.text : undefined,
+      duration: num(def.duration),
+      position: def.position !== undefined && HUD_POSITIONS.has(def.position) ? def.position : undefined,
+      hidden: def.hidden === true ? true : undefined,
+    };
+    if (w.duration !== undefined && w.duration > 0) w.remaining = w.duration;
+    this.hud.set(id, w);
+  }
+
+  /** Remove a HUD widget, but only one owned by `owner` (owner-scoped, like despawn). */
+  removeHud(owner: string, id: string): void {
+    const w = this.hud.get(id);
+    if (w && w.owner === owner) this.hud.delete(id);
+  }
+
+  /** All HUD widgets in creation order. */
+  hudList(): HudWidget[] {
+    return [...this.hud.values()];
+  }
+
+  /** Age auto-removing banners on sim time (deterministic, never wall-clock). */
+  private ageHud(dt: number): void {
+    for (const [id, w] of this.hud) {
+      if (w.remaining === undefined) continue;
+      w.remaining -= dt;
+      if (w.remaining <= 0) this.hud.delete(id);
+    }
   }
 
   rand(): number {
@@ -31,6 +84,7 @@ export class World {
   removeByOwner(owner: string): void {
     this.handlers.delete(owner);
     this.entities = this.entities.filter((e) => e.owner !== owner);
+    for (const [id, w] of this.hud) if (w.owner === owner) this.hud.delete(id);
   }
 
   spawn(def: SpawnDef, owner: string): Entity {
@@ -121,6 +175,7 @@ export class World {
   step(): void {
     const dt = SIM.dt;
     this.tickCount++;
+    this.ageHud(dt);
     for (const list of [...this.handlers.values()]) for (const fn of [...list]) fn(dt);
 
     const solids = this.entities.filter((e) => e.solid);

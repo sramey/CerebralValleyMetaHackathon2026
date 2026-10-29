@@ -23,6 +23,7 @@ export const coinsMod: ModDefinition = {
         data: { spin: i },
       });
     }
+    api.setHud("score", { kind: "stat", label: "Coins", icon: "🪙", value: 0, position: "top-left" });
     api.onTick(() => {
       const player = api.player();
       if (!player) return;
@@ -34,6 +35,8 @@ export const coinsMod: ModDefinition = {
           player.data.score = Number(player.data.score) + 1;
         }
       }
+      // Live score HUD (ADR 0019): updates the moment a coin is collected.
+      api.setHud("score", { kind: "stat", label: "Coins", icon: "🪙", value: Number(player.data.score), position: "top-left" });
     });
   },
   dispose(api) {
@@ -53,6 +56,8 @@ export const coinsMod: ModDefinition = {
     t.step(5);
     t.expect(t.api.byType("coin").length === before - 1, "touching a coin collects it");
     t.expect(Number(t.api.player()?.data.score) === 1, "collect adds 1 to player score");
+    const scoreHud = t.api.hud("score");
+    t.expect(!!scoreHud && scoreHud.value === 1, "score HUD shows 1 after collecting");
   },
 };
 
