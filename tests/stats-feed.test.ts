@@ -45,7 +45,7 @@ const req = (method: string, url: string) => ({ method, url }) as unknown as Inc
 describe("GET /api/stats (ADR 0027)", () => {
   it("returns the aggregate as numbers with the exact StatsFeed shape", () => {
     const feed = feedOf();
-    expect(Object.keys(feed).sort()).toEqual(["builds", "lines", "malformed", "mods", "window"]);
+    expect(Object.keys(feed).sort()).toEqual(["agent", "builds", "lines", "malformed", "mods", "window"]);
     expect(Object.keys(feed.builds).sort()).toEqual([
       "attempts", "failed", "firstPass", "firstPassPct", "fixAttempts", "fixSaves",
       "landed", "landedPct", "medianMs", "p90Ms", "total",
