@@ -282,6 +282,19 @@ export function validateClientMsg(value: unknown): Validation {
         ...(view === undefined ? {} : { view }),
       });
     }
+    case "tester": {
+      const evs = ["open", "typed", "voice", "landed", "rejected", "failed", "mood", "close"] as const;
+      const n = value.n;
+      const ev = evs.find((e) => e === value.ev);
+      const cid = value.cid === undefined ? undefined : Number.isInteger(value.cid) && (value.cid as number) >= 0 ? (value.cid as number) : null;
+      const mood = value.mood === undefined ? undefined : label(value.mood, MAX_KEY) ?? null;
+      if (!Number.isInteger(n) || (n as number) < 1 || (n as number) > 99 || !ev || cid === null || mood === null) return reject(REPLY.bad);
+      return accept({ kind: "tester", n: n as number, ev, ...(cid === undefined ? {} : { cid }), ...(mood === undefined ? {} : { mood }) });
+    }
+    case "timelineRestore": {
+      const n = value.n;
+      return Number.isInteger(n) && (n as number) >= 0 ? accept({ kind: "timelineRestore", n: n as number }) : reject(REPLY.bad);
+    }
     default:
       return reject(REPLY.unknown);
   }

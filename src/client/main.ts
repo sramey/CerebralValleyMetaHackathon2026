@@ -1698,7 +1698,7 @@ function shareUrl(id: string): string {
 }
 
 // Anonymous family-test metrics, only with ?tester=N (ADR 0034).
-const tester = createTester(urlFlags, (m) => { if (ws?.readyState === WebSocket.OPEN) { ws.send(JSON.stringify(m)); return true; } return false; });
+const tester = createTester(new URLSearchParams(location.search), (m) => { if (ws?.readyState === WebSocket.OPEN) { ws.send(JSON.stringify(m)); return true; } return false; });
 let inputVia: "typed" | "voice" = "typed";
 addEventListener("pagehide", () => tester.close());
 const voice = initVoice({

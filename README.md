@@ -14,6 +14,23 @@ Each change is written by AI agents, **verified by a headless playtest before it
 
 Entry for the Meta Global AI Developer Hackathon (solo, Indie track). **Deadline: Wed Nov 4 2026, 9:00 PM ET.**
 
+## See it in action
+
+| Starter World (Night) | Christmas Mood Restyle |
+|:---:|:---:|
+| ![Starter World (Night)](docs/img/starter-world-night.webp) | ![Christmas Mood](docs/img/christmas-mood.webp) |
+| *Talk to build: deterministic physics platformer with live mod knobs* | *Whole-world restyle: festive palette, falling snow, frosted surfaces* |
+
+| Agentic Playtest Auto-Fix (Live) | Pipeline Architecture & Impact Metrics |
+|:---:|:---:|
+| ![Make Me Huge Rejected to Fixed](docs/img/make-me-huge-rejected-fixed.gif) | ![Pipeline and Impact Tiles](docs/img/pipeline-lanes-impact.webp) |
+| *The playtest bot rejects a player too big for the cliff overhang; Wonder fixes it* | *Live node graph, autonomy metrics, and parallel build lanes (press P)* |
+
+| Draw-to-Build (Sketch Mode) | First-Run Onboarding Coach |
+|:---:|:---:|
+| ![Sketch Mode](docs/img/sketch-mode.webp) | ![First-Run Coach](docs/img/first-run-coach.webp) |
+| *Draw platforms, coins, and enemies directly on screen* | *Interactive 3-step tour for non-coders on first load* |
+
 ## Run it in 5 minutes (judges start here)
 
 You need **Node 22+** and a **Meta Model API key**. Get one from the [Meta Model API docs](https://dev.meta.ai/docs/models). Calls are billed to your account through the standard billing setup, and a card must be on file before calls work. Every model the game calls at runtime is a Meta model; no other AI provider is used.

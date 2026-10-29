@@ -66,5 +66,7 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0030](0030-sketch-idle-guard-live-stats-refresh.md) | Sketch mode lets go after 3 minutes idle, and the impact tiles move when a build lands | Draft |
 | [0031](0031-art-decisions-derive-from-ontology.md) | Art decisions derive from the entity ontology | Draft |
 | [0034](0034-anonymous-tester-metrics.md) | Anonymous family-test metrics (?tester=N) → aggregates-only page | Draft |
+| [0036](0036-validate-every-client-message.md) | Validate every client message at the door | Draft |
+| [0037](0037-share-links-and-url-flags-untrusted.md) | Share links and URL flags are untrusted input, decoded in one defensive place | Draft |
 | [0039](0039-pickup-reach-and-sketch-replaces-level.md) | Pickup reach matches the drawn player; a sketched level replaces the level | Draft |
 | [0041](0041-time-travel-timeline.md) | Time-travel timeline: snapshot every world change, restore as a new step | Draft |
