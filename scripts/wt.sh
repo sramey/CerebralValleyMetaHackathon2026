@@ -16,7 +16,7 @@ case "$cmd" in
     git -C "$ROOT" worktree add "$dir" -b "wt/$task" main
     cp "$ROOT/.env" "$dir/.env"
     # Share node_modules through a junction; adding a dependency means flagging the orchestrator.
-    cmd //c mklink /J "$(cygpath -w "$dir/node_modules")" "$(cygpath -w "$ROOT/node_modules")" > /dev/null
+    powershell -NoProfile -Command "New-Item -ItemType Junction -Path '$(cygpath -w "$dir/node_modules")' -Target '$(cygpath -w "$ROOT/node_modules")' | Out-Null"
     cat >> "$dir/.env" <<EOF
 
 # lease ports (slot $slot)
@@ -30,7 +30,7 @@ EOF
     [[ -n "$task" ]] || { echo "usage: wt.sh done <task>"; exit 1; }
     dir="$WT/$task"
     # Remove the junction first so worktree removal never touches the shared node_modules.
-    [[ -e "$dir/node_modules" ]] && cmd //c rmdir "$(cygpath -w "$dir/node_modules")"
+    [[ -e "$dir/node_modules" ]] && powershell -NoProfile -Command "(Get-Item '$(cygpath -w "$dir/node_modules")').Delete()"
     git -C "$ROOT" worktree remove --force "$dir"
     git -C "$ROOT" branch -d "wt/$task"
     echo "returned $task"
