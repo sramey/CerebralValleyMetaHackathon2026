@@ -154,9 +154,14 @@ const SCENERY_WORDS = [
 export function isScenerySubject(text: string): boolean {
   const lower = text.toLowerCase().trim();
   if (!lower) return false;
+  if (entityKind(lower) === "creature" || entityKind(lower) === "player") return false;
   if (isHeldItemType(lower)) return true;
   if (entityKind(lower) === "prop") return true;
-  return SCENERY_WORDS.some((w) => lower.includes(w));
+  const tokens = lower.split(/[^a-z0-9]+/).filter(Boolean);
+  return tokens.some((tok) => {
+    const singular = tok.endsWith("s") && tok.length > 3 ? tok.slice(0, -1) : tok;
+    return (SCENERY_WORDS as readonly string[]).includes(tok) || (SCENERY_WORDS as readonly string[]).includes(singular);
+  });
 }
 
 /** Clear cached sprite sheet in memory and on disk so a bad art sheet can be regenerated or replaced. */
