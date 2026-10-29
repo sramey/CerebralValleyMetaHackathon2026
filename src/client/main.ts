@@ -3,6 +3,7 @@ import { framesFor, loadSpriteSheet, loadSubjects } from "./sprites";
 import chickenMod from "../mods/chicken";
 import { SIM } from "../contract";
 import type { ClientMsg, Entity, KnobValue, ModDefinition, ServerMsg } from "../contract";
+import { initVoice } from "./voice";
 import { ModLoader } from "../sim/loader";
 import { World } from "../sim/world";
 import playerMod from "../mods/player";
@@ -1259,10 +1260,17 @@ cameraConfirm.addEventListener("click", () => {
   closeCameraModal(false);
 });
 const WS_URL: string = import.meta.env.VITE_WS_URL ?? "ws://127.0.0.1:8787";
+const voice = initVoice({
+  bar: $("#orb-bar"), feedback: orbFeedback,
+  isOpen: () => ws?.readyState === WebSocket.OPEN,
+  sendJson: send, sendBinary: (b) => ws?.send(b),
+  say, submit: (text) => submitCommand(text), log,
+});
+
 function connect(): void {
   try { ws = new WebSocket(WS_URL); }
   catch { serverStatus.textContent = "Server: offline (local mods still work)"; return; }
-  ws.addEventListener("open", () => { serverStatus.textContent = `Server: connected on ${WS_URL}`; });
+  ws.addEventListener("open", () => { serverStatus.textContent = `Server: connected on ${WS_URL}`; voice.onOpen(); });
   ws.addEventListener("close", () => {
     serverStatus.textContent = "Server: offline (local mods still work)";
     setTimeout(connect, 3000);
@@ -1270,6 +1278,7 @@ function connect(): void {
   ws.addEventListener("message", async (ev) => {
     let msg: ServerMsg;
     try { msg = JSON.parse(String(ev.data)) as ServerMsg; } catch { return; }
+    if (voice.onServerMsg(msg)) return;
     if (msg.kind === "say") say(msg.text);
     else if (msg.kind === "stage") { say(msg.detail, msg.stage === "failed" ? "failed" : "building"); log(`${msg.stage}: ${msg.detail}`); }
     else if (msg.kind === "timing") log(`timing route ${msg.ms.route}ms write ${msg.ms.write}ms compile ${msg.ms.compile}ms verify ${msg.ms.verify}ms total ${msg.ms.total}ms`);
