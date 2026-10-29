@@ -8,6 +8,7 @@ import { canUseSpriteSheet, entityKind } from "../ontology";
 import type { ClientMsg, Entity, KnobValue, ModDefinition, MoodSpec, ServerMsg } from "../contract";
 import { initVoice } from "./voice";
 import { Fx } from "./fx";
+import { Feel } from "./feel";
 import { Portal } from "./portal";
 import { drawCliff, drawShape, isCliff, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
 import { celestialPos, computeDesiredCamY, depthFog, drawContactShadows, drawDistantMountains, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
@@ -98,6 +99,7 @@ app.stage.addChild(gfx);
 app.stage.sortableChildren = true;
 gfx.zIndex = -100;
 const fx = new Fx(app.stage);
+const feel = new Feel(app.stage, (amp) => fx.kick(amp), !new URLSearchParams(location.search).has("noshake"));
 const portal = new Portal(app.stage); // screen-rip entrance for new entities (bead yzd)
 let lastRenderAt = performance.now();
 const isEffectType = (type: string): boolean => kindOf(type)?.kind === "effect";
@@ -627,13 +629,16 @@ function render(): void {
   gfx.clear();
   const W = app.screen.width;
   const H = app.screen.height;
-  const desiredCamX = desiredCamXFor(W);
+  const camDt = Math.min(0.05, Math.max(0.001, (performance.now() - lastRenderAt) / 1000));
+  const camPlayer = world.entities.find((e) => e.type === "player");
+  const desiredCamX = desiredCamXFor(W) + feel.cam.lookahead(camPlayer, camDt);
   if (camXSmooth === null) camXSmooth = desiredCamX;
-  else camXSmooth += (desiredCamX - camXSmooth) * 0.12;
+  else camXSmooth = feel.cam.smoothX(camXSmooth, desiredCamX, camDt);
   const camX = camXSmooth;
   const desiredCamY = desiredCamYFor(H);
   if (camYSmooth === null) camYSmooth = desiredCamY;
-  else camYSmooth += (desiredCamY - camYSmooth) * 0.12;
+  else camYSmooth = feel.cam.smoothY(camYSmooth, desiredCamY, camDt, camPlayer?.onGround ?? true);
+  feel.update(world.entities, camDt);
   // Radial menu follows its entity; close if it is gone.
   if (radialTargetId !== null) {
     const target = world.entities.find((e) => e.id === radialTargetId);
@@ -744,13 +749,16 @@ function render(): void {
     const targetH = visualHeightOf(e);
     const scale = targetH / frame.height;
     s.texture = frame;
-    s.scale.set(scale * e.facing, scale);
+    const sq = feel.scaleOf(e.id);
+    s.scale.set(scale * e.facing * sq.sx, scale * sq.sy);
+    s.tint = feel.tintOf(e.id);
     s.position.set(e.x - camX + e.w / 2, e.y - camYSmooth + e.h + 2);
     s.zIndex = layerOf(e, subjectKey);
     s.visible = true;
   }
   for (const [id, s] of spritePool) if (!seen.has(id)) { s.visible = false; scaleOverride.delete(id); }
   const nowMs = performance.now();
+  feel.draw(camX, camYSmooth);
   fx.render(world, camX, camYSmooth, W, H, (nowMs - lastRenderAt) / 1000, isEffectType);
   portal.render(world, camX, camYSmooth, (nowMs - lastRenderAt) / 1000, (t) => isEffectType(t) || !canUseSpriteSheet(t));
   lastRenderAt = nowMs;
