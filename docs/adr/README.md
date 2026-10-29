@@ -69,6 +69,7 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0036](0036-validate-every-client-message.md) | Validate every client message at the door | Draft |
 | [0037](0037-share-links-and-url-flags-untrusted.md) | Share links and URL flags are untrusted input, decoded in one defensive place | Draft |
 | [0039](0039-pickup-reach-and-sketch-replaces-level.md) | Pickup reach matches the drawn player; a sketched level replaces the level | Draft |
+| [0043](0043-explain-this-mod-in-plain-words.md) | 'How does this work?': Spark explains a mod in plain words with its key lines | Draft |
 | [0044](0044-kid-safe-screen.md) | Kid-safe screen: local list + budgeted Spark verdict before routing; art prompts screened too | Draft |
 | [0041](0041-time-travel-timeline.md) | Time-travel timeline: snapshot every world change, restore as a new step | Draft |
 | [0042](0042-export-single-html.md) | Download the world as one self-contained, offline HTML game | Draft |
