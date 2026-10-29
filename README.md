@@ -74,6 +74,9 @@ Router: Muse Spark Open (open weights) on Baseten when `BASETEN_API_KEY` is set,
 
 ## How it works
 
+**Full picture:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), one diagram of the whole pipeline plus the sim, mod sandbox, ontology, learner and spend guard, each with file pointers and ADRs.
+
+
 - **Engine (built-in, never generated):** 60 fps fixed-step deterministic simulation, rendering, tile collision, physics, input, camera, particles, lighting, mod loader, verifier, and the orb UI. Runs identically in the browser and headless (Node / worker) so mods can be playtested at 100x speed before they ship.
 - **Everything visible is a mod.** The player, ground, enemies, art, music, and backgrounds are all mods written against a small mod API (`setup` / `dispose` / `knobs` / `test`). Mods are isolated, toggleable, and undoable.
 - **Router:** Muse Spark classifies each command (tweak / new / edit / undo / question) against a world manifest. Tweaks adjust exposed knobs in under 2s; new things are written by Muse Wonder (~10-20s), compiled with esbuild, verified, then hot-loaded.

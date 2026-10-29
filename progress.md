@@ -148,3 +148,4 @@ Original prompt: lets setup our project, get oriented, organized, and setup, see
 - 10-29 merged wt/agentic (top): Wonder's tool calls stream as steps in the pipeline lane (write → playtest → rejected → fix → pass); stats show tool calls/build, self-corrected %, playtests. Gates green.
 - 10-29 merged wt/follow (OpenCode): sketch paused chip + idle cancel, stats refresh on build settle; wt/ontology (OpenCode): art decisions from artPlanFor(kind), no hand lists; wt/uiqa2 (Flash): overlay layout fixes at 1080p/720p. Gates 286/286.
 - 10-29 merged wt/testkit (bottom): anonymous ?tester=N metrics, npm run testers (aggregates only), docs/USER-TEST.md facilitator script; fixed commands sent before the socket opened (coach stuck on step 2). Gates 300/300.
+- 10-29 merged wt/archdoc (top): docs/ARCHITECTURE.md (mermaid pipeline, sim/sandbox/ontology/learner/spend guard, every path verified), linked from README.
