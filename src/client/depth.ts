@@ -53,6 +53,29 @@ export function colorLuminance(color: number): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+/**
+ * Compute target camera Y so the main ground (y = 400..448) stays anchored at the bottom
+ * of the viewport during normal jumps and platforming, only panning upward when the player
+ * climbs into the top 28% of the screen (bead 98v item 3).
+ */
+export function computeDesiredCamY(
+  player: Pick<Entity, "y" | "h"> | undefined,
+  screenH: number,
+  fallbackCamY = 0,
+): number {
+  const groundAnchorY = 400 - screenH * 0.89;
+  if (!player) return Math.min(fallbackCamY, groundAnchorY);
+  const footY = player.y + player.h;
+  const topDeadzone = groundAnchorY + screenH * 0.28;
+  if (player.y < topDeadzone) {
+    return player.y - screenH * 0.28;
+  }
+  if (footY > 420) {
+    return footY - screenH * 0.89;
+  }
+  return groundAnchorY;
+}
+
 /** True when a mood or world state represents a bright daytime sky. */
 export function isDaytimeSky(mood: MoodSpec | null, entities: readonly Entity[], skyTopColor?: number): boolean {
   if (mood) {

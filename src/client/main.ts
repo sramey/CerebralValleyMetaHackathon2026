@@ -9,7 +9,7 @@ import { initVoice } from "./voice";
 import { Fx } from "./fx";
 import { Portal } from "./portal";
 import { drawCliff, drawShape, isCliff, kindOf, registerLook, setGrade } from "./shapes";
-import { drawContactShadows, drawDistantMountains, drawForegroundDepth, drawGround25D, drawHorizonMist } from "./depth";
+import { computeDesiredCamY, drawContactShadows, drawDistantMountains, drawForegroundDepth, drawGround25D, drawHorizonMist } from "./depth";
 import { drawParallaxEntities, isParallaxOrSkyEntity } from "./parallax";
 import { ModLoader } from "../sim/loader";
 import { createGhost } from "./ghost";
@@ -302,7 +302,7 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
     }
   }
   if (isCliff(e)) { drawCliff(gfx, e, x, y); return; }
-  if (t.indexOf("ground") >= 0 || t.indexOf("platform") >= 0) { drawGround(e, x, y); return; }
+  if (t.indexOf("ground") >= 0 || t.indexOf("platform") >= 0 || (e.solid && /wall|block|brick|pillar|column|ledge|step|terrain|floor|bridge/i.test(t))) { drawGround(e, x, y); return; }
   // dark outline behind every code-drawn entity
   gfx.rect(x - 1.5, y - 1.5, e.w + 3, e.h + 3).fill(OUTLINE);
   if (t === "player") {
@@ -420,7 +420,7 @@ function desiredCamXFor(w: number): number {
 }
 function desiredCamYFor(h: number): number {
   const playerForCam = world.entities.find((e) => e.type === "player");
-  return playerForCam ? playerForCam.y + playerForCam.h - h * 0.90 : world.camera.y;
+  return computeDesiredCamY(playerForCam, h, world.camera.y);
 }
 function fitRenderer(): void {
   const rect = stageWrapEl.getBoundingClientRect();

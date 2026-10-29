@@ -3,6 +3,7 @@ import { World } from "../src/sim/world";
 import {
   castsContactShadow,
   colorLuminance,
+  computeDesiredCamY,
   drawContactShadows,
   drawDistantMountains,
   drawDynamicLighting,
@@ -12,6 +13,7 @@ import {
   mixColor,
   scaleColor,
 } from "../src/client/depth";
+import { drawCliff } from "../src/client/shapes";
 import type { Graphics } from "pixi.js";
 
 function mockGraphics(): { gfx: Graphics; ellipses: number; rects: number; polys: number } {
@@ -117,5 +119,38 @@ describe("2.5D visual depth & lighting (bead 1z7)", () => {
     expect(colorLuminance(0x000000)).toBeCloseTo(0, 3);
     expect(isDaytimeSky(null, [], 0x05070a)).toBe(false);
     expect(isDaytimeSky(null, [], 0x2f80ed)).toBe(true);
+  });
+
+  it("keeps ground visible on normal jumps/platforms and draws cliff masonry past y=760 (bead 98v)", () => {
+    const H = 1080;
+    const camGround = computeDesiredCamY({ y: 366, h: 34 }, H);
+    const camPlat1 = computeDesiredCamY({ y: 266, h: 34 }, H);
+    const camPlat2 = computeDesiredCamY({ y: 186, h: 34 }, H);
+    // Ground (y=400) stays anchored at the exact same screen Y during normal platforming
+    expect(camPlat1).toBeCloseTo(camGround, 5);
+    expect(camPlat2).toBeCloseTo(camGround, 5);
+    expect(400 - camPlat2).toBeLessThan(H - 80); // Ground top is well above bottom of screen
+
+    // Climbing high above topDeadzone pans the camera upward
+    const camSky = computeDesiredCamY({ y: -400, h: 34 }, H);
+    expect(camSky).toBeLessThan(camGround);
+
+    // drawCliff draws brick rows all the way down past ry > 760 when bottom is at 860
+    const world = new World(1337);
+    const cliff = world.spawn({ type: "platform", x: 950, y: -600, w: 200, h: 900, solid: true, gravityScale: 0 }, "ground");
+    const rectYs: number[] = [];
+    const chain = {
+      fill() { return chain; },
+      stroke() { return chain; },
+      moveTo() { return chain; },
+      lineTo() { return chain; },
+      poly() { return chain; },
+      rect(_x: number, ry: number, _w: number, rh: number) {
+        if (rh <= 30 && rh >= 15) rectYs.push(ry);
+        return chain;
+      },
+    };
+    drawCliff(chain as unknown as Graphics, cliff, 500, -40); // bottom = 860 (> 760)
+    expect(Math.max(...rectYs)).toBeGreaterThan(760);
   });
 });
