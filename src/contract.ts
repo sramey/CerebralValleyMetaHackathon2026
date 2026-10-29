@@ -210,6 +210,9 @@ export type ClientMsg =
   /** Make step `n` the world again, as a new step; nothing is deleted (ADR 0041). */
   | { kind: "timelineRestore"; n: number }
   | { kind: "worldState"; mods: { id: string; values: Record<string, KnobValue> }[] }
+  /** "How does this work?" (ADR 0043): explain one loaded mod's source in plain words. The
+   *  server answers from its own copy of the source, so no code travels on this message. */
+  | { kind: "explain"; modId: string }
   // Voice (ADR 0012). Mic audio itself travels as binary frames: PCM16 mono 16 kHz.
   | { kind: "voiceWarm" }
   | { kind: "voiceStart" }
@@ -323,6 +326,9 @@ export type ServerMsg =
   /** The session's steps, newest last; `current` is the step the world is at right now (ADR 0041). */
   | { kind: "timeline"; steps: TimelineStep[]; current: number }
   | { kind: "world"; id: string; mods: WorldMod[]; mood?: MoodSpec | null; restyled?: Record<string, string> }
+  /** A plain-words explanation of one mod (ADR 0043): `text` is three short sentences and
+   *  `lines` are the key lines of its source, already resolved from the source itself. */
+  | { kind: "explainResult"; modId: string; title: string; text: string; lines: { n: number; code: string }[]; cached: boolean; ms: number }
   // Visitor mode (no key, kill-switch, or budget spent): the game still plays; offer these instead.
   | { kind: "visitor"; reason: "nokey" | "killswitch" | "budget"; demos: DemoWorld[] };
 

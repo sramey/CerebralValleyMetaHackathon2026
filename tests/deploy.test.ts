@@ -11,7 +11,7 @@ import type { SessionMod } from "../server/worlds";
 import { createStaticHandler, resolveInside } from "../server/static";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "metabuild-"));
-const lim = (n: number) => ({ build: n, image: n, sam: n, voice: n });
+const lim = (n: number) => ({ build: n, image: n, sam: n, voice: n, explain: n });
 
 describe("budget", () => {
   it("allows up to the per-visitor limit, then refuses with a friendly message", () => {

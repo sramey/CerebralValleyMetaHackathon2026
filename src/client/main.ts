@@ -1,5 +1,6 @@
 import { createBuilds } from "./builds";
 import { initFeedback } from "./feedback";
+import { initExplain } from "./explain";
 import { Application, Graphics, Sprite, Texture } from "pixi.js";
 import { computePrimaries, framesFor, isProjectileType, loadSpriteSheet, loadSubjects } from "./sprites";
 import chickenMod from "../mods/chicken";
@@ -103,6 +104,14 @@ const feedback = initFeedback({
   send: (msg) => send(msg),
   sendWorldState: () => send({ kind: "worldState", mods: loader.list().map((m) => ({ id: m.id, values: m.values })) }),
   say,
+  log,
+});
+/** "How does this work?" (ADR 0043): any object's code explained in plain words. */
+const explain = initExplain({
+  host: stageWrapEl,
+  send: (msg) => send(msg),
+  say,
+  connected: () => ws?.readyState === WebSocket.OPEN,
   log,
 });
 /** While other builds are in flight the orb keeps saying "building"; returns true if it did. */
@@ -667,6 +676,10 @@ document.querySelectorAll<HTMLButtonElement>("#radial-menu [data-action]").forEa
       const modTitle = loader.list().find((m) => m.id === e.owner)?.title ?? formatRadialLabel(e.type);
       feedback.open({ modId: e.owner, title: modTitle, entityType: e.type, vote: action === "thumbs-up" ? "up" : "down" });
       closeRadialMenu();
+    } else if (action === "explain") {
+      const modTitle = loader.list().find((m) => m.id === e.owner)?.title ?? formatRadialLabel(e.type);
+      closeRadialMenu();
+      explain.open({ modId: e.owner, title: modTitle, entityType: e.type });
     }
   });
 });
@@ -1812,6 +1825,7 @@ function connect(): void {
     else if (msg.kind === "timing") { builds.finish(msg.command); log(`timing route ${msg.ms.route}ms write ${msg.ms.write}ms compile ${msg.ms.compile}ms verify ${msg.ms.verify}ms total ${msg.ms.total}ms`); }
     else if (msg.kind === "tweak") tweak(msg.modId, msg.knob, msg.value, "Tweaked.");
     else if (msg.kind === "timeline") timelineView.update(msg.steps, msg.current);
+    else if (msg.kind === "explainResult") explain.onMsg(msg);
     else if (msg.kind === "removed") { loader.unload(msg.modId); renderMods(); }
     else if (msg.kind === "mod") {
       try {

@@ -25,7 +25,7 @@ const BBOX = { x: 10, y: 20, w: 120, h: 16 };
 const KNOWN_KINDS = new Set([
   "command", "undo", "knob", "photo", "photoFind", "photoBring", "photoBringLocal",
   "worldState", "voiceWarm", "voiceStart", "voiceEnd", "worldSave", "worldLoad", "worldExport",
-  "restyle", "feedback", "sketch", "tester", "timelineRestore",
+  "restyle", "feedback", "sketch", "tester", "timelineRestore", "explain",
 ]);
 
 const STROKE = { color: "#3fd06a", tag: "terrain" as const, points: [{ x: 1, y: 2 }, { x: 3, y: 4 }], bbox: BBOX };
@@ -50,6 +50,7 @@ const VALID: { [K in ClientMsg["kind"]]: Extract<ClientMsg, { kind: K }> } = {
   feedback: { kind: "feedback", modId: "player", entityType: "player", vote: "down", note: "too slow", fixNow: true },
   tester: { kind: "tester", n: 2, ev: "landed", cid: 3 },
   timelineRestore: { kind: "timelineRestore", n: 4 },
+  explain: { kind: "explain", modId: "player" },
   sketch: { kind: "sketch", image: PNG, strokes: [STROKE], prompt: "a stair", view: { x: 0, y: 0, w: 800, h: 600 } },
 };
 
@@ -179,6 +180,11 @@ const BAD: [label: string, value: unknown][] = [
     ["sketch with an empty view box", { kind: "sketch", image: PNG, strokes: [STROKE], view: { x: 0, y: 0, w: 0, h: 10 } }],
     ["sketch with a numeric view", { kind: "sketch", image: PNG, strokes: [STROKE], view: 42 }],
     ["sketch with a numeric prompt", { kind: "sketch", image: PNG, strokes: [STROKE], prompt: 9 }],
+    ["explain with no id", { kind: "explain" }],
+    ["explain with an empty id", { kind: "explain", modId: "" }],
+    ["explain with a numeric id", { kind: "explain", modId: 7 }],
+    ["explain with an oversized id", { kind: "explain", modId: "a".repeat(MAX_KEY + 1) }],
+    ["explain with a dangerous id", JSON.parse('{"kind":"explain","modId":"__proto__"}')],
 ];
 
 describe("wire validation: rejects bad shape, wrong kinds, ranges and caps", () => {
@@ -392,7 +398,7 @@ describe("wire validation: fuzz (no throw, no dispatch, no spend)", () => {
 
   it("no rejected frame ever reaches a handler or the budget, and a real command spends exactly one build", () => {
     // The handlers are the only code that touches the budget; the gate is the only way in.
-    const limits: Limits = { build: 2, image: 2, sam: 2, voice: 60 };
+    const limits: Limits = { build: 2, image: 2, sam: 2, voice: 60, explain: 2 };
     const budget = new Budget({ session: limits, global: limits });
     const kinds: string[] = [];
     const replies: string[] = [];
@@ -401,6 +407,7 @@ describe("wire validation: fuzz (no throw, no dispatch, no spend)", () => {
       if (msg.kind === "command" || msg.kind === "sketch" || msg.kind === "feedback") budget.take("visitor", "build");
       if (msg.kind === "photo" || msg.kind === "photoFind") budget.take("visitor", "sam");
       if (msg.kind === "restyle") budget.take("visitor", "image");
+      if (msg.kind === "explain") budget.take("visitor", "explain");
       if (msg.kind === "voiceWarm" || msg.kind === "voiceStart") budget.take("visitor", "voice", 30);
     };
 

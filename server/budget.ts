@@ -4,12 +4,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-export type Kind = "build" | "image" | "sam" | "voice";
+export type Kind = "build" | "image" | "sam" | "voice" | "explain";
 export type Limits = Record<Kind, number>;
 
 /** Voice is counted in seconds of Meta session time (standby + live); the env vars are minutes. */
-export const DEFAULT_SESSION: Limits = { build: 20, image: 24, sam: 6, voice: 8 * 60 };
-export const DEFAULT_GLOBAL: Limits = { build: 400, image: 300, sam: 100, voice: 120 * 60 };
+export const DEFAULT_SESSION: Limits = { build: 20, image: 24, sam: 6, voice: 8 * 60, explain: 40 };
+export const DEFAULT_GLOBAL: Limits = { build: 400, image: 300, sam: 100, voice: 120 * 60, explain: 800 };
 
 export type Verdict =
   | { ok: true }
@@ -20,6 +20,7 @@ const WHAT: Record<Kind, string> = {
   image: "AI art",
   sam: "photo cutouts",
   voice: "voice",
+  explain: "code explanations",
 };
 
 export function readLimits(env: Record<string, string | undefined>): { session: Limits; global: Limits } {
@@ -34,19 +35,34 @@ export function readLimits(env: Record<string, string | undefined>): { session: 
       image: num("BUDGET_SESSION_IMAGES", DEFAULT_SESSION.image),
       sam: num("BUDGET_SESSION_SAM", DEFAULT_SESSION.sam),
       voice: num("BUDGET_SESSION_VOICE_MIN", DEFAULT_SESSION.voice / 60, 60),
+      explain: num("BUDGET_SESSION_EXPLAINS", DEFAULT_SESSION.explain),
     },
     global: {
       build: num("BUDGET_GLOBAL_BUILDS", DEFAULT_GLOBAL.build),
       image: num("BUDGET_GLOBAL_IMAGES", DEFAULT_GLOBAL.image),
       sam: num("BUDGET_GLOBAL_SAM", DEFAULT_GLOBAL.sam),
       voice: num("BUDGET_GLOBAL_VOICE_MIN", DEFAULT_GLOBAL.voice / 60, 60),
+      explain: num("BUDGET_GLOBAL_EXPLAINS", DEFAULT_GLOBAL.explain),
     },
   };
 }
 
 interface Persisted { day: string; global: Limits; sessions: Record<string, Limits> }
 
-const zero = (): Limits => ({ build: 0, image: 0, sam: 0, voice: 0 });
+const zero = (): Limits => ({ build: 0, image: 0, sam: 0, voice: 0, explain: 0 });
+
+/**
+ * A persisted counter set, completed with 0 for any kind this version added since the file was
+ * written (ADR 0043 added `explain`). Without this an old counter file turns a new kind into NaN.
+ */
+function fill(l: Partial<Limits> | undefined): Limits {
+  const out = zero();
+  for (const k of Object.keys(out) as Kind[]) {
+    const v = l?.[k];
+    if (typeof v === "number" && Number.isFinite(v) && v >= 0) out[k] = v;
+  }
+  return out;
+}
 
 export interface BudgetOptions {
   session?: Limits;
@@ -100,7 +116,12 @@ export class Budget {
     if (!this.file || !existsSync(this.file)) return;
     try {
       const p = JSON.parse(readFileSync(this.file, "utf8")) as Persisted;
-      if (p.day === this.day && p.global && p.sessions) this.used = p;
+      if (p.day !== this.day || !p.global || !p.sessions) return;
+      this.used = {
+        day: p.day,
+        global: fill(p.global),
+        sessions: Object.fromEntries(Object.entries(p.sessions).map(([who, l]) => [who, fill(l)])),
+      };
     } catch { /* a corrupt counter file just starts the day fresh */ }
   }
 
