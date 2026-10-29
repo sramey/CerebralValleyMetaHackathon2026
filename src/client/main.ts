@@ -13,11 +13,13 @@ import { Sound, buildSfx } from "./sound";
 import { createTester } from "./tester";
 import { createOnboarding, createSoundButton, plainBuildMessage } from "./onboard";
 import { Portal } from "./portal";
-import { drawCliff, drawShape, isCliff, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
+import { drawCliff, drawHoop, drawShape, isCliff, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
 import { celestialPos, computeDesiredCamY, depthFog, drawContactShadows, drawDistantMountains, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
 import { drawScenery } from "./scenery";
 import { drawFluffyCloud, drawParallaxEntities, isParallaxOrSkyEntity, isSkyOrBackgroundEntity } from "./parallax";
 import { ModLoader } from "../sim/loader";
+import { isHoop } from "../sim/hoop";
+import { inputFromKeys } from "./keys";
 import { createGhost } from "./ghost";
 import { mountTimeline } from "./timeline";
 import { createPipeline } from "./pipeline";
@@ -34,6 +36,7 @@ import coinsMod from "../mods/coins";
 import movingPlatformMod from "../mods/platform-moving";
 import fireArrowMod from "../mods/fire-arrow";
 import parallaxMod from "../mods/parallax";
+import basketballMod from "../mods/basketball";
 import { resolveItemMod, gunMod } from "./items";
 import { parseUrlFlags, shareIssueMessage, urlWithoutWorld } from "./url-flags";
 import type { ShareIssue } from "./url-flags";
@@ -41,7 +44,7 @@ import type { ShareIssue } from "./url-flags";
 const BUILTINS: Record<string, ModDefinition> = {
   player: playerMod, ground: groundMod, enemies: enemyMod, rain: rainMod,
   coins: coinsMod, "moving-platform": movingPlatformMod, "fire-arrow": fireArrowMod,
-  chicken: chickenMod, parallax: parallaxMod, gun: gunMod,
+  chicken: chickenMod, parallax: parallaxMod, gun: gunMod, basketball: basketballMod,
 };
 
 const world = new World(1337);
@@ -380,6 +383,7 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   if (x + e.w < -40 || x > W + 40 || y + e.h < -40 || y > H + 40) return; // off-screen cull
   const t = e.type;
   if (morph.size > 0 && isMorphing(e)) { drawDigitize(e, x, y); return; } // a restyled sheet is about to swap in (ADR 0017)
+  if (isHoop(e)) { drawHoop(gfx, e, x, y); return; } // a goal is a structure, never a floating ring (bead z1d)
   const look = kindOf(t); // code-drawn shapes and engine effects never use sprites or the outline (ADR 0015)
   if (look) { if (look.kind === "shape") drawShape(gfx, e, x, y, look.shape); return; }
   if (getActivePrimaries().has(e.id)) return; // sprite pass below
@@ -862,11 +866,9 @@ addEventListener("keydown", (e) => {
 });
 addEventListener("keyup", (e) => { keys.delete(e.code); syncInput(); });
 function syncInput(): void {
-  world.input.left = keys.has("ArrowLeft") || keys.has("KeyA");
-  world.input.right = keys.has("ArrowRight") || keys.has("KeyD");
-  world.input.jump = keys.has("ArrowUp") || keys.has("KeyW") || keys.has("Space");
-  world.input.shoot = keys.has("KeyX") || keys.has("KeyJ") || keys.has("KeyF");
-  world.input.use = keys.has("KeyF") || keys.has("KeyE") || keys.has("KeyX") || keys.has("KeyJ");
+  // One pure mapping for every key (src/client/keys.ts, ADR 0046): B is an action key, so
+  // "pick it up and shoot with B" works without a special case per prompt.
+  Object.assign(world.input, inputFromKeys(keys));
 }
 
 // --- mod cards -----------------------------------------------------------------

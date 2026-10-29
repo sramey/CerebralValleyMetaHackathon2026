@@ -24,7 +24,7 @@ ModApi (everything a mod may call — nothing else exists):
   byType(type: string): Entity[]
   touches(collector: Entity, item: Entity): boolean — pickup overlap that matches what the player sees (padded reach, up to the drawn head). Collect coins, gems and powerups with this, not a raw box test.
   player(): Entity | undefined — the entity with type "player"
-  input(): Readonly<InputState> — { left, right, jump, shoot }
+  input(): Readonly<InputState> — { left, right, jump, shoot, use }; shoot and use are both true for B, X, J and F
   onTick(fn: (dt: number) => void): void — called every 1/60s frame
   burst(x, y, color, n?): void — particle effect
   rand(): number — seeded RNG in [0,1). NEVER use Math.random.
@@ -35,7 +35,7 @@ ModApi (everything a mod may call — nothing else exists):
   hudList(): HudWidget[] — all widgets in creation order
 
 Entity: { id, type, x, y, w, h, vx, vy, color, solid, gravityScale (0=no gravity,1=full), facing (1|-1), onGround, owner, data }
-InputState: { left, right, jump, shoot }
+InputState: { left, right, jump, shoot, use }
 TestApi: expect(cond, msg), api: ModApi, step(n, input?) — advance n frames with optional input override
 
 HUD widgets (the ONLY way to show the player numbers/text — health bars, score, timers, speedometers; mods never touch the DOM):
@@ -91,6 +91,7 @@ Rules:
     }
   });
 In test(t): spawn a ground and a player if not present, step 2 frames with { jump: true } to launch off the ground, step 10 frames with { jump: false } while airborne, step 1 frame with { jump: true } and assert p.vy < -200.
+- SPORTS: PICKUP & SHOOT (balls, basketball, hoop, goal): for "a basketball I can pick up and shoot with B" spawn exactly TWO entities: the ball (type "basketball", w 22, h 22, solid: false, gravityScale: 1, color 0xe8702a) and ONE grounded goal (type "basketball-hoop"). The engine draws a real goal for any type containing hoop, backboard or basketball-goal (steel post standing on the ground, backboard with target square, orange rim, mesh net), so never assemble a hoop from several entities and never leave it floating: put the goal's box bottom on the ground (y + h = 400; the engine's goal is w 100, h 200, so y 200). For that box the rim mouth is 34 px wide, centred at x + 35, and its scoring plane is y + 104: a shot scores when the ball's centre crosses that y going DOWN inside the mouth. Pick up and shoot on the ACTION key (api.input().shoot, true for B): edge-detect it (pressed = input.shoot || input.use; fresh = pressed && !prevPressed), pick the ball up with api.touches(player, ball), carry it at the player's hands with gravityScale 0 (follow player.x/y and facing every tick), then on the next press set gravityScale 1 and release it on a real arc: pick a flight time T of 0.4-0.8 s, then vx = dx/T and vy = (dy - 0.5*1500*T*(T + 1/60))/T lands the ball on the rim (the 1/60 term is the sim's Euler step). On a swish: api.burst at the rim, a score HUD stat, and a "SWISH!" banner. There is no mod sound API, so feedback is particles plus HUD.
 - ENTITY ONTOLOGY: Every entity has a role: terrain (ground, platform, stair, step, wall, block, brick, ledge, ramp), effect (rain, snow, snowflake, fog, smoke, spark, light), projectile (bullet, shot, arrow, fireball, laser, beam), shape (coin, ball, orb, bubble, ring, spikes, star, gem), prop (tree, house, snowman, gift, chest, gun, sword, wand, shield), creature (living/moving characters, enemies, allies, pets, bosses), or player ("player"). Never spawn replacement ground entities when decorating or theming; when giving the player a held weapon/item (like a gun, sword, or wand), either spawn projectiles directly from api.player() on input.shoot or attach a small compact held item prop (w: 22, h: 12, solid: false, gravityScale: 0) at the player's hand, never a full-sized character.`;
 
 export const WONDER_SYSTEM = `You write tiny self-contained TypeScript game mods for a 2D platformer simulation.

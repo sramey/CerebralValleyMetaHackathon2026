@@ -50,7 +50,7 @@ export const ideaPlaceholder = (i: number): string => `Try: “${IDEAS[((i % IDE
 const STEP_TEXT: Record<1 | 2 | 3, { title: string; body: string }> = {
   1: { title: "1 · Tell it what to build", body: "Type an idea in the box at the top, or hold Shift and say it out loud." },
   2: { title: "2 · Watch it get built", body: "It writes the code, then a robot player tests it. This takes about 20 seconds." },
-  3: { title: "3 · Now play it!", body: "Move: A / D or arrows. Jump: W or Space. Shoot: X. Ask for anything else and it keeps building." },
+  3: { title: "3 · Now play it!", body: "Move: A / D or arrows. Jump: W or Space. Shoot: X or B. Ask for anything else and it keeps building." },
 };
 
 const KEY = "metabuild.coach";

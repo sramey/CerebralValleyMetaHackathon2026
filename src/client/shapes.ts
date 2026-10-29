@@ -1,6 +1,7 @@
 // Procedural shapes (ADR 0015): primitives are drawn in code, never sent to Muse Image as "poses".
 import type { Graphics } from "pixi.js";
 import type { Entity, Look, ShapeName } from "../contract";
+import { HOOP, isHoopType } from "../sim/hoop";
 
 const OUTLINE = 0x0b0e13;
 
@@ -28,6 +29,9 @@ const SHAPE_WORDS: [ShapeName, RegExp][] = [
 ];
 const EFFECT_RE = /rain|fog|mist|haze|smoke|snow|explosion|blast|shockwave|spark|ember/;
 const PROJECTILE_RE = /bullet|shot|projectile|arrow|fireball|laser|bolt|pellet|plasma/i;
+/** Round leather balls: drawn as a sphere with seams, never squashed into an egg (bead z1d). */
+const BALL_RE = /ball|sphere|marble/;
+const BASKETBALL_RE = /basket/;
 
 export type Kind = { kind: "shape"; shape: ShapeName } | { kind: "effect" };
 
@@ -35,6 +39,7 @@ export type Kind = { kind: "shape"; shape: ShapeName } | { kind: "effect" };
 export function kindOf(type: string): Kind | undefined {
   const t = type.toLowerCase();
   if (t === "player" || t === "ground" || t.includes("platform") || t.includes("coin") || PROJECTILE_RE.test(t)) return undefined;
+  if (isHoopType(t)) return undefined; // a goal has its own structure (drawHoop), never a ring or a ball
   for (const l of looks) {
     if (l.types.some((x) => t.includes(x))) return l.visual === "effect" ? { kind: "effect" } : { kind: "shape", shape: l.shape ?? "circle" };
   }
@@ -61,11 +66,15 @@ export function drawShape(g: Graphics, e: Entity, x: number, y: number, shape: S
   switch (shape) {
     case "circle": {
       const r = Math.min(w, h) / 2;
-      // squash and stretch: long on the fall/rise, flat on contact
-      const sy = e.onGround ? 0.8 : 1 + Math.min(0.28, Math.abs(e.vy) / 1500);
-      const sx = 1 / sy;
+      const t = e.type.toLowerCase();
+      const ball = BALL_RE.test(t) || BASKETBALL_RE.test(t);
+      // squash and stretch: long on the fall/rise, flat on contact. Balls are exempt: a squashed
+      // basketball reads as an egg on the ground, not as a ball (bead z1d).
+      const sy = ball ? 1 : e.onGround ? 0.8 : 1 + Math.min(0.28, Math.abs(e.vy) / 1500);
+      const sx = ball ? 1 : 1 / sy;
       const rx = r * sx, ry = r * sy;
-      const cx = x + w / 2, cy = y + h - ry;
+      const cx = x + w / 2, cy = ball ? y + h / 2 : y + h - ry;
+      if (ball) { drawBall(g, cx, cy, r, BASKETBALL_RE.test(t) ? 0xe8702a : c); return; }
       g.ellipse(cx, cy, rx + 1.5, ry + 1.5).fill(OUTLINE);
       g.ellipse(cx, cy, rx, ry).fill(scale(c, 0.55));
       g.ellipse(cx - rx * 0.1, cy - ry * 0.1, rx * 0.9, ry * 0.9).fill(c);
@@ -131,6 +140,103 @@ export function drawShape(g: Graphics, e: Entity, x: number, y: number, shape: S
 /** True for the level's cliff overhang: a platform far taller than any ledge (the starter ground's `overhang` knob). */
 export function isCliff(e: Entity): boolean {
   return e.type.toLowerCase().includes("platform") && e.h >= 300 && e.w >= 120;
+}
+
+/** A round leather ball: pebbled shading plus the iconic seams, so it reads as a basketball at any size. */
+function drawBall(g: Graphics, cx: number, cy: number, r: number, leather: number): void {
+  const k = gradeFn;
+  g.circle(cx, cy, r + 1.5).fill(OUTLINE);
+  g.circle(cx, cy, r).fill(k(scale(leather, 0.6)));
+  g.circle(cx - r * 0.05, cy - r * 0.06, r * 0.95).fill(k(leather));
+  g.circle(cx - r * 0.22, cy - r * 0.24, r * 0.6).fill({ color: k(scale(leather, 1.22)), alpha: 0.5 });
+  g.circle(cx - r * 0.32, cy - r * 0.36, r * 0.24).fill({ color: 0xffffff, alpha: 0.4 });
+  // Seams: one down the middle, one across, and the two bowed arcs that make it unmistakable.
+  const seam = Math.max(1.1, r * 0.1);
+  const ink = { width: seam, color: OUTLINE, alpha: 0.88 };
+  g.moveTo(cx, cy - r + seam).lineTo(cx, cy + r - seam).stroke(ink);
+  g.moveTo(cx - r + seam, cy).lineTo(cx + r - seam, cy).stroke(ink);
+  for (const side of [-1, 1]) {
+    g.moveTo(cx, cy - r * 0.9);
+    for (let i = 1; i <= 10; i++) {
+      const t = -1 + (2 * i) / 10;
+      g.lineTo(cx + side * r * 0.84 * (1 - t * t), cy + t * r * 0.9);
+    }
+    g.stroke(ink);
+  }
+}
+
+/**
+ * A real basketball goal (bead z1d): a steel post standing on the ground, a backboard with its inner
+ * target square, an orange rim seen in perspective and a mesh net under it. Every size comes from
+ * HOOP, the same ratios rimOf() scores with, so the mouth you see is the mouth that scores.
+ */
+export function drawHoop(g: Graphics, e: Entity, x: number, y: number): void {
+  const k = gradeFn;
+  const w = e.w, h = e.h;
+  const bottom = y + h;
+  const cx = x + w * (HOOP.boardX + HOOP.boardW / 2);
+  const boardX = x + w * HOOP.boardX;
+  const boardW = w * HOOP.boardW;
+  const boardY = y + h * HOOP.boardY;
+  const boardH = h * HOOP.boardH;
+  const rimY = y + h * HOOP.rimY;
+  const rimR = w * HOOP.rimR;
+  const rimRy = rimR * 0.34;
+  const netBottom = rimY + h * HOOP.netH;
+  const rimColor = e.color || 0xe8702a;
+
+  // 1. Post: steel, behind the board, standing on the ground on a base plate.
+  const postW = Math.max(6, w * HOOP.postW);
+  const postX = cx - postW / 2;
+  const postTop = boardY - 6;
+  g.rect(postX - postW * 0.65, bottom - 7, postW * 2.3, 7).fill(OUTLINE);
+  g.rect(postX - postW * 0.5, bottom - 6, postW * 2, 5).fill(k(0x59626d));
+  g.rect(postX - 1.5, postTop, postW + 3, bottom - postTop).fill(OUTLINE);
+  g.rect(postX, postTop, postW, bottom - postTop).fill(k(0x707b88));
+  g.rect(postX, postTop, postW * 0.34, bottom - postTop).fill(k(0xa9b6c4));
+  g.rect(postX + postW * 0.7, postTop, postW * 0.3, bottom - postTop).fill({ color: k(0x3a434d), alpha: 0.9 });
+
+  // 2. Backboard: white, framed, with the orange target square behind the rim.
+  g.rect(boardX - 2, boardY - 2, boardW + 4, boardH + 4).fill(OUTLINE);
+  g.rect(boardX, boardY, boardW, boardH).fill(k(0xf2f6fb));
+  g.rect(boardX, boardY, boardW, boardH * 0.16).fill({ color: k(0xc9d4e2), alpha: 0.5 });
+  g.rect(boardX + boardW * 0.78, boardY, boardW * 0.22, boardH).fill({ color: 0x93a5ba, alpha: 0.26 });
+  const sqW = boardW * 0.44, sqH = boardH * 0.38;
+  const sqX = cx - sqW / 2;
+  const sqY = boardY + boardH - sqH - boardH * 0.08;
+  g.rect(sqX, sqY, sqW, sqH).stroke({ width: 2.5, color: k(0xe8572c) });
+  g.rect(boardX, boardY, boardW, boardH).stroke({ width: 2, color: k(0x8f9cad) });
+
+  // 3. Rim: an orange ring in perspective, mounted at the board's lower edge, jutting forward.
+  g.rect(cx - 3.5, rimY - rimRy - 7, 7, rimRy + 7).fill(k(0x9c3a16));
+  g.ellipse(cx, rimY + 2, rimR + 2.5, rimRy + 1.5).fill({ color: 0x000000, alpha: 0.22 });
+  g.ellipse(cx, rimY, rimR, rimRy).stroke({ width: 5, color: OUTLINE });
+  g.ellipse(cx, rimY, rimR, rimRy).stroke({ width: 3, color: k(rimColor) });
+  g.ellipse(cx, rimY - 0.5, rimR, rimRy).stroke({ width: 1.2, color: k(scale(rimColor, 1.55)), alpha: 0.85 });
+
+  // 4. Net: white mesh hanging from the rim, tapering in, rows sagging a little.
+  const topL = cx - rimR * 0.94, topR = cx + rimR * 0.94;
+  const botL = cx - rimR * HOOP.netTaper, botR = cx + rimR * HOOP.netTaper;
+  const netTopY = rimY + rimRy * 0.6;
+  const strands = 6, rows = 4;
+  for (let i = 0; i <= strands; i++) {
+    const t = i / strands;
+    g.moveTo(topL + (topR - topL) * t, netTopY)
+      .lineTo(botL + (botR - botL) * t, netBottom)
+      .stroke({ width: 1.2, color: k(0xdfe7f0), alpha: 0.9 });
+  }
+  for (let r = 1; r <= rows; r++) {
+    const f = r / rows;
+    const yy = netTopY + (netBottom - netTopY) * f;
+    const l = topL + (botL - topL) * f;
+    const rr = topR + (botR - topR) * f;
+    g.moveTo(l, yy);
+    for (let i = 1; i <= 6; i++) {
+      const t = i / 6;
+      g.lineTo(l + (rr - l) * t, yy + Math.sin(Math.PI * t) * 2.5);
+    }
+    g.stroke({ width: 1.1, color: k(0xe8eef6), alpha: 0.72 });
+  }
 }
 
 /** A 2.5D stone cliff archway & overhang with full-height masonry courses, recessed tunnel pillars, and mossy arch lintel. */
