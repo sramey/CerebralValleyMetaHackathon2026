@@ -138,3 +138,11 @@ Original prompt: lets setup our project, get oriented, organized, and setup, see
 - 10-29 merged wt/sketch2 (OpenCode): 'let me draw a level' opens sketch, sim pauses, side palette. Judge dry run #2 (Flash, hyv.3): fresh clone, every try-this row + christmas/stairs/gun passed; README rows added. Gates 221/221.
 - 10-29 merged wt/beats (top): demo set 3x each all pass (slime p50 10.9 s; dragon/coins/rain splits into 3 parallel lanes; double jump p50 14.7 s; make me huge rejected→fixed 3/3 p50 22.6 s; spooky palette <1.2 s). Compound commands now send an end marker.
 - 10-29 merged wt/starter (bottom): starter world recomposed: three fogged scenery bands (castle, trees, lamp posts, focal tree), stacked ledges; make me huge still 2/2; 61 fps.
+- 10-29 merged wt/look4 (bottom): scenery takes each mood (snow caps, bare spooky trees, neon rims), night castle rim-lit with windows; 61 fps.
+- 10-29 integrated regression (top, h8l): demo set 5/5, aware 15/16 (giant after huge = order effect), compound end marker live 9.4 s, stairs/sketch/P stats/share/camera upload/voice all pass. No code change.
+- 10-29 merged wt/feel (bottom): lookahead camera with airborne deadzone, squash/stretch, dust, coin pop, hit flash, optional micro-shake (?noshake). Render-only.
+- 10-29 merged wt/demoprep (top): npm run demo:prep (budgets, learned reset, stray art, spooky pre-warm, preflight), DEMO_FREEZE_LEARNING=1; fixed default per-visitor voice budget being 8 s instead of 8 min.
+- 10-29 merged wt/sound (bottom): all sound synthesized in WebAudio (SFX, build chime/rejection thunk, mood swell, per-mood ambience), M mute. Gates 246/246. Levels not yet judged by ear.
+- 10-29 merged wt/openweights (top): router runs on Muse Spark Open via Baseten when BASETEN_API_KEY is set (fallback to hosted Spark, model chip in orb, npm run bench:router). Dormant until the key arrives; model slug unconfirmed. Gates 251/251.
+- 10-29 merged wt/onboard (bottom): first-run coach, rotating known-good ideas, first-build celebration, plain-language rejections, speaker button, enemy-death sound; first build 15.5 s from page load (scripted). Gates 263/263.
+- 10-29 merged wt/agentic (top): Wonder's tool calls stream as steps in the pipeline lane (write → playtest → rejected → fix → pass); stats show tool calls/build, self-corrected %, playtests. Gates green.

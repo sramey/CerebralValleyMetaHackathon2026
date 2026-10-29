@@ -25,7 +25,8 @@ const WHAT: Record<Kind, string> = {
 export function readLimits(env: Record<string, string | undefined>): { session: Limits; global: Limits } {
   const num = (name: string, dflt: number, scale = 1) => {
     const v = Number(env[name]);
-    return env[name] !== undefined && env[name] !== "" && Number.isFinite(v) && v >= 0 ? v * scale : dflt;
+    // dflt is in the env var's unit (voice: minutes), so it scales the same way an explicit value does.
+    return (env[name] !== undefined && env[name] !== "" && Number.isFinite(v) && v >= 0 ? v : dflt) * scale;
   };
   return {
     session: {
