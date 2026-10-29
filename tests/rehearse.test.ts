@@ -1,0 +1,49 @@
+import { describe, expect, it } from "vitest";
+import { percentile, summarize, summarizeAll } from "../scripts/rehearse";
+import type { RehearsalRow } from "../scripts/rehearse";
+
+function row(command: string, outcome: RehearsalRow["outcome"], totalMs: number, extra: Partial<RehearsalRow> = {}): RehearsalRow {
+  return { run: 1, command, outcome, totalMs, autoFixRounds: 0, rejectedThenFixed: false, ...extra };
+}
+
+describe("rehearsal summarizer", () => {
+  it("groups commands in script order and computes pass rate and latency percentiles", () => {
+    const rows = [
+      row("make it rain", "landed", 400),
+      row("add trees", "landed", 900),
+      row("make it rain", "failed", 800, { run: 2 }),
+      row("add trees", "landed", 100, { run: 2 }),
+      row("make it rain", "landed", 200, { run: 3 }),
+      row("add trees", "rejected", 500, { run: 3 }),
+    ];
+
+    expect(summarize(rows)).toEqual([
+      { command: "make it rain", runs: 3, passed: 2, passPct: 66.7, p50Ms: 400, p90Ms: 800, autoFixRounds: 0, rejectedThenFixed: 0 },
+      { command: "add trees", runs: 3, passed: 2, passPct: 66.7, p50Ms: 500, p90Ms: 900, autoFixRounds: 0, rejectedThenFixed: 0 },
+    ]);
+  });
+
+  it("counts auto-fix rounds and rejected-then-fixed landings", () => {
+    const rows = [
+      row("make me huge", "landed", 1200, { autoFixRounds: 1, rejectedThenFixed: true }),
+      row("make me huge", "rejected", 1500, { run: 2, autoFixRounds: 1 }),
+    ];
+    expect(summarize(rows)[0]).toMatchObject({ passPct: 50, autoFixRounds: 2, rejectedThenFixed: 1 });
+  });
+
+  it("summarizes the whole invocation without making live calls", () => {
+    const rows = [row("undo", "landed", 20), row("undo", "failed", 40, { run: 2 })];
+    expect(summarizeAll(rows)).toEqual({ command: "ALL", runs: 2, passed: 1, passPct: 50, p50Ms: 20, p90Ms: 40, autoFixRounds: 0, rejectedThenFixed: 0 });
+    expect(summarize([])).toEqual([]);
+    expect(summarizeAll([])).toMatchObject({ runs: 0, passPct: 0, p50Ms: 0, p90Ms: 0 });
+  });
+
+  it("uses nearest-rank percentiles without mutating the input", () => {
+    const values = [50, 10, 40, 20, 30];
+    expect(percentile(values, 50)).toBe(30);
+    expect(percentile(values, 90)).toBe(50);
+    expect(percentile(values, 0)).toBe(10);
+    expect(percentile([], 90)).toBe(0);
+    expect(values).toEqual([50, 10, 40, 20, 30]);
+  });
+});
