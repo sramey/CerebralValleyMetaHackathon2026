@@ -25,7 +25,7 @@ import type { Recent } from "./context";
 import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, formatManifest, ROUTER_SYSTEM, WONDER_SYSTEM } from "./prompt";
 import { activeLogFile, logBuild, logMood, saveModSources } from "./createlog";
 import { createStatsHandler } from "./stats-feed";
-import { artCachedUrl, artKeyForType, clearCachedArt, deriveSubject, generateSubjectArt, isScenerySubject, pickArtType } from "./art";
+import { artCachedUrl, artKeyForType, clearCachedArt, deriveSubject, generateSubjectArt, isScenerySubject, pickArtType, purgeLegacyArt } from "./art";
 import { learnFromFix, learnRuleFromFeedback, learnSkillFromFeedback } from "./learn";
 import { segmentPhoto } from "./photo";
 import { Budget, readLimits } from "./budget";
@@ -1132,6 +1132,9 @@ wss.on("connection", (ws: WebSocket, req) => {
     }
   });
 });
+// One-time cleanup of legacy terrain sheets, explicitly at startup (never an import side effect, ADR 0031).
+const purgedArt = purgeLegacyArt();
+if (purgedArt.length > 0) console.log(`purged legacy art sheets: ${purgedArt.join(", ")}`);
 httpServer.listen(PORT, HOST, () => {
   console.log(`meta server listening on ws://${HOST}:${PORT} (client + websocket on one port)`);
 });
