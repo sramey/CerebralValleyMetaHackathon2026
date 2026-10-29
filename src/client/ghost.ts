@@ -22,7 +22,7 @@ export interface GhostPlay {
 const W = 320;
 const H = 180;
 const SCALE = 0.34;
-const STEPS_PER_FRAME = 6;
+const STEPS_PER_FRAME = 8;
 const HOLD_MS = 1400;
 
 async function importDef(compiled: string): Promise<ModDefinition> {
