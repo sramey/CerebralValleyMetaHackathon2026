@@ -65,11 +65,39 @@ export function computePrimaries(
   return primaries;
 }
 
+/**
+ * Resolve once the image can be drawn, whatever happens — never hang.
+ * `img.decode()` is the fast path but Chrome defers it while the tab is not the
+ * focused window, and the promise then never settles. The boot sequence awaits
+ * this loader, so a deferred decode used to leave a cold, unfocused first visit
+ * stuck on a black screen ("Server: connecting…") with no mods and no error.
+ * `load`/`error` and a timeout cover that case; a late decode just warms the cache.
+ */
+function imageDrawable(img: HTMLImageElement, timeoutMs: number): Promise<boolean> {
+  const ready = (): boolean => img.complete && img.naturalWidth > 0;
+  if (ready()) return Promise.resolve(true);
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const finish = (ok: boolean): void => {
+      if (settled) return;
+      settled = true;
+      resolve(ok);
+    };
+    img.addEventListener("load", () => finish(ready()), { once: true });
+    img.addEventListener("error", () => finish(false), { once: true });
+    void img.decode?.().then(() => finish(ready())).catch(() => { /* the load/error listeners still decide */ });
+    setTimeout(() => finish(ready()), timeoutMs);
+  });
+}
+
+/** How long one sprite sheet may hold up the boot. Sheets are ~150 KB; 6 s is a stall, not a slow network. */
+const SHEET_TIMEOUT_MS = 6000;
+
 export async function loadSpriteSheet(url: string): Promise<Texture[]> {
   try {
     const img = new Image();
     img.src = url;
-    await img.decode();
+    if (!(await imageDrawable(img, SHEET_TIMEOUT_MS))) return [];
     const w = img.naturalWidth;
     const h = img.naturalHeight;
     const canvas = document.createElement("canvas");

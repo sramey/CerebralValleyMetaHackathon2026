@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { existsSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import {
@@ -158,7 +159,9 @@ describe("single-file HTML export (ADR 0042)", () => {
     };
 
     const html = generateExportHtml(world, process.cwd());
-    const tempFile = join(process.cwd(), "output", "test-export.html");
+    // A fresh clone has no output/ (gitignored), so write the scratch file to the OS temp dir.
+    const tempDir = mkdtempSync(join(tmpdir(), "metabuild-export-"));
+    const tempFile = join(tempDir, "test-export.html");
     writeFileSync(tempFile, html, "utf8");
 
     try {
