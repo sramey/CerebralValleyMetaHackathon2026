@@ -168,6 +168,14 @@ export class Fx {
     }
   }
 
+  /** True when the mood's sky is light enough that white snow needs an outline (daytime, beach). */
+  private brightSky(): boolean {
+    const m = this.mood;
+    if (!m) return false;
+    const c = m.skyBottom;
+    return 0.299 * ((c >> 16) & 255) + 0.587 * ((c >> 8) & 255) + 0.114 * (c & 255) > 150;
+  }
+
   /** Weather effects (rain, snow), atmospheric fog, and particle effects. Returns count of active weather drops. */
   private entities(world: World, W: number, H: number, isEffect: (type: string) => boolean): number {
     const g = this.g;
@@ -203,15 +211,20 @@ export class Fx {
         const color = e.color || 0xffffff;
 
         // Soft additive aura on larger snowflakes
-        if (sz >= 3.6) {
+        if (sz >= 3.6 && !this.brightSky()) {
           this.puff(cx, cy, sz * 3.2, 0xffffff, 0.12, true);
         }
 
-        // 4-point snowflake crystal
-        const arm = sz * 0.85;
-        g.moveTo(cx - arm, cy).lineTo(cx + arm, cy).stroke({ width: 1.2, color, alpha, cap: "round" });
-        g.moveTo(cx, cy - arm).lineTo(cx, cy + arm).stroke({ width: 1.2, color, alpha, cap: "round" });
-        g.rect(cx - 0.7, cy - 0.7, 1.4, 1.4).fill({ color, alpha });
+        if (this.brightSky()) {
+          // White crosses vanish into (or read as stars on) a daytime sky: draw soft round flakes with a pale-blue rim.
+          g.circle(cx, cy, sz * 0.95).fill({ color, alpha: 0.95 }).stroke({ width: 1.2, color: 0x6f98c4, alpha: 0.85 });
+        } else {
+          // 4-point snowflake crystal
+          const arm = sz * 0.85;
+          g.moveTo(cx - arm, cy).lineTo(cx + arm, cy).stroke({ width: 1.2, color, alpha, cap: "round" });
+          g.moveTo(cx, cy - arm).lineTo(cx, cy + arm).stroke({ width: 1.2, color, alpha, cap: "round" });
+          g.rect(cx - 0.7, cy - 0.7, 1.4, 1.4).fill({ color, alpha });
+        }
 
         // Soft snow puff & accumulation when touching ground
         if (e.onGround || e.y + e.h >= 396) {

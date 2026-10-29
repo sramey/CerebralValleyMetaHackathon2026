@@ -176,6 +176,23 @@ export interface ModDefinition {
   test?(t: TestApi): void;
 }
 
+/** Semantic brush of a sketch stroke: what the drawing means, not just its color. */
+export type SketchTag = "terrain" | "coin" | "hazard" | "bouncer" | "freehand";
+
+/** One point of a sketch stroke, in screen pixels relative to the game viewport. */
+export interface SketchPoint { x: number; y: number }
+
+/** One hand-drawn stroke: its brush, its screen points, and the world-space box it
+ *  covers (screen point + camera), so a builder can place things where they were drawn. */
+export interface SketchStroke {
+  /** CSS hex color of the brush, e.g. "#3fd06a". */
+  color: string;
+  tag: SketchTag;
+  points: SketchPoint[];
+  /** World-space bounds of the stroke: x/y grow right/down like the sim. */
+  bbox: { x: number; y: number; w: number; h: number };
+}
+
 /** Wire protocol: client <-> server over WebSocket (JSON text frames). */
 export type ClientMsg =
   | { kind: "command"; text: string }
@@ -197,7 +214,17 @@ export type ClientMsg =
   // Mood restyle (ADR 0017): the client lists the sprite sheets it has; the server edits each toward the mood anchor.
   | { kind: "restyle"; mood: string; keys: string[] }
   // Self-improving feedback (ADR 0020): thumbs-up/down on entities or mod cards distills persistent rules & skills.
-  | { kind: "feedback"; modId: string; entityType?: string; vote: "up" | "down"; note: string; fixNow?: boolean };
+  | { kind: "feedback"; modId: string; entityType?: string; vote: "up" | "down"; note: string; fixNow?: boolean }
+  /** Draw-to-build (ADR 0026): a hand-drawn level sketch. `image` is a PNG data URL of
+   *  the sketch canvas; `strokes` carry exact world boxes; `view` is the world rect the
+   *  sketch covers; `prompt` is the optional typed hint. */
+  | {
+      kind: "sketch";
+      image: string;
+      strokes: SketchStroke[];
+      prompt?: string;
+      view?: { x: number; y: number; w: number; h: number };
+    };
 
 /** One mod in a saved world: a built-in the client bundles, or a verified AI mod with its source. */
 export type WorldMod =

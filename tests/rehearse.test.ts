@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatTable, metExpectation, parseCommandList, percentile, summarize, summarizeAll } from "../scripts/rehearse";
+import { awareMiss, formatTable, metExpectation, parseCommandList, percentile, summarize, summarizeAll } from "../scripts/rehearse";
 import type { RehearsalRow } from "../scripts/rehearse";
 
 function row(command: string, outcome: RehearsalRow["outcome"], totalMs: number, extra: Partial<RehearsalRow> = {}): RehearsalRow {
@@ -93,5 +93,19 @@ describe("rehearsal summarizer", () => {
     expect(table).toContain("expect");
     expect(table).toContain("1/2 (50.0%) rejected-then-fixed");
     expect(table).toContain("2/3 (66.7%)");
+  });
+});
+
+describe("awareMiss (bead 4fa)", () => {
+  const none = { moods: [], sources: [], arts: [] };
+  it("passes when the world effect matches", () => {
+    expect(awareMiss({ mood: "christmas" }, { ...none, moods: ["christmas"] })).toBeUndefined();
+    expect(awareMiss({ source: "api[.]player[(]", noArt: true }, { ...none, sources: ["api.player().x"] })).toBeUndefined();
+  });
+  it("flags a mood that built a mod, a wrong mood, and sprite art on terrain", () => {
+    expect(awareMiss({ mood: "daytime" }, { ...none, moods: ["daytime"], sources: ["x"] })).toMatch(/also built a mod/);
+    expect(awareMiss({ mood: "daytime" }, none)).toMatch(/expected mood/);
+    expect(awareMiss({ noArt: true }, { ...none, arts: ["stair"] })).toMatch(/sprite art/);
+    expect(awareMiss({ notSource: "ninja" }, { ...none, sources: ["type: 'ninja'"] })).toMatch(/forbidden/);
   });
 });

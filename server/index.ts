@@ -33,6 +33,7 @@ import type { Kind } from "./budget";
 import { isWorldId, restyledForWorld, snapshotWorld, WorldStore } from "./worlds";
 import { createStaticHandler } from "./static";
 import { createVoiceHub } from "./voice";
+import { runSketchBuild } from "./sketch";
 
 loadEnv();
 const PORT = Number(process.env.PORT ?? 8787);
@@ -363,6 +364,52 @@ async function handlePhotoBringLocal(ws: WebSocket, msg: Extract<ClientMsg, { ki
     return;
   }
   await buildPhotoMod(ws, key, prompt, aspect);
+}
+
+/**
+ * Draw-to-build (ADR 0026): Wonder reads the sketch image + world stroke boxes, and the
+ * resulting JSON level is compiled here into a level mod, verified, and hot-loaded.
+ * Ports and prompts live in server/sketch.ts; this only wires the session in.
+ */
+async function handleSketchMessage(ws: WebSocket, msg: Extract<ClientMsg, { kind: "sketch" }>): Promise<void> {
+  const t0 = performance.now();
+  const command = "✏️ sketched level";
+  if (!spend(ws, "build")) return;
+  const manifest = sess(ws).manifest;
+  const timings: DeliverTimings = { route: 0, write: 0, compile: 0, verify: 0 };
+  const deliver = async (source: string): Promise<{ ok: boolean; errors: string[] }> => {
+    stage(ws, { kind: "stage", stage: "compiling", detail: "building your level", command });
+    const c0 = performance.now();
+    const compiled = compileMod(source);
+    timings.compile += Math.round(performance.now() - c0);
+    if (!compiled.ok) return { ok: false, errors: compiled.errors };
+    stage(ws, { kind: "stage", stage: "verifying", detail: "verifying your level", command });
+    const v0 = performance.now();
+    const verified = await verifyMod(source, compiled.js);
+    timings.verify += Math.round(performance.now() - v0);
+    if (!verified.ok || !verified.def) return { ok: false, errors: verified.errors.length > 0 ? verified.errors : ["verification failed"] };
+    const def = verified.def;
+    manifest.set(def.id, { id: def.id, title: def.title, source, compiled: compiled.js, knobs: def.knobs ?? {} });
+    noteTouched(sess(ws).recent, def.id);
+    stage(ws, { kind: "stage", stage: "done", detail: `loaded ${def.id} (${SIM.healthFrames} frames OK)`, command });
+    send(ws, { kind: "mod", mod: { id: def.id, title: def.title, source, compiled: compiled.js, knobs: def.knobs ?? {} } });
+    const files = saveModSources([source], def.id);
+    logBuild({ command, route: "new", outcome: "mod", modId: def.id, title: def.title, timings: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) }, verify: { ok: true, errors: [], msPerFrame: verified.msPerFrame }, fixAttempted: false, sourceFile: files[files.length - 1], sourceFiles: files });
+    return { ok: true, errors: [] };
+  };
+  try {
+    await runSketchBuild({
+      ask: (messages) => chat(WONDER, messages, 1400).then((r) => { timings.write += r.ms; return r.text; }),
+      deliver,
+      say: (text) => send(ws, { kind: "say", text }),
+      stage: (s, detail) => stage(ws, { kind: "stage", stage: s, detail, command }),
+      note: (text) => console.log(`[sketch] ${text}`),
+    }, msg);
+  } catch (err) {
+    send(ws, { kind: "say", text: `Sketch failed: ${err instanceof Error ? err.message : String(err)}` });
+    logBuild({ command, route: "new", outcome: "failed", timings: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) }, fixAttempted: false });
+  }
+  send(ws, { kind: "timing", command, ms: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) } });
 }
 
 function parseRoute(text: string): Route | null {
@@ -1014,6 +1061,10 @@ function handleMessage(ws: WebSocket, raw: string): void {
   } else if (msg.kind === "photoBringLocal") {
     handlePhotoBringLocal(ws, msg).catch((err) => {
       send(ws, { kind: "say", text: `Photo failed: ${err instanceof Error ? err.message : String(err)}` });
+    });
+  } else if (msg.kind === "sketch") {
+    handleSketchMessage(ws, msg).catch((err) => {
+      send(ws, { kind: "say", text: `Sketch failed: ${err instanceof Error ? err.message : String(err)}` });
     });
   } else if (msg.kind === "restyle") {
     handleRestyle(ws, msg).catch(() => {});

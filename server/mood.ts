@@ -36,7 +36,7 @@ export const PRESETS: Record<string, MoodSpec> = {
   christmas: {
     name: "christmas",
     anchor: "festive Christmas holiday winter night: warm red, gold and pine-green accents, snow-frosted surfaces, twinkling holiday lights, cozy festive pixel-art details",
-    skyTop: 0x0b1528, skyBottom: 0x1e3557, ridgeFar: 0x15253d, ridgeNear: 0x1d3b32, moon: 0xfff4cc, star: 0xffe082,
+    skyTop: 0x0b1528, skyBottom: 0x1e3557, ridgeFar: 0x2a4068, ridgeNear: 0x3d5f82, moon: 0xfff4cc, star: 0xffe082,
     grass: 0xf4f9ff, soil: 0x5c2c24, tint: 0xffd8a8, grade: 0.22, dim: 1.0, fog: 0.15, vignette: 0.25, ambient: "snow",
   },
   daytime: {

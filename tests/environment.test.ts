@@ -110,18 +110,20 @@ describe("environmental awareness & day/night sky (bead 196)", () => {
     const pal = { grass: 0x45d66b, soil: 0x7a5230, ridgeFar: 0x4a8c6f, ridgeNear: 0x357a5b, moon: 0xffe042, star: 0xffffff };
     const skyBands = [0x2f80ed, 0x56a0f5, 0x9be2ff];
 
+    const SKY_RECTS = 72; // the gradient is drawn in at least 72 bands however few colours are passed
+
     // Daytime: radiant Sun (4 concentric glow circles), zero star rects, no crescent shadow cutout
     const dayM = mockGraphics();
     drawSkyAndCelestials(dayM.gfx, 1920, 1080, 0, skyBands.length, skyBands, pal, true, false);
     expect(dayM.circles.length).toBe(4); // 38, 26, 18, 12 glow/disc rings
-    expect(dayM.rects.length).toBe(skyBands.length); // sky bands only, NO night stars
+    expect(dayM.rects.length).toBe(SKY_RECTS); // sky bands only, NO night stars
 
     // Nighttime: crescent Moon (3 circles including shadow cutout), plus 14 night stars
     const nightM = mockGraphics();
     const nightBands = [0x05070a, 0x0d1b20, 0x133441];
     drawSkyAndCelestials(nightM.gfx, 1920, 1080, 0, nightBands.length, nightBands, pal, false, false);
-    expect(nightM.circles.length).toBe(3); // outer glow + moon disc + crescent cutout
-    expect(nightM.rects.length).toBe(nightBands.length + 14); // sky bands + 14 stars
+    expect(nightM.circles.length).toBe(7); // 4 halo rings + outer glow + moon disc + crescent cutout
+    expect(nightM.rects.length).toBe(SKY_RECTS + 14); // sky bands + 14 stars
 
     // When an explicit sun entity exists in the world, fixed top-right celestial body is hidden
     const explicitSunM = mockGraphics();
