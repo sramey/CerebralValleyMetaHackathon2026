@@ -151,6 +151,11 @@ describe("explain: the parser never trusts a line number", () => {
     expect(parseExplanation("{}", SOURCE)).toBeNull();
     expect(parseExplanation('{"say": "   ", "lines": [9]}', SOURCE)).toBeNull();
   });
+
+  it("takes the words from a renamed field instead of dropping a usable answer", () => {
+    const parsed = parseExplanation(JSON.stringify({ text: "It rains. It ticks. Change the rate.", lines: [9] }), SOURCE);
+    expect(parsed?.text).toBe("It rains. It ticks. Change the rate.");
+  });
 });
 
 describe("explain: the deterministic key lines", () => {

@@ -176,8 +176,10 @@ export function parseExplanation(raw: string, source: string): ParsedExplanation
     try { parsed = JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>; } catch { parsed = null; }
   }
   if (parsed) {
-    if (typeof parsed.say !== "string") return null;
-    say = parsed.say;
+    // Models sometimes rename the prose field; take the words wherever they are.
+    const sayField = parsed.say ?? parsed.text ?? parsed.explanation;
+    if (typeof sayField !== "string") return null;
+    say = sayField;
     if (Array.isArray(parsed.lines)) {
       for (const v of parsed.lines) {
         const n = typeof v === "number" ? v : typeof v === "string" && /^\d+$/.test(v.trim()) ? Number(v) : NaN;
