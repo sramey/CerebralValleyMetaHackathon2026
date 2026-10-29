@@ -9,7 +9,7 @@ import type { ClientMsg, Entity, KnobValue, ModDefinition, MoodSpec, ServerMsg }
 import { initVoice } from "./voice";
 import { Fx } from "./fx";
 import { Portal } from "./portal";
-import { drawCliff, drawShape, isCliff, kindOf, registerLook, scale, setGrade } from "./shapes";
+import { drawCliff, drawShape, isCliff, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
 import { computeDesiredCamY, drawContactShadows, drawDistantMountains, drawForegroundDepth, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
 import { drawFluffyCloud, drawParallaxEntities, isParallaxOrSkyEntity, isSkyOrBackgroundEntity } from "./parallax";
 import { ModLoader } from "../sim/loader";
@@ -406,6 +406,7 @@ function applyMood(m: MoodSpec | null): void {
     for (let i = 0; i < SKY_BANDS; i++) SKY[i] = mixC((SKY_TOP[0] << 16) | (SKY_TOP[1] << 8) | SKY_TOP[2], (SKY_BOTTOM[0] << 16) | (SKY_BOTTOM[1] << 8) | SKY_BOTTOM[2], i / (SKY_BANDS - 1));
   }
   setGrade(grade);
+  setSnowy(!!m && (m.ambient === "snow" || m.name === "christmas" || m.name === "snowy"));
   fx.setMood(m);
   portal.setMood(m);
 }

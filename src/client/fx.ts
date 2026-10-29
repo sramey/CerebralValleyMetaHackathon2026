@@ -211,13 +211,13 @@ export class Fx {
         const color = e.color || 0xffffff;
 
         // Soft additive aura on larger snowflakes
-        if (sz >= 3.6) {
+        if (sz >= 3.6 && !this.brightSky()) {
           this.puff(cx, cy, sz * 3.2, 0xffffff, 0.12, true);
         }
 
         if (this.brightSky()) {
           // White crosses vanish into (or read as stars on) a daytime sky: draw soft round flakes with a pale-blue rim.
-          g.circle(cx, cy, sz * 0.7).fill({ color, alpha: 0.95 }).stroke({ width: 1, color: 0x7fa6cf, alpha: 0.55 });
+          g.circle(cx, cy, sz * 0.95).fill({ color, alpha: 0.95 }).stroke({ width: 1.2, color: 0x6f98c4, alpha: 0.85 });
         } else {
           // 4-point snowflake crystal
           const arm = sz * 0.85;

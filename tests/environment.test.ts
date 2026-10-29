@@ -122,7 +122,7 @@ describe("environmental awareness & day/night sky (bead 196)", () => {
     const nightM = mockGraphics();
     const nightBands = [0x05070a, 0x0d1b20, 0x133441];
     drawSkyAndCelestials(nightM.gfx, 1920, 1080, 0, nightBands.length, nightBands, pal, false, false);
-    expect(nightM.circles.length).toBe(3); // outer glow + moon disc + crescent cutout
+    expect(nightM.circles.length).toBe(7); // 4 halo rings + outer glow + moon disc + crescent cutout
     expect(nightM.rects.length).toBe(SKY_RECTS + 14); // sky bands + 14 stars
 
     // When an explicit sun entity exists in the world, fixed top-right celestial body is hidden
