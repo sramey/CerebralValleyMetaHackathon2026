@@ -1730,7 +1730,7 @@ function submitCommand(text: string): void {
   // no build slot. Anything else, including "draw a dragon", goes down the normal path.
   const sketchIntent = matchSketchIntent(text);
   if (sketchIntent === "open") { sketch.open(); return; }
-  if (sketchIntent === "close") { sketch.close(); return; }
+  if (sketchIntent === "close") { sketch.close(); say("Sketch closed — the world is running again."); return; }
   say(`Building: ${text}`, "building");
   if (!handleLocal(text)) {
     if (ws?.readyState === WebSocket.OPEN) send({ kind: "worldState", mods: loader.list().map((m) => ({ id: m.id, values: m.values })) });
