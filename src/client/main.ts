@@ -9,6 +9,8 @@ import { initVoice } from "./voice";
 import { Fx } from "./fx";
 import { Portal } from "./portal";
 import { drawCliff, drawShape, isCliff, kindOf, registerLook, setGrade } from "./shapes";
+import { computeDesiredCamY, drawContactShadows, drawDistantMountains, drawForegroundDepth, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
+import { drawFluffyCloud, drawParallaxEntities, isParallaxOrSkyEntity, isSkyOrBackgroundEntity } from "./parallax";
 import { ModLoader } from "../sim/loader";
 import { createGhost } from "./ghost";
 import { createPipeline } from "./pipeline";
@@ -22,11 +24,12 @@ import rainMod from "../mods/rain";
 import coinsMod from "../mods/coins";
 import movingPlatformMod from "../mods/platform-moving";
 import fireArrowMod from "../mods/fire-arrow";
+import parallaxMod from "../mods/parallax";
 
 const BUILTINS: Record<string, ModDefinition> = {
   player: playerMod, ground: groundMod, enemies: enemyMod, rain: rainMod,
   coins: coinsMod, "moving-platform": movingPlatformMod, "fire-arrow": fireArrowMod,
-  chicken: chickenMod,
+  chicken: chickenMod, parallax: parallaxMod,
 };
 
 const world = new World(1337);
@@ -176,8 +179,13 @@ function drawRidge(pts: number[], camX: number, par: number, baseY: number, seed
   for (let sx = -step; sx <= W + step; sx += step) {
     pts.push(sx, baseY - ridgeY(sx + camX * par, seed));
   }
+  const topCount = pts.length;
   pts.push(W + step, H, -step, H);
   gfx.poly(pts).fill(color);
+  const rim = mixC(color, pal.moon, 0.22);
+  for (let i = 0; i + 3 < topCount; i += 2) {
+    gfx.moveTo(pts[i], pts[i + 1]).lineTo(pts[i + 2], pts[i + 3]).stroke({ width: 1.5, color: rim, alpha: 0.30 });
+  }
 }
 
 function squash(e: Entity): { bw: number; bh: number } {
@@ -237,20 +245,7 @@ function drawCoin(e: Entity, x: number, y: number): void {
 }
 
 function drawGround(e: Entity, x: number, y: number): void {
-  gfx.rect(x, y, e.w, e.h).fill(e.color);
-  const gh = Math.min(8, Math.max(3, e.h * 0.22));
-  gfx.rect(x, y, e.w, gh).fill(pal.grass);
-  // deterministic speckles from world coords (no per-frame random)
-  const base = Math.floor(e.x) * 31 + Math.floor(e.y) * 7;
-  const n = Math.floor(e.w / 14);
-  for (let k = 0; k < n; k++) {
-    const hsh = ((base + k * 57) % 11 + 11) % 11;
-    if (hsh % 2 !== 0) continue;
-    const px = x + k * 14 + (hsh % 5);
-    const span = e.h - gh - 6;
-    const py = y + gh + 3 + (span > 0 ? hsh % span : 0);
-    gfx.rect(px, py, 3, 2).fill(pal.soil);
-  }
+  drawGround25D(gfx, e, x, y, pal, app.screen.width, app.screen.height, grade);
 }
 
 function drawShot(e: Entity, x: number, y: number): void {
@@ -300,6 +295,7 @@ function getActivePrimaries(): Set<number> {
 }
 
 function drawEntityRaw(e: Entity, camX: number, camY: number): void {
+  if (isParallaxOrSkyEntity(e)) return;
   const x = e.x - camX;
   const y = e.y - camY;
   const W = app.screen.width;
@@ -315,7 +311,13 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
       if (t.includes(k)) { drawDigitize(e, x, y); return; }
     }
   }
+  if (t === "sun" || /\bsun\b/i.test(t)) { drawSunEntity(gfx, e, x, y); return; }
+  if (t.includes("cloud") || t.includes("cumulus")) {
+    drawFluffyCloud(gfx, x, y, e.w, e.h, e.color, pal.moon, SKY[SKY_BANDS - 1], e.id);
+    return;
+  }
   if (isCliff(e)) { drawCliff(gfx, e, x, y); return; }
+  if (t.indexOf("ground") >= 0 || t.indexOf("platform") >= 0 || (e.solid && /wall|block|brick|pillar|column|ledge|step|terrain|floor|bridge/i.test(t))) { drawGround(e, x, y); return; }
   // dark outline behind every code-drawn entity
   gfx.rect(x - 1.5, y - 1.5, e.w + 3, e.h + 3).fill(OUTLINE);
   if (t === "player") {
@@ -323,7 +325,6 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
     return;
   }
   if (t.indexOf("coin") >= 0) { drawCoin(e, x, y); return; }
-  if (t.indexOf("ground") >= 0 || t.indexOf("platform") >= 0) { drawGround(e, x, y); return; }
   if (isProjectileType(t) || t.indexOf("arrow") >= 0 || t.indexOf("fire") >= 0) { drawShot(e, x, y); return; }
   if (t.indexOf("slime") >= 0 || t.indexOf("gel") >= 0 || t.indexOf("enemy") >= 0 ||
     t.indexOf("walker") >= 0 || t.indexOf("turtle") >= 0) { drawBlob(e, x, y); return; }
@@ -434,7 +435,7 @@ function desiredCamXFor(w: number): number {
 }
 function desiredCamYFor(h: number): number {
   const playerForCam = world.entities.find((e) => e.type === "player");
-  return playerForCam ? playerForCam.y + playerForCam.h - h * 0.90 : world.camera.y;
+  return computeDesiredCamY(playerForCam, h, world.camera.y);
 }
 function fitRenderer(): void {
   const rect = stageWrapEl.getBoundingClientRect();
@@ -601,32 +602,60 @@ function render(): void {
     if (!target) closeRadialMenu();
     else positionRadialMenu(target, camX, camYSmooth);
   }
-  // vertical sky gradient via stacked bands
-  const bandH = Math.ceil(H / SKY_BANDS);
-  for (let i = 0; i < SKY_BANDS; i++) {
-    gfx.rect(0, i * bandH, W, bandH + 1).fill(SKY[i]);
+  const isDaytime = isDaytimeSky(mood, world.entities, SKY[0]);
+  const sunEntity = world.entities.find((e) => {
+    const t = e.type.toLowerCase();
+    return t === "sun" || /\bsun\b/.test(t);
+  });
+  const skyEntity = world.entities.find((e) => isSkyOrBackgroundEntity(e) && typeof e.color === "number" && e.color > 0);
+  const skyEntityCol = (!mood && skyEntity) ? skyEntity.color : undefined;
+
+  drawSkyAndCelestials(
+    gfx,
+    W,
+    H,
+    camX,
+    SKY_BANDS,
+    SKY,
+    pal,
+    isDaytime,
+    Boolean(sunEntity),
+    skyEntityCol,
+  );
+
+  if (isDaytime && !world.entities.some((e) => e.type.toLowerCase().includes("cloud"))) {
+    const skyBottomCol = SKY[SKY_BANDS - 1];
+    const c1x = ((140 - camX * 0.08) % (W + 220) + W + 220) % (W + 220) - 110;
+    drawFluffyCloud(gfx, c1x, 38, 120, 36, 0xffffff, pal.moon, skyBottomCol, 1);
+    const c2x = ((W * 0.48 - camX * 0.12) % (W + 260) + W + 260) % (W + 260) - 130;
+    drawFluffyCloud(gfx, c2x, 62, 150, 42, 0xffffff, pal.moon, skyBottomCol, 2);
+    const c3x = ((W * 0.82 - camX * 0.06) % (W + 200) + W + 200) % (W + 200) - 100;
+    drawFluffyCloud(gfx, c3x, 28, 95, 30, 0xffffff, pal.moon, skyBottomCol, 3);
   }
-  // stars (parallax markers)
-  for (let i = 0; i < 14; i++) {
-    const sx = ((i * 173 - camX * 0.3) % (W + 80) + W + 80) % (W + 80) - 40;
-    gfx.rect(sx, 40 + (i % 5) * 22, 3, 3).fill(pal.star);
-  }
-  // moon, fixed top-right
-  gfx.circle(W - 70, 60, 24).fill({ color: pal.moon, alpha: 0.15 });
-  gfx.circle(W - 70, 60, 17).fill(pal.moon);
-  gfx.circle(W - 76, 54, 14).fill(SKY[1]);
-  // far hill silhouettes
+  // far hill silhouettes + parallax layers + atmospheric horizon mist (bead 1z7 & rm1)
   const horizon = H * 0.62 - camYSmooth * 0.1;
+  drawDistantMountains(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
   drawRidge(ridgeFar, camX, 0.3, horizon, 0, pal.ridgeFar);
   drawRidge(ridgeNear, camX, 0.55, horizon + 34, 1, pal.ridgeNear);
-  // solids-first, reuse scratch array
+  drawParallaxEntities(gfx, world.entities, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1], grade);
+  drawHorizonMist(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
+  // solids-first, then contact shadows on solid surfaces, then dynamic entities
   order.length = 0;
   for (let i = 0; i < world.entities.length; i++) order.push(world.entities[i]);
   order.sort((a, b) => Number(b.solid) - Number(a.solid));
-  for (let i = 0; i < order.length; i++) drawEntity(order[i], camX, camYSmooth);
+  let shadowsDrawn = false;
+  for (let i = 0; i < order.length; i++) {
+    if (!shadowsDrawn && !order[i].solid) {
+      drawContactShadows(gfx, world.entities, camX, camYSmooth, W, H, isEffectType);
+      shadowsDrawn = true;
+    }
+    drawEntity(order[i], camX, camYSmooth);
+  }
+  if (!shadowsDrawn) drawContactShadows(gfx, world.entities, camX, camYSmooth, W, H, isEffectType);
   for (const p of world.particles) {
     gfx.rect(p.x - camX, p.y - camYSmooth, p.size, p.size).fill({ color: p.color, alpha: Math.max(0, 1 - p.life / p.maxLife) });
   }
+  drawForegroundDepth(gfx, camX, camYSmooth, W, H, pal);
   // Sprite primaries: per owner+subject every entity at >=30% of the group's
   // max area gets the sprite; small assembled sub-parts stay rects under it.
   const seen = new Set<number>();
@@ -634,6 +663,7 @@ function render(): void {
   {
     const groups = new Map<string, { maxArea: number; items: { id: number; area: number }[] }>();
     for (const e of world.entities) {
+      if (isParallaxOrSkyEntity(e)) continue;
       const frames = framesFor(framesBySubject, e.type, e.type === "player");
       if (frames.length < 1 || kindOf(e.type)) continue;
       const subject = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0] ?? e.type;
@@ -652,6 +682,7 @@ function render(): void {
   }
   const spriteDraw: { e: Entity; frame: Texture; subjectKey: string | undefined }[] = [];
   for (const e of world.entities) {
+    if (isParallaxOrSkyEntity(e)) continue;
     const frames = framesFor(framesBySubject, e.type, e.type === "player");
     if (frames.length < 1 || !primaries.has(e.id) || kindOf(e.type) || (morph.size > 0 && isMorphing(e))) continue;
     seen.add(e.id);
@@ -689,12 +720,6 @@ function render(): void {
     if (x + e.w < -40 || x > W + 40 || y + e.h < -40 || y > H + 40) continue;
     drawHealthBar(e, x, y);
   }
-  // subtle vignette: 4 edge rects
-  const V = 26;
-  gfx.rect(0, 0, W, V).fill({ color: 0x000000, alpha: 0.28 });
-  gfx.rect(0, H - V, W, V).fill({ color: 0x000000, alpha: 0.28 });
-  gfx.rect(0, 0, V, H).fill({ color: 0x000000, alpha: 0.22 });
-  gfx.rect(W - V, 0, V, H).fill({ color: 0x000000, alpha: 0.22 });
   hud.render(world);
 }
 
@@ -852,6 +877,7 @@ function handleLocal(text: string): boolean {
   if (n === "coin" || n === "coins") { loadLocal(coinsMod); return true; }
   if (n === "moving platform") { loadLocal(movingPlatformMod); return true; }
   if (n === "fire arrow" || n === "fire arrows" || n === "arrow" || n === "arrows" || n === "shoot fire arrows") { loadLocal(fireArrowMod); return true; }
+  if (n === "parallax" || n === "parallax background" || n === "parallax forest" || n === "parallax vista") { loadLocal(parallaxMod); return true; }
   if (n === "chicken") { loadLocal(chickenMod); return true; }
   if (t.includes("jump higher")) { tweak("player", "jump", 880, "Jump raised."); return true; }
   if (t.includes("faster")) {
