@@ -12,6 +12,12 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e13; col
 #orb-dot.failed { background: radial-gradient(circle at 35% 35%, #ffb3ab, #e2483d 55%, #a02722); box-shadow: inset 0 0 8px rgba(255,255,255,.45), 0 0 12px rgba(226,72,61,.5); }
 @keyframes orb-pulse { 50% { transform: scale(1.18); opacity: .75; } }
 @media (prefers-reduced-motion: reduce) { #orb-dot.building { animation: none; } }
+/* Hold-to-talk (ADR 0012): the orb lights up and pulses with mic volume (--level 0..1). */
+#orb-bar.voice-live { border-color: #ffe9a8; box-shadow: 0 4px 18px rgba(0,0,0,.45), 0 0 22px rgba(255,201,77,.55); }
+#orb-bar.voice-live #orb-dot { animation: none; transform: scale(calc(1 + var(--level, 0) * .55)); transition: transform .06s linear; background: radial-gradient(circle at 35% 35%, #fff6d6, #ffd35c 55%, #f0a91c); box-shadow: inset 0 0 8px rgba(255,255,255,.7), 0 0 calc(14px + var(--level, 0) * 26px) rgba(255,201,77,.85); }
+#orb-bar.voice-wait #orb-dot { animation: orb-pulse .6s ease-in-out infinite; }
+#orb-bar.voice-live #orb-feedback, #orb-bar.voice-wait #orb-feedback { font-size: 15px; font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { #orb-bar.voice-wait #orb-dot { animation: none; } }
 #orb-form { flex: 1; display: flex; min-width: 0; margin: 0; }
 #orb-input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: #e8e4d8; font-size: 14px; padding: 6px 2px; }
 #orb-input::placeholder { color: #9aa3ad; }

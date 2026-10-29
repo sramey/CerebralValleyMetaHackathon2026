@@ -13,6 +13,7 @@ import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, 
 import { logBuild, saveModSources } from "./createlog";
 import { artCachedUrl, artKeyForType, deriveSubject, generateSubjectArt, isScenerySubject, pickArtType } from "./art";
 import { segmentPhoto } from "./photo";
+import { createVoiceHub } from "./voice";
 
 loadEnv();
 const PORT = Number(process.env.PORT ?? 8787);
@@ -614,6 +615,9 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
   send(ws, { kind: "timing", command, ms: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) } });
 }
 
+// Hold-to-talk (ADR 0012): mic audio arrives as binary frames and is proxied to Muse Voice Transcribe.
+const voiceHub = createVoiceHub({ modNames: () => [...manifest.values()].flatMap((m) => [m.id, m.title]), send });
+
 function handleMessage(ws: WebSocket, raw: string): void {
   let msg: ClientMsg;
   try {
@@ -626,6 +630,7 @@ function handleMessage(ws: WebSocket, raw: string): void {
     send(ws, { kind: "say", text: "I only speak JSON — try the text box again." });
     return;
   }
+  if (voiceHub.handle(ws, msg)) return;
   if (msg.kind === "command") {
     handleCommand(ws, msg.text).catch((err) => {
       send(ws, { kind: "say", text: `Command failed: ${err instanceof Error ? err.message : String(err)}` });
@@ -672,9 +677,11 @@ wss.on("connection", (ws: WebSocket) => {
   send(ws, { kind: "say", text: "hello! Tell me what to build — e.g. 'add a player'." });
   ws.on("close", () => {
     pendingFinds.delete(ws);
+    voiceHub.close(ws);
   });
-  ws.on("message", (data) => {
+  ws.on("message", (data, isBinary) => {
     try {
+      if (isBinary) { voiceHub.audio(ws, data); return; }
       handleMessage(ws, String(data));
     } catch (err) {
       try {
