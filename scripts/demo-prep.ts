@@ -16,11 +16,11 @@ import type { Kind, Limits } from "../server/budget";
 import { PRESETS, restyleSheet, sheetPath } from "../server/mood";
 
 /** What a recording session needs per visitor (IP) and globally; builds cover ~20 rehearsal commands plus takes. */
-export const RECORDING_SESSION: Limits = { build: 60, image: 60, sam: 20, voice: 30 * 60 };
-export const RECORDING_GLOBAL: Limits = { build: 400, image: 300, sam: 100, voice: 120 * 60 };
-const SESSION_VAR: Record<Kind, string> = { build: "BUDGET_SESSION_BUILDS", image: "BUDGET_SESSION_IMAGES", sam: "BUDGET_SESSION_SAM", voice: "BUDGET_SESSION_VOICE_MIN" };
-const GLOBAL_VAR: Record<Kind, string> = { build: "BUDGET_GLOBAL_BUILDS", image: "BUDGET_GLOBAL_IMAGES", sam: "BUDGET_GLOBAL_SAM", voice: "BUDGET_GLOBAL_VOICE_MIN" };
-const KINDS: Kind[] = ["build", "image", "sam", "voice"];
+export const RECORDING_SESSION: Limits = { build: 60, image: 60, sam: 20, voice: 30 * 60, explain: 60 };
+export const RECORDING_GLOBAL: Limits = { build: 400, image: 300, sam: 100, voice: 120 * 60, explain: 900 };
+const SESSION_VAR: Record<Kind, string> = { build: "BUDGET_SESSION_BUILDS", image: "BUDGET_SESSION_IMAGES", sam: "BUDGET_SESSION_SAM", voice: "BUDGET_SESSION_VOICE_MIN", explain: "BUDGET_SESSION_EXPLAINS" };
+const GLOBAL_VAR: Record<Kind, string> = { build: "BUDGET_GLOBAL_BUILDS", image: "BUDGET_GLOBAL_IMAGES", sam: "BUDGET_GLOBAL_SAM", voice: "BUDGET_GLOBAL_VOICE_MIN", explain: "BUDGET_GLOBAL_EXPLAINS" };
+const KINDS: Kind[] = ["build", "image", "sam", "voice", "explain"];
 
 /** Sheets worth pre-warming for the demo, in priority order. */
 export const PREWARM_KEYS = ["ninja", "dragon", "slime", "chicken", "bird", "cat"];
