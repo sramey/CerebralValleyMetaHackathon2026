@@ -113,6 +113,22 @@ export function artCachedUrl(keyRaw: string): string | null {
 }
 
 /**
+ * The sprite-sheet prompt for one subject, exactly as Muse Image receives it (the kid-safe screen
+ * reads this string too, so it can be screened without spending an image call — bead 82z).
+ */
+export function spritePrompt(cleanSubject: string, form: { held: boolean; scenery: boolean }): string {
+  if (form.held) {
+    return `Pixel art game held item icon sheet containing ONLY the isolated object ${cleanSubject} by itself (side view, pointing right): exactly 4 variants of that single item in one row, nothing else in the image, no landscape, no ground, no sky. ONLY the standalone weapon or item itself — NO character, NO person, NO warrior, NO ninja, NO hands holding it, NO body, NO head, NO face, NO eyes, NO arms, NO legs, NO animation poses. Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, variants far apart with wide empty magenta gaps between them, variants must NOT touch or overlap each other`;
+  }
+  if (form.scenery) {
+    return `Pixel art game scenery sprite sheet containing ONLY ${cleanSubject}: exactly 4 variants of that single object in one row, nothing else in the image, no landscape, no ground, no sky, no other objects or props. Each variant is the same object with a slightly different shape or size. NOT a character, no face, no eyes, no mouth, no arms, no legs, no animation poses. Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, variants far apart with wide empty magenta gaps between them, bottoms aligned on the same baseline, variants must NOT touch or overlap each other`;
+  }
+  return `Pixel art game sprite sheet of ${cleanSubject}, side view, 4 poses in a row: ` +
+    `idle, running, running, jumping. Flat solid magenta background (#FF00FF), ` +
+    `chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
+}
+
+/**
  * Generate sprite-sheet art for a subject, or reuse the cached file.
  * Returns the public URL, or null on any failure. Never throws.
  */
@@ -139,13 +155,7 @@ export async function generateSubjectArt(subject: string, keyRaw: string, scener
     const plan = artPlanFor(key);
     const heldItem = isHeldItemType(cleanSubject) || plan === "held-item";
     const effectiveScenery = scenery || heldItem || plan === "scenery" || isScenerySubject(cleanSubject);
-    const prompt = heldItem
-      ? `Pixel art game held item icon sheet containing ONLY the isolated object ${cleanSubject} by itself (side view, pointing right): exactly 4 variants of that single item in one row, nothing else in the image, no landscape, no ground, no sky. ONLY the standalone weapon or item itself — NO character, NO person, NO warrior, NO ninja, NO hands holding it, NO body, NO head, NO face, NO eyes, NO arms, NO legs, NO animation poses. Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, variants far apart with wide empty magenta gaps between them, variants must NOT touch or overlap each other`
-      : effectiveScenery
-        ? `Pixel art game scenery sprite sheet containing ONLY ${cleanSubject}: exactly 4 variants of that single object in one row, nothing else in the image, no landscape, no ground, no sky, no other objects or props. Each variant is the same object with a slightly different shape or size. NOT a character, no face, no eyes, no mouth, no arms, no legs, no animation poses. Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, variants far apart with wide empty magenta gaps between them, bottoms aligned on the same baseline, variants must NOT touch or overlap each other`
-        : `Pixel art game sprite sheet of ${cleanSubject}, side view, 4 poses in a row: ` +
-          `idle, running, running, jumping. Flat solid magenta background (#FF00FF), ` +
-          `chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
+    const prompt = spritePrompt(cleanSubject, { held: heldItem, scenery: effectiveScenery });
     const t0 = performance.now();
     // Image prompts take the same kid-safe screen (ADR 0044): a declined subject simply gets
     // no AI art, and the mod still loads with its code-drawn shape.

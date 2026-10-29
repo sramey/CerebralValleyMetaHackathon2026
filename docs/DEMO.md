@@ -2,7 +2,7 @@
 
 Built from what the game does today. No slides: every beat is the live product, and the closing architecture beat is the in-app pipeline view (**P**). Judges stop watching at 3:00 exactly, so the plan ends at **2:50** and leaves 10 s of slack for one speed-up or one retake.
 
-**Rules (from WINPLAN):** use real uncut runs; label any speed-up on screen ("⏩ 3×"); English; every model on screen is Meta. Record Tue Nov 3. The commands below are exactly `scripts/rehearse.json`; rehearse them with `npm run rehearse -- --runs 20`. The world-awareness set (unseen phrasings) is `scripts/rehearse-aware.json`, run with `--file rehearse-aware.json`.
+**Rules (from WINPLAN):** use real uncut runs; label any speed-up on screen ("⏩ 3×"); English; every model on screen is Meta. Record Tue Nov 3. The commands below are exactly `scripts/rehearse.json`; rehearse them with `npm run rehearse -- --runs 20`. The world-awareness set (unseen phrasings) is `scripts/rehearse-aware.json`, run with `--file rehearse-aware.json`. The owner's must-pass weapon lines (flamethrower, gun, stabbing sword, exploding boss) are `scripts/rehearse-weapons.json`, and the kid-safe screen is checked over all three sets with `npm run safety:rehearse`.
 
 **Setup before recording:** fresh browser tab on the starter world (ninja + ground), orb bar visible, side panel open, microphone allowed, spend guard raised for the session (builds, images, voice), pipeline view closed. Beats run in order in one world.
 
@@ -49,6 +49,6 @@ Run `npm run demo:prep` before every take (add `--dry` to only report, `--skip-a
 - **Speed-ups:** only beats 2 and 6 contain waits worth compressing. Every speed-up gets a visible label.
 - **Risk ranking (rehearse most):** beat 5 (needs a real rejection on camera), beat 3 (three parallel builds), beat 7 (webcam lighting).
 - **Not in the cut (cut for time):** radial menu and 👍/👎 teaching, camera-free demos, stairs, snow, daytime.
-- **Check before recording:** run `npm run rehearse -- --runs 20` (demo set) and `npm run rehearse -- --runs 5 --file rehearse-aware.json` against the live server; fix flakiness only.
+- **Check before recording:** run `npm run safety:rehearse` first (SAFETY on; one Spark call per sentence, about 23, and it exits 1 if any demo line would be declined), then `npm run rehearse -- --runs 20` (demo set) and `npm run rehearse -- --runs 5 --file rehearse-aware.json` against the live server; fix flakiness only.
 
 **Recording tip:** open the game with `?nocoach` so the first-run coach does not cover the stage (or show it on purpose for the non-coder beat).
