@@ -1,0 +1,29 @@
+/* First-run coach, celebration and speaker button (bead okp). Top-left sits under the HP bar, clear of the player, #orb-bar, #hint and #ghost. */
+#coach { position: absolute; left: 14px; top: 84px; z-index: 26; width: min(340px, calc(100% - 28px)); background: rgba(16,20,27,.94); border: 1px solid rgba(255,201,77,.7); border-radius: 12px; padding: 12px 14px 14px; box-shadow: 0 8px 28px rgba(0,0,0,.55); color: #e9edf2; font: 14px/1.4 system-ui, sans-serif; animation: coach-in .25s ease-out; }
+#coach[hidden] { display: none; }
+#coach .coach-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+#coach .coach-dots { display: inline-flex; gap: 6px; }
+#coach .coach-dots i { width: 8px; height: 8px; border-radius: 50%; background: #3a4350; }
+#coach .coach-dots i.on { background: #ffc94d; }
+#coach .coach-skip { background: none; border: 0; color: #9aa3ad; font: 12px system-ui, sans-serif; cursor: pointer; text-decoration: underline; padding: 2px 4px; }
+#coach .coach-skip:hover { color: #e9edf2; }
+#coach .coach-title { font-size: 16px; font-weight: 700; color: #ffd97a; margin-bottom: 2px; }
+#coach .coach-body { color: #cfd6de; }
+#coach .coach-go { margin-top: 10px; width: 100%; padding: 9px 12px; border-radius: 8px; border: 0; background: #ffc94d; color: #171106; font: 700 14px system-ui, sans-serif; cursor: pointer; }
+#coach .coach-go:hover { background: #ffd97a; }
+#coach[data-step="2"] .coach-title::after { content: ""; display: inline-block; width: 10px; height: 10px; margin-left: 8px; border-radius: 50%; background: #ffc94d; animation: coach-pulse 1s ease-in-out infinite; }
+@keyframes coach-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+@keyframes coach-pulse { 50% { transform: scale(1.5); opacity: .5; } }
+
+#celebrate { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); z-index: 40; text-align: center; pointer-events: none; animation: celebrate-in .4s cubic-bezier(.2,1.4,.4,1), celebrate-out .6s ease-in 4.5s forwards; }
+#celebrate .celebrate-big { font: 800 28px system-ui, sans-serif; color: #fff3c4; text-shadow: 0 2px 14px rgba(255,201,77,.8), 0 2px 0 #000; }
+#celebrate .celebrate-small { margin-top: 4px; font: 600 15px system-ui, sans-serif; color: #e9edf2; text-shadow: 0 1px 6px #000; }
+#celebrate .confetti { position: absolute; left: 50%; top: 50%; width: 9px; height: 14px; border-radius: 2px; animation: confetti 1.5s ease-out forwards; }
+@keyframes celebrate-in { from { opacity: 0; transform: translate(-50%, -50%) scale(.6); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+@keyframes celebrate-out { to { opacity: 0; } }
+@keyframes confetti { 0% { transform: translate(0, 0) rotate(0); opacity: 1; } 100% { transform: translate(var(--dx), calc(var(--dy) + 140px)) rotate(var(--rot)); opacity: 0; } }
+
+#sound-btn { position: absolute; right: 14px; top: 12px; z-index: 26; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: rgba(16,20,27,.82); color: #ffd97a; border: 1px solid rgba(255,201,77,.55); cursor: pointer; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+#sound-btn:hover { background: rgba(40,46,56,.95); }
+#sound-btn.off { color: #8b95a1; border-color: rgba(139,149,161,.5); }
+@media (prefers-reduced-motion: reduce) { #coach, #celebrate { animation: none; } #coach[data-step="2"] .coach-title::after { animation: none; } }

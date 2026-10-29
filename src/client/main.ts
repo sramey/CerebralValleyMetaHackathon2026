@@ -10,6 +10,7 @@ import { initVoice } from "./voice";
 import { Fx } from "./fx";
 import { Feel } from "./feel";
 import { Sound, buildSfx } from "./sound";
+import { createOnboarding, createSoundButton, plainBuildMessage } from "./onboard";
 import { Portal } from "./portal";
 import { drawCliff, drawShape, isCliff, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
 import { celestialPos, computeDesiredCamY, depthFog, drawContactShadows, drawDistantMountains, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
@@ -112,6 +113,7 @@ const urlFlags = new URLSearchParams(location.search);
 // Synthesized WebAudio sound (bead 6d3): silent until the first gesture; ?mute starts muted, ?vol=0..1 sets master volume, M toggles mute.
 const sound = new Sound({ muted: urlFlags.has("mute"), volume: urlFlags.has("vol") ? Number(urlFlags.get("vol")) : undefined });
 const unlockSound = (): void => sound.unlock();
+const syncSoundButton = createSoundButton(sound, stageWrapEl, unlockSound);
 addEventListener("pointerdown", unlockSound);
 addEventListener("keydown", unlockSound);
 const feel = new Feel(app.stage, (amp) => fx.kick(amp), !urlFlags.has("noshake"), (ev) => sound.playEvent(ev));
@@ -829,7 +831,8 @@ requestAnimationFrame(frame);
 const keys = new Set<string>();
 addEventListener("keydown", (e) => {
   if (e.target === inputEl || e.target === orbInputEl || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-  if (e.code === "KeyM" && !e.repeat) { log(sound.toggleMute() ? "sound muted (M)" : "sound on (M)"); return; }
+  if (e.code === "KeyM" && !e.repeat) { log(sound.toggleMute() ? "sound muted (M)" : "sound on (M)"); syncSoundButton(); return; }
+  if (["KeyA", "KeyD", "KeyW", "Space", "ArrowLeft", "ArrowRight", "ArrowUp"].includes(e.code)) onboarding.event("move");
   if (e.code === "BracketLeft" || e.code === "BracketRight") sound.setVolume(sound.volume + (e.code === "BracketRight" ? 0.1 : -0.1));
   keys.add(e.code);
   syncInput();
@@ -1706,17 +1709,20 @@ function connect(): void {
     }
     if (msg.kind === "say") say(msg.text);
     else if (msg.kind === "stage") {
-      log(`${msg.stage}: ${msg.detail}`);
+      // A non-coder never sees a raw rejection or error: rejected and failed builds are reworded (onboard.ts).
+      const shown = msg.stage === "rejected" || msg.stage === "failed" ? plainBuildMessage(msg.stage, msg.detail) : msg.detail;
+      log(`${msg.stage}: ${shown}`);
+      onboarding.event(msg.stage === "done" ? "built" : "working");
       const sx = buildSfx(msg.stage);
       if (sx) sound.play(sx);
       if (msg.command) builds.stage(msg.command, msg.stage, msg.detail);
       if (builds.active() > 1) sayWhileBuilding();
-      else if (msg.stage === "rejected") { rejectedAt = performance.now(); say(msg.detail, "failed"); }
+      else if (msg.stage === "rejected") { rejectedAt = performance.now(); say(shown, "failed"); }
       else if (msg.stage === "fixing") {
         // Keep the red "why" on screen long enough to read before the fix status replaces it.
         const wait = Math.max(0, 2200 - (performance.now() - rejectedAt));
-        window.setTimeout(() => say("Fixing it: Wonder is replaying the playtest…", "building"), wait);
-      } else say(msg.detail, msg.stage === "failed" ? "failed" : "building");
+        window.setTimeout(() => say("Fixing it: building a better version…", "building"), wait);
+      } else say(shown, msg.stage === "failed" ? "failed" : "building");
       if (msg.stage === "done" || msg.stage === "failed") ghost.hideSoon();
     }
     else if (msg.kind === "playtest") {
@@ -1769,7 +1775,10 @@ function submitCommand(text: string): void {
   if (sketchIntent === "open") { sketch.open(); return; }
   if (sketchIntent === "close") { sketch.close(); say("Sketch closed — the world is running again."); return; }
   say(`Building: ${text}`, "building");
-  if (!handleLocal(text)) {
+  onboarding.event("submit");
+  const modsBefore = loader.list().length;
+  if (handleLocal(text)) { if (loader.list().length > modsBefore) onboarding.event("built"); }
+  else {
     if (ws?.readyState === WebSocket.OPEN) send({ kind: "worldState", mods: loader.list().map((m) => ({ id: m.id, values: m.values })) });
     if (ws?.readyState === WebSocket.OPEN) send({ kind: "command", text });
     else say("That needs the AI server. Start it with: npm run server — local builds above still work.", "failed");
@@ -1798,6 +1807,7 @@ document.querySelectorAll<HTMLButtonElement>("#chips button").forEach((b) => {
 
 renderMods();
 say("Say something — or type below. Try “add a player”.");
+const onboarding = createOnboarding({ submit: (t) => submitCommand(t), orbInput: orbInputEl, mount: stageWrapEl, flags: urlFlags });
 if (!worldParam) autoLoadStarterOnce();
 
 // Test hooks: deterministic stepping + text view of the world (no DOM reads needed to playtest).
