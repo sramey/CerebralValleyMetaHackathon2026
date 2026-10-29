@@ -5,7 +5,7 @@
 // /art/gen/<key>.webp.
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { canUseSpriteSheet, detectMoodCommand, entityKind, extractSpawnedEntities, isHeldItemType } from "../src/ontology";
+import { artPlanFor, canUseSpriteSheet, detectMoodCommand, extractSpawnedEntities, isHeldItemType } from "../src/ontology";
 import { loadEnv } from "./meta";
 import { logArt } from "./createlog";
 import { loadRules } from "./learn";
@@ -25,143 +25,16 @@ export function sanitizeArtKey(raw: string): string {
   return s.slice(0, 64);
 }
 
-const SCENERY_WORDS = [
-  "tree",
-  "pine",
-  "oak",
-  "birch",
-  "bush",
-  "shrub",
-  "rock",
-  "stone",
-  "boulder",
-  "flower",
-  "grass",
-  "plant",
-  "cactus",
-  "mushroom",
-  "cloud",
-  "mountain",
-  "hill",
-  "house",
-  "hut",
-  "cabin",
-  "castle",
-  "tower",
-  "fence",
-  "lamp",
-  "lantern",
-  "waterfall",
-  "lake",
-  "pond",
-  "sign",
-  "statue",
-  "crystal",
-  "coral",
-  "seaweed",
-  "stump",
-  "log",
-  "barrel",
-  "crate",
-  "chest",
-  "door",
-  "window",
-  "treehouse",
-  "sun",
-  "moon",
-  "rainbow",
-  "planet",
-  "comet",
-  "meteor",
-  "snowman",
-  "igloo",
-  "tent",
-  "campfire",
-  "volcano",
-  "island",
-  "icicle",
-  "tornado",
-  "twister",
-  "cyclone",
-  "whirlwind",
-  "vortex",
-  "hurricane",
-  "waterspout",
-  "gift",
-  "present",
-  "ornament",
-  "wreath",
-  "sleigh",
-  "stocking",
-  "candycane",
-  "gingerbread",
-  "bell",
-  "candle",
-  "pumpkin",
-  "cauldron",
-  "gravestone",
-  "tombstone",
-  "chair",
-  "table",
-  "bench",
-  "throne",
-  "altar",
-  "fountain",
-  "well",
-  "cart",
-  "wagon",
-  "car",
-  "racecar",
-  "boat",
-  "ship",
-  "airplane",
-  "anchor",
-  "flag",
-  "trophy",
-  "prize",
-  "crown",
-  "gun",
-  "pistol",
-  "rifle",
-  "blaster",
-  "shotgun",
-  "cannon",
-  "launcher",
-  "sword",
-  "blade",
-  "dagger",
-  "katana",
-  "shield",
-  "bow",
-  "crossbow",
-  "wand",
-  "staff",
-  "hammer",
-  "axe",
-  "spear",
-  "key",
-  "potion",
-  "flask",
-  "heart",
-  "jetpack",
-  "umbrella",
-  "torch",
-  "pickaxe",
-  "shovel",
-  "weapon",
-] as const;
-
+/**
+ * True when a subject or type wants static scenery art rather than animated
+ * poses. Derived from the ontology (ADR 0009, ADR 0031): props and held items
+ * are scenery, creatures and the player are not.
+ */
 export function isScenerySubject(text: string): boolean {
   const lower = text.toLowerCase().trim();
   if (!lower) return false;
-  if (entityKind(lower) === "creature" || entityKind(lower) === "player") return false;
-  if (isHeldItemType(lower)) return true;
-  if (entityKind(lower) === "prop") return true;
-  const tokens = lower.split(/[^a-z0-9]+/).filter(Boolean);
-  return tokens.some((tok) => {
-    const singular = tok.endsWith("s") && tok.length > 3 ? tok.slice(0, -1) : tok;
-    return (SCENERY_WORDS as readonly string[]).includes(tok) || (SCENERY_WORDS as readonly string[]).includes(singular);
-  });
+  const plan = artPlanFor(lower);
+  return plan === "scenery" || plan === "held-item";
 }
 
 /** Clear cached sprite sheet in memory and on disk so a bad art sheet can be regenerated or replaced. */
@@ -181,138 +54,36 @@ export function clearCachedArt(keyRaw: string): boolean {
   }
 }
 
-/** Entity types that never need generated art (terrain, level geometry, effects, projectiles, primitives, built-in creatures). */
-const SKIP_TYPES = new Set([
-  "player",
-  "ground",
-  "platform",
-  "platforms",
-  "platform-moving",
-  "moving-platform",
-  "stair",
-  "stairs",
-  "staircase",
-  "step",
-  "steps",
-  "ramp",
-  "ramps",
-  "ladder",
-  "ladders",
-  "ledge",
-  "ledges",
-  "wall",
-  "walls",
-  "block",
-  "blocks",
-  "brick",
-  "bricks",
-  "pillar",
-  "pillars",
-  "column",
-  "floor",
-  "ceiling",
-  "slope",
-  "bridge",
-  "cliff",
-  "terrain",
-  "surface",
-  "tile",
-  "road",
-  "path",
-  "soil",
-  "dirt",
-  "mud",
-  "slab",
-  "coin",
-  "coins",
-  "enemy",
-  "enemies",
-  "rain",
-  "raindrop",
-  "raindrops",
-  "projectile",
-  "projectiles",
-  "bullet",
-  "bullets",
-  "shot",
-  "shots",
-  "arrow",
-  "arrows",
-  "fireball",
-  "bolt",
-  "beam",
-  "laser",
-  "plasma",
-  "missile",
-  "rocket",
-  "shuriken",
-  "pellet",
-  "fire",
-  "slime",
-  "gel",
-  "background",
-  // weather and effects are engine fx, never sprite sheets (ADR 0015 & ADR 0023)
-  "fog",
-  "mist",
-  "haze",
-  "smoke",
-  "snow",
-  "snowflake",
-  "snowflakes",
-  "blizzard",
-  "explosion",
-  "explosions",
-  "blast",
-  "shockwave",
-  "spark",
-  "sparks",
-  "ember",
-  "embers",
-  "lightning",
-  "glow",
-  "firefly",
-  "fireflies",
-  "light",
-  "lights",
-  "garland",
-  "aurora",
-  "particle",
-  "particles",
-  "trail",
-  // primitives / shapes (ADR 0015 & ADR 0023)
-  "ball",
-  "orb",
-  "bubble",
-  "sphere",
-  "circle",
-  "ring",
-  "halo",
-  "hoop",
-  "spike",
-  "spikes",
-  "thorn",
-  "triangle",
-  "cone",
-  "wedge",
-  "diamond",
-  "gem",
-  "star",
-  "pill",
-  "capsule",
-  "bomb",
-]);
-
-// Purge any corrupted terrain/geometry sprite sheets on startup (x9i, cjj, 98v).
-for (const forbidden of ["ground", "stair", "stairs", "step", "wall", "walls", "platform", "block", "brick"]) {
-  clearCachedArt(forbidden);
-}
-
+/**
+ * True when the ontology says this type is drawn procedurally in code instead
+ * of getting generated sprite art (ADR 0015, ADR 0023, ADR 0031). Terrain and
+ * static structure, effects, projectiles and shapes are code-drawn; the player's
+ * sheet ships with the engine, so it is never generated either.
+ */
 export function isSkippedType(type: string): boolean {
   const t = type.toLowerCase().trim();
   if (!t) return true;
-  if (SKIP_TYPES.has(t)) return true;
-  if (!canUseSpriteSheet(t)) return true;
-  return t.includes("string") || t.includes("tail") || t.includes("particle");
+  const plan = artPlanFor(t);
+  if (plan === "none") return true;
+  return plan === "sheet" && !canUseSpriteSheet(t);
+}
+
+/**
+ * Legacy sheet keys written by pre-ontology code (x9i, cjj, 98v). New bad keys
+ * cannot appear: artKeyForType derives from the ontology, so terrain and static
+ * geometry never produce a key. This is a one-time cleanup of files on disk and
+ * is called explicitly at server startup, never as an import side effect.
+ * Exported so tests can prove none of them is valid art.
+ */
+export const LEGACY_PURGE_KEYS: readonly string[] = ["ground", "stair", "stairs", "step", "wall", "walls", "platform", "block", "brick"];
+
+/** Delete legacy corrupted terrain sheets. Returns the keys that existed on disk. */
+export function purgeLegacyArt(): string[] {
+  const purged: string[] = [];
+  for (const key of LEGACY_PURGE_KEYS) {
+    if (clearCachedArt(key)) purged.push(key);
+  }
+  return purged;
 }
 
 export function artUrlForKey(key: string): string {
@@ -363,8 +134,10 @@ export async function generateSubjectArt(subject: string, keyRaw: string, scener
     const apiKey = loadEnv();
     if (!apiKey) return null;
     const cleanSubject = subject.trim() || key;
-    const heldItem = isHeldItemType(cleanSubject) || isHeldItemType(key);
-    const effectiveScenery = scenery || heldItem || isScenerySubject(cleanSubject) || isScenerySubject(key);
+    // The ontology names the art form (ADR 0031); the router's `scenery` hint still wins.
+    const plan = artPlanFor(key);
+    const heldItem = isHeldItemType(cleanSubject) || plan === "held-item";
+    const effectiveScenery = scenery || heldItem || plan === "scenery" || isScenerySubject(cleanSubject);
     const prompt = heldItem
       ? `Pixel art game held item icon sheet containing ONLY the isolated object ${cleanSubject} by itself (side view, pointing right): exactly 4 variants of that single item in one row, nothing else in the image, no landscape, no ground, no sky. ONLY the standalone weapon or item itself — NO character, NO person, NO warrior, NO ninja, NO hands holding it, NO body, NO head, NO face, NO eyes, NO arms, NO legs, NO animation poses. Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, variants far apart with wide empty magenta gaps between them, variants must NOT touch or overlap each other`
       : effectiveScenery
@@ -456,10 +229,10 @@ export function deriveSubject(command: string, fallbackType: string): string {
  */
 export function artKeyForType(type: string): string {
   const lower = type.toLowerCase().trim();
-  if (!lower || isSkippedType(lower) || !canUseSpriteSheet(lower)) return "";
+  if (!lower || isSkippedType(lower)) return "";
   const parts = lower.split("-").filter(Boolean);
   const base = parts.length > 1 ? (parts[parts.length - 1] ?? lower) : lower;
   const key = sanitizeArtKey(base || lower);
-  if (!key || isSkippedType(key) || !canUseSpriteSheet(key)) return "";
+  if (!key || isSkippedType(key)) return "";
   return key;
 }
