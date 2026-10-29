@@ -1,4 +1,4 @@
-# 0023. First-class entity ontology and deterministic theme routing
+# 0024. First-class entity ontology and deterministic theme routing
 
 - **Status:** Draft
 - **Date:** 2026-10-29

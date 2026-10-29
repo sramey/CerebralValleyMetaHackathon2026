@@ -19,14 +19,14 @@ export const PLAYTEST = {
   bigRatio: 1.25,
 } as const;
 
-const L = 1, R = 2, J = 4, S = 8;
+const L = 1, R = 2, J = 4, S = 8, U = 16;
 
 export function packInput(i: InputState): number {
-  return (i.left ? L : 0) | (i.right ? R : 0) | (i.jump ? J : 0) | (i.shoot ? S : 0);
+  return (i.left ? L : 0) | (i.right ? R : 0) | (i.jump ? J : 0) | (i.shoot ? S : 0) | (i.use ? U : 0);
 }
 
 export function unpackInput(m: number): InputState {
-  return { left: (m & L) !== 0, right: (m & R) !== 0, jump: (m & J) !== 0, shoot: (m & S) !== 0 };
+  return { left: (m & L) !== 0, right: (m & R) !== 0, jump: (m & J) !== 0, shoot: (m & S) !== 0, use: (m & U) !== 0 };
 }
 
 /** Run-length encode per-frame input masks as [mask, count, mask, count, ...]. */

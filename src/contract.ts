@@ -7,9 +7,11 @@ export interface InputState {
   right: boolean;
   jump: boolean;
   shoot: boolean;
+  /** Primary item/weapon action or use key (e.g. F / E / X / J). */
+  use?: boolean;
 }
 
-export const emptyInput = (): InputState => ({ left: false, right: false, jump: false, shoot: false });
+export const emptyInput = (): InputState => ({ left: false, right: false, jump: false, shoot: false, use: false });
 
 export type EntityKind = "terrain" | "effect" | "projectile" | "shape" | "prop" | "creature" | "player";
 
@@ -88,7 +90,7 @@ export interface HudDef {
   /** Short label ("HP", "Coins"). Banners use text instead. */
   label?: string;
   /** bar/hearts: current amount. stat: the number to show. */
-  value?: number;
+  value?: number | string;
   /** bar/hearts: amount when full. stat: optional, adds a "3/20" readout. */
   max?: number;
   /** stat unit suffix ("s", "px/s"). */
@@ -116,6 +118,15 @@ export interface HudWidget extends HudDef {
   remaining?: number;
 }
 
+export interface ProjectileDamageOptions {
+  damage?: number;
+  burstColor?: number;
+  burstCount?: number;
+  despawnOnHit?: boolean;
+  despawnOnSolid?: boolean;
+  filter?: (target: Entity) => boolean;
+}
+
 /** API handed to a mod in setup(). Everything a mod creates is owned by it
  *  and removed on dispose(). Mods get no DOM, network, eval or engine internals. */
 export interface ModApi {
@@ -141,6 +152,8 @@ export interface ModApi {
   hud(id: string): HudWidget | undefined;
   /** All widgets in creation order (read-only view). */
   hudList(): readonly HudWidget[];
+  /** Optional helper: check projectile collision against hostile entities/solids and damage on hit. ADR 0023. */
+  damageHit?: (projectile: Entity, options?: ProjectileDamageOptions) => Entity | undefined;
 }
 
 export type KnobValue = number | string | boolean;

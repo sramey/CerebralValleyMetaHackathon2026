@@ -54,3 +54,6 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0017](0017-world-mood-restyle.md) | World mood restyle: Spark mood spec, palette swap, Muse Image edit from original sheets | Draft |
 | [0021](0021-in-app-pipeline-view.md) | In-app live pipeline view replaces the architecture slide | Draft |
 | [0022](0022-code-stream-build-theater.md) | Stream Wonder code live: build theater behind the stage + pipeline pane | Draft |
+| [0023](0023-reliable-huge-beat.md) | Reliable "make me huge" beat: clearance 72px, learner skips size rejections | Draft |
+| [0024](0024-entity-ontology-and-theme-routing.md) | Entity ontology and theme routing | Draft |
+| [0025](0025-usable-item-keybinding-and-damage-pattern.md) | Usable item key (F/E/X/J) and reusable enemy-damage helper | Draft |
