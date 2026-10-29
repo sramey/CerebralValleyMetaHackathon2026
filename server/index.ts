@@ -38,6 +38,8 @@ import { createVoiceHub } from "./voice";
 import { appendTester, sanitizeTester } from "./testers";
 import { runSketchBuild } from "./sketch";
 import { clampKnobValue, gateMessage } from "./validate";
+import { screenRequest, lateVerdict } from "./safety";
+import type { PendingVerdict } from "./safety";
 
 loadEnv();
 const PORT = Number(process.env.PORT ?? 8787);
@@ -53,7 +55,9 @@ interface ManifestRec {
 }
 
 // Each connection has its own world (ADR 0014): a public server must never mix visitors' mods.
-interface Session { /** Family-test tester index and session id once the page said ?tester=N (ADR 0034). */ tester?: { n: number; sid: string }; manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string>; mood?: MoodSpec; moodMods?: Set<string>; /** Level mods a sketch replaced, by the sketch mod id, so undo can put them back (bug j2t). */ levelStash?: Map<string, ManifestRec[]>; restyled?: Record<string, string>; /** Time-travel steps and the command that probably explains the next one (ADR 0041). */ timeline?: Timeline; lastCommand?: { text: string; at: number }; tlTimer?: ReturnType<typeof setTimeout> }
+/** A screen verdict the build path may still read, tagged with the command it belongs to (ADR 0044). */
+interface PendingScreen { command: string; verdict: PendingVerdict }
+interface Session { /** Family-test tester index and session id once the page said ?tester=N (ADR 0034). */ tester?: { n: number; sid: string }; manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string>; mood?: MoodSpec; moodMods?: Set<string>; /** Level mods a sketch replaced, by the sketch mod id, so undo can put them back (bug j2t). */ levelStash?: Map<string, ManifestRec[]>; restyled?: Record<string, string>; /** Time-travel steps and the command that probably explains the next one (ADR 0041). */ timeline?: Timeline; lastCommand?: { text: string; at: number }; tlTimer?: ReturnType<typeof setTimeout>; /** Kid-safe verdict the screen did not wait for (ADR 0044). */ pendingSafety?: PendingScreen }
 const sessions = new WeakMap<WebSocket, Session>();
 function sess(ws: WebSocket): Session {
   let s = sessions.get(ws);
@@ -425,6 +429,17 @@ async function handlePhotoBringLocal(ws: WebSocket, msg: Extract<ClientMsg, { ki
 async function handleSketchMessage(ws: WebSocket, msg: Extract<ClientMsg, { kind: "sketch" }>): Promise<void> {
   const t0 = performance.now();
   const command = "✏️ sketched level";
+  // A sketch prompt is a build request too, so it takes the same kid-safe screen (ADR 0044).
+  const ask = typeof msg.prompt === "string" ? msg.prompt.trim() : "";
+  if (ask) {
+    const safety = await screenRequest(ask);
+    if (safety.unsafe) {
+      console.log(`[safety] sketch declined category=${safety.category ?? "other"} by=${safety.by} in ${safety.ms} ms`);
+      send(ws, { kind: "say", text: safety.reply });
+      send(ws, { kind: "timing", command: `[safety:${safety.category ?? "other"}]`, ms: { route: 0, write: 0, compile: 0, verify: 0, total: safety.ms } });
+      return;
+    }
+  }
   if (!spend(ws, "build")) return;
   const manifest = sess(ws).manifest;
   await adoptingOf.get(ws);
@@ -530,6 +545,20 @@ async function trySplitCompound(command: string): Promise<string[] | null> {
 }
 
 async function handleCommand(ws: WebSocket, text: string): Promise<void> {
+  // Kid-safe screen first (ADR 0044): a declined request never reaches the router, so it can
+  // never spend a Wonder build or become a mod. The reply is one kind sentence with an
+  // alternative; the player's words are not logged.
+  const safety = await screenRequest(text);
+  if (safety.unsafe) {
+    console.log(`[safety] declined category=${safety.category ?? "other"} by=${safety.by} in ${safety.ms} ms`);
+    send(ws, { kind: "say", text: safety.reply });
+    const ms = { route: 0, write: 0, compile: 0, verify: 0, total: safety.ms };
+    send(ws, { kind: "timing", command: `[safety:${safety.category ?? "other"}]`, ms });
+    logBuild({ command: `[safety:${safety.category ?? "other"}]`, route: "new", outcome: "say", timings: ms, fixAttempted: false });
+    return;
+  }
+  // A verdict that missed the deadline is read before the build writes anything (step 3 below).
+  sess(ws).pendingSafety = safety.pending ? { command: text.slice(0, 400), verdict: safety.pending } : undefined;
   // Compound split: only for build-shaped commands that join requests with
   // "," or " and ". Anything else takes the normal single-command path.
   if (/^\s*(add|make|create|spawn|build)\b/i.test(text) && (text.includes(",") || text.toLowerCase().includes(" and "))) {
@@ -736,6 +765,20 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
 
   // 3. new / edit: Wonder writes one mod. An edit whose target is gone falls
   // back to new.
+  // Second chance for the kid-safe screen (ADR 0044): a Spark verdict that missed the screen's
+  // deadline is read here, for free, before Wonder is asked to write anything.
+  const late = lateVerdict(
+    sess(ws).pendingSafety?.command === command ? sess(ws).pendingSafety?.verdict : undefined,
+  );
+  sess(ws).pendingSafety = undefined;
+  if (late?.unsafe) {
+    console.log(`[safety] declined late category=${late.category ?? "other"} in ${late.ms} ms`);
+    send(ws, { kind: "say", text: late.reply });
+    const safetyMs = { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) };
+    send(ws, { kind: "timing", command: `[safety:${late.category ?? "other"}]`, ms: safetyMs });
+    logBuild({ command: `[safety:${late.category ?? "other"}]`, route: "new", outcome: "say", timings: safetyMs, fixAttempted: false });
+    return;
+  }
   let editRec: ManifestRec | undefined;
   if (route.action === "edit") {
     editRec = route.target ? manifest.get(route.target) : undefined;

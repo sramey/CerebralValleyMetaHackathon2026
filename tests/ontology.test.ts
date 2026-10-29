@@ -81,9 +81,10 @@ describe("entity ontology & art invariants (x9i, 98v, olm)", () => {
     const prompts: string[] = [];
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (_url: string, init: { body: string }) => {
-        prompts.push(JSON.parse(init.body).prompt);
-        return { ok: false, status: 500, json: async () => ({}) };
+      vi.fn(async (url: string, init: { body: string }) => {
+        // The kid-safe screen (ADR 0044) also calls the Meta API; only image generations are prompts here.
+        if (String(url).includes("/images/generations")) prompts.push(JSON.parse(init.body).prompt);
+        return { ok: false, status: 500, json: async () => ({}), text: async () => "" };
       }),
     );
     await generateSubjectArt("gun", "gun", false);

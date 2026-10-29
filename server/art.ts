@@ -9,6 +9,7 @@ import { artPlanFor, canUseSpriteSheet, detectMoodCommand, extractSpawnedEntitie
 import { loadEnv } from "./meta";
 import { logArt } from "./createlog";
 import { loadRules } from "./learn";
+import { screenArtPrompt } from "./safety";
 
 const IMAGE_MODEL = "muse-image-1.0";
 const IMAGE_URL = "https://api.meta.ai/v1/images/generations";
@@ -146,6 +147,13 @@ export async function generateSubjectArt(subject: string, keyRaw: string, scener
           `idle, running, running, jumping. Flat solid magenta background (#FF00FF), ` +
           `chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
     const t0 = performance.now();
+    // Image prompts take the same kid-safe screen (ADR 0044): a declined subject simply gets
+    // no AI art, and the mod still loads with its code-drawn shape.
+    const screen = await screenArtPrompt(prompt);
+    if (screen.unsafe) {
+      console.log(`[safety] art declined category=${screen.category ?? "other"} by=${screen.by} in ${screen.ms} ms`);
+      return null;
+    }
     const res = await fetch(IMAGE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
