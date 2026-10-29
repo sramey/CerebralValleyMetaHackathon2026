@@ -6,7 +6,7 @@
 Rubric: Impact 30 · Meta tooling 25 · Depth 20 · Demo 25. Category risk: "AI makes a game" is crowded. We win on what others won't have:
 1. **You talk, it builds while you play.** Voice is the core claim and isn't built yet.
 2. **It can't break.** Every change is playtested by agents before it goes live, and *you can see it happen* (ghost playtest, rejected-then-fixed). This is the differentiator.
-3. **Your real stuff walks in.** Camera import (SAM 3.1). Already works; this is the viral clip.
+3. **Your real stuff walks in.** Camera import (SAM 3.1). Already works; this is the viral clip. Film-ready dialog 10-29 (ADR 0048): fits 1920x854 and 1280x720 with the stream on, upload path checked on a drawn mug fixture — shoot the clip from the upload path if a webcam misbehaves on the day.
 4. **Five Meta models doing real jobs, live:** Spark routes, Wonder writes and fixes, Image draws, SAM cuts out, Transcribe listens.
 5. **Impact evidence:** non-coders building games in minutes, with numbers (build success rate, time to first game).
 

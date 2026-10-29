@@ -76,26 +76,32 @@
     </div>
     <div id="camera-modal" hidden>
       <div class="camera-card">
-        <video id="camera-video" autoplay playsinline></video>
-        <p id="camera-nocam" hidden>No camera available — upload a photo instead.</p>
+        <h2 id="camera-title">Bring an object in</h2>
+        <div id="camera-stage">
+          <video id="camera-video" autoplay playsinline muted hidden></video>
+          <div id="camera-preview-wrap" hidden>
+            <canvas id="camera-preview"></canvas>
+            <div id="camera-box" hidden></div>
+            <div id="camera-dot" hidden></div>
+          </div>
+          <p id="camera-placeholder">Upload a photo of something you are holding — no camera needed.</p>
+        </div>
         <input id="camera-label" type="text" placeholder="What are you holding? e.g. coffee mug" autocomplete="off" />
-        <label class="camera-pixel"><input id="camera-pixel" type="checkbox" checked /> Pixel-art style</label>
-        <label class="camera-wand-sens">Sensitivity <input id="wand-sens" type="range" min="18" max="60" value="40" /></label>
+        <div class="camera-opts">
+          <label class="camera-pixel"><input id="camera-pixel" type="checkbox" checked /> Pixel-art style</label>
+          <label class="camera-wand-sens">Sensitivity <input id="wand-sens" type="range" min="18" max="60" value="40" /></label>
+        </div>
         <div class="camera-actions">
-          <button id="camera-capture" type="button">Capture</button>
-          <button id="camera-upload-btn" type="button">Upload a photo instead</button>
+          <button id="camera-upload-btn" type="button" class="primary">Upload a photo</button>
           <input id="camera-upload" type="file" accept="image/*" hidden />
+          <button id="camera-start" type="button">Use camera</button>
+          <button id="camera-capture" type="button" hidden>Capture</button>
+          <button id="camera-bg" type="button" hidden title="Capture the empty scene first: the cleanest cutout">Empty background</button>
           <button id="camera-find" type="button" hidden>Find it</button>
-          <button id="camera-bg" type="button" hidden>1) Capture empty background</button>
           <button id="camera-cancel" type="button">Cancel</button>
         </div>
-        <div id="camera-preview-wrap" hidden>
-          <canvas id="camera-preview"></canvas>
-          <div id="camera-box" hidden></div>
-          <div id="camera-dot" hidden></div>
-        </div>
-        <p id="camera-status" hidden></p>
-        <button id="camera-confirm" type="button" hidden>Bring it into the game</button>
+        <p id="camera-status"></p>
+        <button id="camera-confirm" type="button" disabled>Bring it into the game</button>
       </div>
     </div>
     <div id="feedback-modal" hidden>

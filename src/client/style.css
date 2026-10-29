@@ -109,26 +109,34 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #
 .knob output { font-family: Consolas, monospace; text-align: right; }
 #log { font: 11px Consolas, monospace; color: #9aa3ad; padding-left: 18px; display: grid; gap: 5px; }
 #camera-btn, #share-btn { width: 100%; margin-top: 8px; background: #232c3b; color: #e8e4d8; border: 1px solid #3a4454; padding: 10px 12px; font-weight: 700; cursor: pointer; }
-#camera-modal { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; background: rgba(3,5,8,.78); padding: 16px; }
+/* Film-ready camera dialog (bead jd1, ADR 0048): every row is a fixed height and the
+   stage is reserved before any stream exists, so the webcam starting can never push the
+   label or the buttons. Heights come from src/client/camera-dialog.ts as custom
+   properties; the fallbacks only matter before the first script run. */
+#camera-modal { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; background: rgba(3,5,8,.78); padding: 16px; box-sizing: border-box; }
 #camera-modal[hidden] { display: none; }
-.camera-card { width: min(560px, 100%); max-height: 92vh; overflow-y: auto; background: #10141b; border: 1px solid #2a3342; padding: 16px; display: grid; gap: 10px; }
-#camera-video { width: 100%; max-height: 46vh; background: #05070a; object-fit: contain; }
-#camera-nocam { margin: 0; font-size: 13px; color: #c9c2ae; }
-#camera-label { width: 100%; background: #05070a; border: 1px solid #3a4454; color: #fff; padding: 10px; font-size: 14px; }
-.camera-pixel { display: flex; gap: 8px; align-items: center; font-size: 13px; color: #c9c2ae; cursor: pointer; }
-.camera-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.camera-actions button, #camera-confirm { background: #ffc94d; color: #171106; border: 0; padding: 10px 12px; font-weight: 700; cursor: pointer; }
-#camera-cancel { background: #232c3b !important; color: #e8e4d8 !important; }
-#camera-preview-wrap { position: relative; justify-self: center; max-width: 100%; line-height: 0; }
-#camera-preview { display: block; max-width: 100%; max-height: 40vh; width: auto; height: auto; background: #05070a; cursor: crosshair; }
-#camera-bg { background: #232c3b; color: #e8e4d8; border: 1px solid #3a4454; }
+.camera-card { width: min(560px, 100%); max-height: var(--cam-max-h, calc(100vh - 32px)); box-sizing: border-box; overflow: hidden; background: #10141b; border: 1px solid #2a3342; padding: var(--cam-pad, 16px); display: grid; gap: var(--cam-gap, 10px); grid-template-rows: var(--cam-row-head, 20px) var(--cam-row-stage, 240px) var(--cam-row-label, 42px) var(--cam-row-options, 22px) var(--cam-row-actions, 40px) var(--cam-row-status, 38px) var(--cam-row-confirm, 40px); }
+#camera-title { margin: 0; font-size: 13px; line-height: 20px; height: 20px; font-weight: 700; color: #e8e4d8; }
+#camera-stage { position: relative; height: var(--cam-row-stage, 240px); box-sizing: border-box; border: 1px solid #2a3342; background: #05070a; display: grid; place-items: center; overflow: hidden; }
+#camera-stage > * { grid-area: 1 / 1; }
+#camera-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #05070a; }
+#camera-placeholder { margin: 0; padding: 0 18px; max-width: 100%; box-sizing: border-box; text-align: center; font-size: 13px; line-height: 1.4; color: #8b97a8; }
+#camera-preview-wrap { position: relative; line-height: 0; }
+#camera-preview { display: block; background: #05070a; cursor: crosshair; image-rendering: pixelated; }
+#camera-label { width: 100%; height: 100%; box-sizing: border-box; background: #05070a; border: 1px solid #3a4454; color: #fff; padding: 0 10px; font-size: 14px; }
+.camera-opts { display: flex; align-items: center; gap: 16px; height: 100%; }
+.camera-pixel { display: flex; gap: 8px; align-items: center; font-size: 13px; color: #c9c2ae; cursor: pointer; white-space: nowrap; }
+.camera-wand-sens { display: flex; gap: 8px; align-items: center; font-size: 13px; color: #c9c2ae; min-width: 0; flex: 1; }
+.camera-wand-sens input { flex: 1; min-width: 0; }
+.camera-actions { display: flex; flex-wrap: nowrap; align-items: stretch; gap: 8px; height: 100%; }
+.camera-actions button { flex: 0 1 auto; min-width: 0; height: 100%; background: #232c3b; color: #e8e4d8; border: 1px solid #3a4454; padding: 0 10px; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.camera-actions button.primary { background: #ffc94d; color: #171106; border-color: #ffc94d; }
+#camera-status { margin: 0; height: 100%; overflow: hidden; font-size: 13px; line-height: 19px; color: #c9c2ae; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 #camera-box { position: absolute; border: 2px solid #3fd06a; background: rgba(63, 208, 106, .18); box-sizing: border-box; pointer-events: none; }
 #camera-dot { position: absolute; width: 14px; height: 14px; border: 2px solid #3fd06a; border-radius: 50%; background: rgba(63, 208, 106, .25); box-sizing: border-box; transform: translate(-50%, -50%); pointer-events: none; }
-#camera-status { margin: 0; font-size: 13px; color: #c9c2ae; line-height: 1.4; }
-#camera-confirm { width: 100%; }
-#camera-confirm:disabled { opacity: .45; cursor: not-allowed; }
-.camera-wand-sens { display: flex; gap: 8px; align-items: center; font-size: 13px; color: #c9c2ae; }
-.camera-wand-sens input { flex: 1; }
+#camera-confirm { width: 100%; height: 100%; background: #232c3b; color: #e8e4d8; border: 1px solid #3a4454; font-weight: 700; cursor: pointer; }
+#camera-confirm.primary { background: #ffc94d; color: #171106; border-color: #ffc94d; }
+#camera-confirm:disabled { opacity: .3; cursor: not-allowed; }
 #app { transition: grid-template-columns .35s ease; }
 #rail { transition: transform .35s ease, visibility .35s ease; }
 #app.drawer-hidden { grid-template-columns: 1fr 0; }
