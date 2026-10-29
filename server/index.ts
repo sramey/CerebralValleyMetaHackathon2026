@@ -82,6 +82,8 @@ const BUILTINS: BuiltinDef[] = [
   { alias: "fire arrow", file: "fire-arrow.ts", id: "fire-arrow" },
   { alias: "fire arrows", file: "fire-arrow.ts", id: "fire-arrow" },
   { alias: "chicken", file: "chicken.ts", id: "chicken" },
+  { alias: "basketball", file: "basketball.ts", id: "basketball" },
+  { alias: "hoop", file: "basketball.ts", id: "basketball" },
 ];
 
 // "starter world" alias: player then ground, delivered sequentially.

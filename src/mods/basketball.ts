@@ -1,14 +1,21 @@
 // Basketball & hoop (bead z1d). One ball you can pick up and one grounded goal, both plain mods'
 // business: the engine only knows how to DRAW a hoop and a ball (src/client/shapes.ts) from the
-// shared geometry in src/sim/hoop.ts. Press the action key (B / X / J / F) near the ball to pick it
-// up, press it again to shoot a real arc into the rim.
-import { SIM } from "../contract";
+// geometry in src/sim/hoop.ts. Press the action key (B / X / J / F) near the ball to pick it up,
+// press it again to shoot a real arc into the rim.
+//
+// A built-in mod source must compile with NO imports (server/compile.ts only transforms, it does not
+// bundle), so the goal's ratios are repeated here. tests/basketball.test.ts pins them to HOOP and
+// rimOf() in src/sim/hoop.ts, which is what the renderer draws with.
 import type { ModDefinition } from "../contract";
-import { HOOP_SIZE, hoopBox, rimOf } from "../sim/hoop";
 
-/** The ground surface the prompt gives every mod (y = 400). */
+/** The ground surface the prompt gives every mod (y = 400), and the sim's gravity (1500) at dt 1/60. */
 const GROUND_Y = 400;
+const GRAVITY = 1500;
+const DT = 1 / 60;
 const BALL = 22;
+
+/** The goal box and where its rim mouth is, as fractions of that box (mirrors HOOP). */
+export const BASKETBALL_GEOMETRY = { w: 100, h: 200, rimXFrac: 0.18, rimYFrac: 0.52, rimWFrac: 0.34 } as const;
 
 export const basketballMod: ModDefinition = {
   id: "basketball",
@@ -24,20 +31,22 @@ export const basketballMod: ModDefinition = {
     const arc = Number(knobs.arc);
     const assist = Math.min(1, Math.max(0, Number(knobs.assist)));
     const bounce = Math.min(0.9, Math.max(0, Number(knobs.bounce)));
+    const G = BASKETBALL_GEOMETRY;
 
     const player = api.player();
     const fromX = player ? player.x : 120;
     // Start the ball at the player's front foot, inside pickup reach: the first press works.
     const restX = (player ? player.x + player.w + 6 : 220);
-    const box = hoopBox(fromX + distance, GROUND_Y);
+    const box = { x: fromX + distance, y: GROUND_Y - G.h, w: G.w, h: G.h };
+    const rim = { x: box.x + box.w * G.rimXFrac, y: box.y + box.h * G.rimYFrac, w: box.w * G.rimWFrac };
 
-    const hoop = api.spawn({
+    api.spawn({
       type: "basketball-hoop",
       x: box.x, y: box.y, w: box.w, h: box.h,
       color: 0xe8702a,
       solid: false,
       gravityScale: 0,
-      data: { prop: true, rimY: rimOf(box).y },
+      data: { prop: true, rimY: rim.y },
     });
     const ball = api.spawn({
       type: "basketball",
@@ -73,8 +82,6 @@ export const basketballMod: ModDefinition = {
     setScoreHud();
     setBallHud();
 
-    const rim = rimOf(hoop);
-
     /** Land the ball's centre on the rim after a whole number of frames (deterministic, no aiming luck). */
     const aimedThrow = (): { vx: number; vy: number } => {
       const bx = ball.x + ball.w / 2;
@@ -83,9 +90,9 @@ export const basketballMod: ModDefinition = {
       const dy = rim.y - by;
       // The sim integrates vy then y (semi-implicit Euler), so a T-second flight drops
       // 0.5*g*T*(T + dt), not 0.5*g*T*T. Solving for that lands exactly on the rim.
-      const frames = Math.max(18, Math.round(arc / SIM.dt));
-      const T = frames * SIM.dt;
-      return { vx: dx / T, vy: (dy - 0.5 * SIM.gravity * T * (T + SIM.dt)) / T };
+      const frames = Math.max(18, Math.round(arc / DT));
+      const T = frames * DT;
+      return { vx: dx / T, vy: (dy - 0.5 * GRAVITY * T * (T + DT)) / T };
     };
 
     const throwBall = (): void => {
@@ -203,7 +210,7 @@ export const basketballMod: ModDefinition = {
     const hoop = t.api.byType("basketball-hoop")[0];
     t.expect(!!hoop, "setup spawns one hoop");
     t.expect(t.api.byType("basketball").length === 1, "setup spawns one ball");
-    t.expect(!!hoop && hoop.w === HOOP_SIZE.w && hoop.h === HOOP_SIZE.h, "hoop uses the shared goal box");
+    t.expect(!!hoop && hoop.w === BASKETBALL_GEOMETRY.w && hoop.h === BASKETBALL_GEOMETRY.h, "hoop uses the shared goal box");
 
     // The ball settles on the ground, round and unflattened (the sim keeps its box square).
     t.step(10);

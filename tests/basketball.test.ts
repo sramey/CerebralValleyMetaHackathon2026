@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import type { Entity } from "../src/contract";
 import { World } from "../src/sim/world";
 import { ModLoader, runModTest } from "../src/sim/loader";
@@ -7,7 +8,8 @@ import { drawHoop, drawShape, kindOf } from "../src/client/shapes";
 import { inputFromKeys } from "../src/client/keys";
 import { resolveItemMod } from "../src/client/items";
 import { artPlanFor, entityKind } from "../src/ontology";
-import basketballMod from "../src/mods/basketball";
+import { compileMod } from "../server/compile";
+import basketballMod, { BASKETBALL_GEOMETRY } from "../src/mods/basketball";
 
 /** A Graphics stand-in that records every draw call, so a visual can be asserted without a browser. */
 function recorder(): { g: unknown; calls: { op: string; args: unknown[] }[] } {
@@ -44,6 +46,26 @@ describe("basketball & hoop (bead z1d)", () => {
     expect(rim.y).toBeLessThan(box.y + box.h); // above the ground, inside the structure
     expect(rim.y).toBeGreaterThan(box.y); // below the board's top
     expect(rim.w).toBeGreaterThan(22); // a basketball (22 px) fits through the mouth
+  });
+
+  it("pins the mod's own goal numbers to the engine's, so drawn and scored never drift", () => {
+    expect(BASKETBALL_GEOMETRY.w).toBe(HOOP_SIZE.w);
+    expect(BASKETBALL_GEOMETRY.h).toBe(HOOP_SIZE.h);
+    for (const x of [0, 120, 360, 900]) {
+      const box = hoopBox(x, 400);
+      const rim = rimOf(box);
+      expect(rim.x).toBeCloseTo(box.x + box.w * BASKETBALL_GEOMETRY.rimXFrac, 6);
+      expect(rim.y).toBeCloseTo(box.y + box.h * BASKETBALL_GEOMETRY.rimYFrac, 6);
+      expect(rim.w).toBeCloseTo(box.w * BASKETBALL_GEOMETRY.rimWFrac, 6);
+    }
+  });
+
+  it("compiles on the server as-is: a built-in mod source carries no value imports", () => {
+    const src = readFileSync(new URL("../src/mods/basketball.ts", import.meta.url), "utf8");
+    expect(src.match(/^import\s+(?!type\b)[^;]+;/gm) ?? []).toEqual([]);
+    const c = compileMod(src); // the server's transform, used for share links and playtests
+    expect(c.errors).toEqual([]);
+    expect(c.ok).toBe(true);
   });
 
   it("treats a basketball goal as a goal, and other sports' goals as themselves", () => {
