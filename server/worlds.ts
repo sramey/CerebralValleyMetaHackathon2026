@@ -5,7 +5,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
-import type { DemoWorld, KnobDefs, KnobValue, KnobValues, WorldMod } from "../src/contract";
+import type { DemoWorld, KnobDefs, Look, KnobValue, KnobValues, WorldMod } from "../src/contract";
 
 export const MAX_WORLD_MODS = 40;
 export const MAX_WORLD_BYTES = 600_000;
@@ -43,6 +43,7 @@ export interface SessionMod {
   compiled: string;
   knobs: KnobDefs;
   art?: { key: string; url: string; scenery?: boolean };
+  look?: Look;
 }
 
 /**
@@ -68,7 +69,7 @@ export function snapshotWorld(
     if (!rec) continue;
     const values: KnobValues = {};
     for (const [k, d] of Object.entries(rec.knobs)) values[k] = d.value;
-    mods.push({ id: rec.id, title: rec.title, source: rec.source, compiled: rec.compiled, knobs: rec.knobs, values, ...(rec.art ? { art: rec.art } : {}) });
+    mods.push({ id: rec.id, title: rec.title, source: rec.source, compiled: rec.compiled, knobs: rec.knobs, values, ...(rec.art ? { art: rec.art } : {}), ...(rec.look ? { look: rec.look } : {}) });
   }
   return mods;
 }
@@ -83,7 +84,7 @@ export function parseWorld(text: string): StoredWorld | null {
       if (!m || typeof m.id !== "string") continue;
       if (m.builtin === true) mods.push({ builtin: true, id: m.id, values: sanitizeValues(m.values) });
       else if (typeof m.title === "string" && typeof m.source === "string" && typeof m.compiled === "string" && m.knobs && typeof m.knobs === "object") {
-        mods.push({ id: m.id, title: m.title, source: m.source, compiled: m.compiled, knobs: m.knobs, values: sanitizeValues(m.values), ...(m.art ? { art: m.art } : {}) });
+        mods.push({ id: m.id, title: m.title, source: m.source, compiled: m.compiled, knobs: m.knobs, values: sanitizeValues(m.values), ...(m.art ? { art: m.art } : {}), ...(m.look ? { look: m.look } : {}) });
       }
     }
     return { v: 1, id: w.id, title: w.title, blurb: w.blurb, createdAt: String(w.createdAt ?? ""), mods };

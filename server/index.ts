@@ -6,7 +6,9 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
 import { SIM } from "../src/contract";
-import type { ClientMsg, KnobDefs, KnobValue, ServerMsg, WorldMod } from "../src/contract";
+import { fallbackVisual, lookFor, parseShape, parseVisual } from "./visual";
+import type { Visual } from "./visual";
+import type { ClientMsg, KnobDefs, Look, ShapeName, KnobValue, ServerMsg, WorldMod } from "../src/contract";
 import { chat, hasApiKey, loadEnv, SPARK, WONDER } from "./meta";
 import { compileMod } from "./compile";
 import { importMod, verifyMod } from "./verify";
@@ -33,6 +35,7 @@ interface ManifestRec {
   compiled: string;
   knobs: KnobDefs;
   art?: { key: string; url: string; scenery?: boolean };
+  look?: Look;
 }
 
 // Each connection has its own world (ADR 0014): a public server must never mix visitors' mods.
@@ -153,6 +156,8 @@ interface Route {
   knob?: string;
   value?: KnobValue;
   answer?: string;
+  visual?: Visual;
+  shape?: ShapeName;
 }
 
 function send(ws: WebSocket, msg: ServerMsg): void {
@@ -363,6 +368,10 @@ function parseRoute(text: string): Route | null {
       r.value = obj.value as KnobValue;
     }
     if (typeof obj.answer === "string") r.answer = obj.answer;
+    const visual = parseVisual(obj.visual);
+    if (visual) r.visual = visual;
+    const shape = parseShape(obj.shape);
+    if (shape) r.shape = shape;
     return r;
   } catch {
     return null;
@@ -662,11 +671,15 @@ You have a run_playtest tool. Call it with your complete fixed source to check t
     let artPending: string | undefined;
     let pendingArt: { subject: string; key: string; scenery: boolean } | undefined;
     const artType = pickArtType(source);
-    if (artType) {
+    // Spark's visual kind (from the router call) decides the art path; word lists only cover a router miss (ADR 0015).
+    const fb = route.visual ? undefined : fallbackVisual(`${command} ${artType ?? ""}`);
+    const visual: Visual | undefined = route.visual ?? fb?.visual;
+    const look = artType ? lookFor(visual, route.shape ?? fb?.shape, [artType.toLowerCase()]) : undefined;
+    if (artType && !look) {
       const subject = deriveSubject(command, artType);
       const key = artKeyForType(artType);
       if (key) {
-        const scenery = isScenerySubject(subject) || isScenerySubject(artType);
+        const scenery = visual === "prop" || (visual !== "creature" && (isScenerySubject(subject) || isScenerySubject(artType)));
         const cachedUrl = artCachedUrl(key);
         if (cachedUrl) {
           art = { key, url: cachedUrl, ...(scenery ? { scenery: true } : {}) };
@@ -676,13 +689,13 @@ You have a run_playtest tool. Call it with your complete fixed source to check t
         }
       }
     }
-    const rec: ManifestRec = { id: def.id, title: def.title, source, compiled: first.js, knobs: def.knobs ?? {}, ...(art ? { art } : {}) };
+    const rec: ManifestRec = { id: def.id, title: def.title, source, compiled: first.js, knobs: def.knobs ?? {}, ...(art ? { art } : {}), ...(look ? { look } : {}) };
     // Edit keeps the same id so the client loader replaces it; if Wonder
     // renamed it anyway, drop the stale entry instead of duplicating.
     if (editRec && def.id !== editRec.id) { manifest.delete(editRec.id); send(ws, { kind: "removed", modId: editRec.id }); }
     manifest.set(def.id, rec);
     stage(ws, { kind: "stage", stage: "done", detail: `loaded ${def.id} (${SIM.healthFrames} frames OK)`, command });
-    send(ws, { kind: "mod", mod: { id: def.id, title: def.title, source, compiled: first.js, knobs: rec.knobs, ...(art ? { art } : {}), ...(artPending ? { artPending } : {}) } });
+    send(ws, { kind: "mod", mod: { id: def.id, title: def.title, source, compiled: first.js, knobs: rec.knobs, ...(art ? { art } : {}), ...(artPending ? { artPending } : {}), ...(look ? { look } : {}) } });
     if (pendingArt) {
       const { subject, key, scenery } = pendingArt;
       generateSubjectArt(subject, key, scenery).then(url => { if (url) { rec.art = { key, url, ...(scenery ? { scenery: true } : {}) }; try { send(ws, { kind: "art", modId: def.id, art: { key, url, ...(scenery ? { scenery: true } : {}) } }); } catch {} } }).catch(() => {});
