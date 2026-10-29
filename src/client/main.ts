@@ -792,11 +792,18 @@ function renderMods(): void {
 }
 
 // --- commands -------------------------------------------------------------------
+function sendWorldState(): void {
+  if (ws?.readyState === WebSocket.OPEN) {
+    send({ kind: "worldState", mods: loader.list().map((m) => ({ id: m.id, values: m.values })) });
+  }
+}
+
 function loadLocal(def: ModDefinition): void {
   loader.load(def);
   say(`${def.title} materialized.`, "done");
   log(`loaded ${def.id}`);
   renderMods();
+  sendWorldState();
 }
 let starterAutoLoaded = false;
 function autoLoadStarterOnce(): void {
@@ -806,6 +813,7 @@ function autoLoadStarterOnce(): void {
     loadLocal(playerMod);
     loadLocal(groundMod);
   }
+  sendWorldState();
 }
 function handleLocal(text: string): boolean {
   const t = text.toLowerCase();
@@ -1544,7 +1552,7 @@ const voice = initVoice({
 function connect(): void {
   try { ws = new WebSocket(WS_URL); }
   catch { serverStatus.textContent = "Server: offline (local mods still work)"; return; }
-  ws.addEventListener("open", () => { serverStatus.textContent = `Server: connected on ${WS_URL}`; voice.onOpen();
+  ws.addEventListener("open", () => { serverStatus.textContent = `Server: connected on ${WS_URL}`; voice.onOpen(); sendWorldState();
     if (worldParam && !worldRequested) {
       worldRequested = true;
       send({ kind: "worldLoad", id: worldParam });

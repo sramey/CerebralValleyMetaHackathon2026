@@ -66,6 +66,29 @@ Rules:
 - Platformer world: x grows right, y grows DOWN. Ground is solid entities. Player type is "player".
 - solid: true + gravityScale: 0 means static terrain (ground/platforms/stairs/walls/blocks) that never moves. Creatures, players and projectiles that must move/fall: use solid: false (or solid: true WITH gravityScale: 1). color is a NUMBER (hex like 0x57d94d), never a CSS string.
 - STAIRCASES & LEVEL GEOMETRY: When building stairs or steps, spawn grounded static terrain steps (type: "stair" or "step", solid: true, gravityScale: 0) ahead of the player (x >= 200). Spawn contiguous ascending/descending steps with step width 24..48 and step height 16..24 (e.g. step 0 at y: 380, h: 20; step 1 at y: 360, h: 40; anchored to ground y=400). The engine automatically steps up onto steps <= 28 px high without blocking.
+- PLAYER ABILITY PATTERN (double jump, wall stick/climb, dash, glide): Standalone ability mods that enhance the player must NOT edit an NPC mod or spawn a new player. In setup(api):
+  let prevJump = false;
+  let jumpsLeft = 1;
+  let wasOnGround = true;
+  api.onTick((dt) => {
+    const p = api.player();
+    if (!p) return;
+    const input = api.input();
+    const jumpPressed = input.jump && !prevJump;
+    prevJump = input.jump;
+    if (p.onGround) {
+      jumpsLeft = 1;
+      wasOnGround = true;
+    } else {
+      if (jumpPressed && !wasOnGround && jumpsLeft > 0) {
+        jumpsLeft--;
+        p.vy = -600;
+        api.burst(p.x + p.w / 2, p.y + p.h, 0x00f0ff, 12);
+      }
+      wasOnGround = false;
+    }
+  });
+In test(t): spawn a ground and a player if not present, step 2 frames with { jump: true } to launch off the ground, step 10 frames with { jump: false } while airborne, step 1 frame with { jump: true } and assert p.vy < -200.
 - ENTITY ONTOLOGY: Every entity has a role: terrain (ground, platform, stair, step, wall, block, brick, ledge, ramp), effect (rain, snow, snowflake, fog, smoke, spark, light), projectile (bullet, shot, arrow, fireball, laser, beam), shape (coin, ball, orb, bubble, ring, spikes, star, gem), prop (tree, house, snowman, gift, chest, gun, sword, wand, shield), creature (living/moving characters, enemies, allies, pets, bosses), or player ("player"). Never spawn replacement ground entities when decorating or theming; when giving the player a held weapon/item (like a gun, sword, or wand), either spawn projectiles directly from api.player() on input.shoot or attach a small compact held item prop (w: 22, h: 12, solid: false, gravityScale: 0) at the player's hand, never a full-sized character.`;
 
 export const WONDER_SYSTEM = `You write tiny self-contained TypeScript game mods for a 2D platformer simulation.
@@ -107,7 +130,7 @@ export function buildFixPrompt(command: string, source: string, errors: string[]
 export const ROUTER_SYSTEM = `You route a player's text command for a 2D platformer game to exactly one action.
 Reply with ONLY a single JSON object, no markdown, no prose. Schema:
 {"action":"new"|"tweak"|"edit"|"undo"|"mood"|"question","target?":string,"knob?":string,"value?":number|string|boolean,"answer?":string,"mood?":string,"visual?":"shape"|"effect"|"prop"|"creature","shape?":"circle"|"ring"|"triangle"|"spikes"|"pill"|"diamond"|"star"|"block"}
-- "new": the request adds new behavior or a new entity (needs fresh mod code).
+- "new": the request adds new behavior, a new entity, or a PLAYER ABILITY/POWER (double jump, extra jump, wall stick/climb/jump, dash, glide, ground pound) that hooks api.player(). Player abilities are ALWAYS action "new" (standalone ability mods acting on api.player()), NEVER an edit on an NPC or another creature.
 - "tweak": the request ONLY adjusts a knob value of an already-loaded mod (set target=mod id, knob, value). Use ONLY when the target mod and knob both exist in the loaded-mods list.
 - "edit": the request changes the BEHAVIOR of an already-loaded mod beyond a knob value (new mechanics, new entities it should own, rule changes — e.g. "make enemies die when I stomp them" for a loaded enemies mod). Set target=mod id. Prefer "edit" over "tweak" when the request adds or changes behavior rather than tuning a number.
 - "undo": the request removes a mod (set target=mod id).

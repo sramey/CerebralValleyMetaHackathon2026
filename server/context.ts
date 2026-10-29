@@ -1,5 +1,5 @@
 // Short-term memory per session (ADR 0016): the last commands and the mods
-import { detectMoodCommand } from "../src/ontology";
+import { detectMoodCommand, isPlayerAbilityCommand, isPlayerCommand } from "../src/ontology";
 // most recently created or touched, so "make them faster" and "make it huge"
 // resolve to the thing the player just meant.
 
@@ -38,6 +38,8 @@ const PRONOUN = /\b(it|its|them|their|they|that|those|these|him|her)\b/i;
 /** Id a pronoun command refers to, if the command uses one and something was touched. */
 export function resolvePronoun(command: string, r: Recent): string | undefined {
   if (detectMoodCommand(command)) return undefined;
-  const cleaned = command.replace(/\bmake\s+it\s+(?:rain|snow|hail|storm)\b/gi, " ");
+  if (isPlayerCommand(command) || isPlayerAbilityCommand(command)) return undefined;
+  let cleaned = command.replace(/\bmake\s+it\s+so(?:\s+that)?\b/gi, " ");
+  cleaned = cleaned.replace(/\bmake\s+it\s+(?:rain|snow|hail|storm)\b/gi, " ");
   return PRONOUN.test(cleaned) ? r.touched[0] : undefined;
 }

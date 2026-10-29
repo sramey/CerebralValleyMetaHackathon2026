@@ -6,7 +6,7 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
 import { SIM } from "../src/contract";
-import { detectMoodCommand, entityKind, extractSpawnedEntities, isHeldItemType } from "../src/ontology";
+import { detectMoodCommand, entityKind, extractSpawnedEntities, isHeldItemType, isPlayerAbilityCommand } from "../src/ontology";
 import { moodKey, moodSpecFor, pool, restyleSheet, sheetPath } from "./mood";
 import { fallbackVisual, lookFor, parseShape, parseVisual } from "./visual";
 import type { Visual } from "./visual";
@@ -481,6 +481,11 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     // Safety net: a whole-world mood phrase Spark routed as a build is still a mood (ADR 0017).
     const moodWord = detectMoodCommand(command);
     if (moodWord && (!route || route.action === "new" || route.action === "edit" || route.action === "question")) route = { action: "mood", mood: moodWord };
+    // Player abilities (double jump, wall stick/climb, dash) are ALWAYS new standalone ability mods hooking api.player(), never edit on an NPC.
+    if (isPlayerAbilityCommand(command) && (!route || route.action === "edit" || route.action === "tweak")) {
+      console.log(`[route] player ability -> new for: ${command}`);
+      route = { action: "new" };
+    }
     // Pronoun commands ("make it bigger") act on the mod touched last, not on a fresh build.
     const pronounTarget = resolvePronoun(command, sess(ws).recent);
     if (route && pronounTarget && manifest.has(pronounTarget) && route.action === "new") {

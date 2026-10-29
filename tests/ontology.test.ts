@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Texture } from "pixi.js";
-import { canUseSpriteSheet, detectMoodCommand, entityKind, extractSpawnedEntities, isHeldItemType } from "../src/ontology";
+import { canUseSpriteSheet, detectMoodCommand, entityKind, extractSpawnedEntities, isHeldItemType, isPlayerAbilityCommand, isPlayerCommand } from "../src/ontology";
 import { artKeyForType, deriveSubject, generateSubjectArt, isScenerySubject, pickArtType } from "../server/art";
 import { moodSpecFor, sheetPath } from "../server/mood";
 import { newRecent, noteTouched, resolvePronoun } from "../server/context";
@@ -181,4 +181,27 @@ describe("entity ontology & art invariants (x9i, 98v, olm)", () => {
     expect(pickArtType('api.spawn({ type: "wall", x: 200, y: 380, w: 30, h: 100, solid: true, gravityScale: 0 })')).toBeNull();
   });
 
+  it("never lets pronoun resolution hijack player ability or first-person commands to NPC mods (7hl)", () => {
+    const r = newRecent();
+    noteTouched(r, "wanderer-newcomer");
+
+    expect(isPlayerCommand("Make it so my character can stick to the walls.")).toBe(true);
+    expect(isPlayerAbilityCommand("Make it so my character can stick to the walls.")).toBe(true);
+    expect(resolvePronoun("Make it so my character can stick to the walls.", r)).toBeUndefined();
+
+    expect(isPlayerCommand("make it so if I hit space bar again he gets one more extra jump.")).toBe(true);
+    expect(isPlayerAbilityCommand("make it so if I hit space bar again he gets one more extra jump.")).toBe(true);
+    expect(resolvePronoun("make it so if I hit space bar again he gets one more extra jump.", r)).toBeUndefined();
+
+    expect(isPlayerAbilityCommand("give me double jump")).toBe(true);
+    expect(resolvePronoun("give me double jump", r)).toBeUndefined();
+
+    expect(isPlayerAbilityCommand("make my character stick to walls")).toBe(true);
+    expect(resolvePronoun("make my character stick to walls", r)).toBeUndefined();
+
+    // Ordinary third-person NPC pronouns still resolve to the recent mod:
+    expect(resolvePronoun("make him faster", r)).toBe("wanderer-newcomer");
+    expect(resolvePronoun("make them jump higher", r)).toBe("wanderer-newcomer");
+    expect(resolvePronoun("make it bigger", r)).toBe("wanderer-newcomer");
+  });
 });
