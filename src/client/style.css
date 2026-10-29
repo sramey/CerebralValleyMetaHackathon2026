@@ -205,3 +205,31 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #
   #sketch-status { left: 10px; right: 10px; top: auto; bottom: 12px; transform: none; max-width: none; }
   #sketch-chip { left: 10px; right: 10px; top: 10px; max-width: none; justify-content: center; flex-wrap: wrap; row-gap: 2px; }
 }
+
+/* Time-travel strip (ADR 0041): sits in the bottom row between the key hint (left) and the pipeline button (right). */
+#timeline { position: absolute; left: 540px; right: 150px; bottom: 10px; z-index: 26; display: flex; justify-content: flex-end; pointer-events: none; }
+#timeline[hidden] { display: none; }
+#timeline > * { pointer-events: auto; }
+#timeline .tl-track { display: flex; align-items: center; gap: 7px; max-width: 100%; overflow-x: auto; scrollbar-width: none; padding: 7px 11px; background: rgba(16,20,27,.82); border: 1px solid rgba(255,201,77,.4); border-radius: 999px; backdrop-filter: blur(8px); box-shadow: 0 2px 10px rgba(0,0,0,.45); }
+#timeline .tl-track::-webkit-scrollbar { display: none; }
+#timeline .tl-dot { flex: none; width: 11px; height: 11px; padding: 0; border-radius: 50%; border: 2px solid #ffc94d; background: #1a2029; cursor: pointer; transition: transform .12s ease; }
+#timeline .tl-dot.mood { border-color: #c79bff; }
+#timeline .tl-dot.undo { border-color: #ff9a7a; }
+#timeline .tl-dot.restore { border-color: #7fd0ff; }
+#timeline .tl-dot:hover, #timeline .tl-dot:focus-visible { transform: scale(1.35); outline: none; }
+#timeline .tl-dot.pin { box-shadow: 0 0 0 3px rgba(255,255,255,.35); }
+#timeline .tl-dot.now { background: #ffc94d; }
+#timeline .tl-dot.now.mood { background: #c79bff; }
+#timeline .tl-dot.now.undo { background: #ff9a7a; }
+#timeline .tl-dot.now.restore { background: #7fd0ff; }
+#timeline .tl-cap { flex: none; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 11px/1 "Segoe UI", system-ui, sans-serif; color: #d9d3c0; padding-left: 4px; }
+#timeline .tl-card { position: absolute; right: 0; bottom: calc(100% + 8px); width: min(300px, 80vw); padding: 9px 11px; background: rgba(11,14,19,.94); border: 1px solid rgba(255,201,77,.5); border-radius: 8px; box-shadow: 0 6px 22px rgba(0,0,0,.55); color: #e8e4d8; font-size: 12px; line-height: 1.35; }
+#timeline .tl-card[hidden] { display: none; }
+#timeline .tl-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 4px; }
+#timeline .tl-kind { font: 10px Consolas, monospace; text-transform: uppercase; letter-spacing: .06em; color: #ffc94d; }
+#timeline .tl-kind.mood { color: #c79bff; } #timeline .tl-kind.undo { color: #ff9a7a; } #timeline .tl-kind.restore { color: #7fd0ff; }
+#timeline .tl-mods { color: #b9b2a0; margin-bottom: 7px; max-height: 5.4em; overflow: hidden; }
+#timeline .tl-here { color: #aef0b0; font-size: 11px; }
+#timeline .tl-restore { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid #ffc94d; background: #2a2412; color: #ffe9a8; font: 600 12px "Segoe UI", system-ui, sans-serif; cursor: pointer; }
+#timeline .tl-restore:hover { background: #3a3218; }
+#stage-wrap:has(#sketch-overlay:not([hidden])) #timeline { display: none; }
