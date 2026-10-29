@@ -22,7 +22,7 @@ export interface LogRow {
   timings?: { route?: number; write?: number; compile?: number; verify?: number; total?: number };
   verify?: { ok?: boolean; errors?: string[]; msPerFrame?: number };
   fixAttempted?: boolean;
-  agent?: { turns?: number; calls?: number };
+  agent?: { turns?: number; calls?: number; playtests?: number; rejected?: number; tools?: { name?: string; ok?: boolean }[] };
   batch?: { size?: number; parallel?: number };
   /** Art lines: generation time and whether SAM accepted the sheet. */
   ms?: number;
@@ -113,7 +113,11 @@ export interface BuildStats {
   failures: { category: FailureCategory; count: number }[];
   art: { count: number; medianMs: number | null; samOkPct: number | null };
   learn: { count: number; byEvent: { event: string; count: number }[] };
-  agent: { builds: number; medianTurns: number | null; medianCalls: number | null };
+  agent: {
+    builds: number; medianTurns: number | null; medianCalls: number | null;
+    /** Autonomy (ADR 0033). */
+    meanCalls: number | null; playtests: number; rejected: number; landed: number; selfCorrected: number;
+  };
   perf: { samples: number; medianMsPerFrame: number | null };
   parallelBatches: number;
 }
@@ -246,6 +250,21 @@ export function aggregate(rows: LogRow[], malformed = 0): BuildStats {
     .filter((v): v is number => v !== null)
     .sort((a, b) => a - b);
 
+  // Autonomy: playtests Wonder ran on its own drafts, and landed builds that needed a correction.
+  let playtests = 0, rejected = 0, agentLanded = 0, selfCorrected = 0, callSum = 0;
+  for (const r of agentRows) {
+    const tools = Array.isArray(r.agent?.tools) ? r.agent!.tools! : [];
+    const pt = num(r.agent?.playtests) ?? tools.filter((t) => t.name === "run_playtest").length;
+    const rej = num(r.agent?.rejected) ?? tools.filter((t) => t.name === "run_playtest" && t.ok === false).length;
+    playtests += pt;
+    rejected += rej;
+    callSum += num(r.agent?.calls) ?? tools.length;
+    if (LANDED.has(String(r.outcome))) {
+      agentLanded++;
+      if (rej > 0 || r.fixAttempted === true) selfCorrected++;
+    }
+  }
+
   const frames = builds
     .map((r) => num(r.verify?.msPerFrame))
     .filter((v): v is number => v !== null && v > 0)
@@ -303,6 +322,8 @@ export function aggregate(rows: LogRow[], malformed = 0): BuildStats {
       builds: agentRows.length,
       medianTurns: percentile(turns, 0.5),
       medianCalls: percentile(calls, 0.5),
+      meanCalls: agentRows.length === 0 ? null : callSum / agentRows.length,
+      playtests, rejected, landed: agentLanded, selfCorrected,
     },
     perf: { samples: frames.length, medianMsPerFrame: percentile(frames, 0.5) },
     parallelBatches: builds.filter((r) => (num(r.batch?.parallel) ?? 1) > 1).length,
@@ -434,6 +455,9 @@ export function renderMarkdown(stats: BuildStats): string {
   }
   out.push(`| Builds that used Wonder's tool loop | ${s.agent.builds} |`);
   out.push(`| Median tool-loop turns / calls per build | ${s.agent.medianTurns ?? "—"} / ${s.agent.medianCalls ?? "—"} |`);
+  out.push(`| Mean tool calls per agent build | ${s.agent.meanCalls === null ? "—" : s.agent.meanCalls.toFixed(1)} |`);
+  out.push(`| Playtests Wonder ran on its own drafts (rejected) | ${s.agent.playtests} (${s.agent.rejected}) |`);
+  out.push(`| Landed agent builds that self-corrected | ${s.agent.landed === 0 ? "—" : `${s.agent.selfCorrected} of ${s.agent.landed}`} |`);
   out.push(`| Builds that ran inside a parallel batch | ${s.parallelBatches} |`);
   out.push(`| Median per-frame simulation cost in the verifier | ${msText(s.perf.medianMsPerFrame)} |`);
   out.push("");

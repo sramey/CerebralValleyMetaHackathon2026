@@ -18,3 +18,5 @@
 .st-tile[data-k="landed"] b { color: #7ee59a; }
 .st-tile[data-k="first"] b { color: #ffe9a8; }
 .st-tile[data-k="fix"] b { color: #9fd0ff; }
+.st-auto { margin-top: clamp(6px, 1vh, 12px); grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.st-tile[data-k="calls"] b, .st-tile[data-k="selfFix"] b, .st-tile[data-k="playtests"] b { color: #c9b6ff; }

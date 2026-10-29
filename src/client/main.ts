@@ -8,6 +8,9 @@ import { canUseSpriteSheet, entityKind } from "../ontology";
 import type { ClientMsg, Entity, KnobValue, ModDefinition, MoodSpec, ServerMsg } from "../contract";
 import { initVoice } from "./voice";
 import { Fx } from "./fx";
+import { Feel } from "./feel";
+import { Sound, buildSfx } from "./sound";
+import { createOnboarding, createSoundButton, plainBuildMessage } from "./onboard";
 import { Portal } from "./portal";
 import { drawCliff, drawShape, isCliff, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
 import { celestialPos, computeDesiredCamY, depthFog, drawContactShadows, drawDistantMountains, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
@@ -68,6 +71,14 @@ function say(text: string, state = "idle"): void {
   orbDot.className = `orb ${orbClass}`;
   orbFeedback.textContent = text;
 }
+/** Label which model answered the router (ADR 0032): a small chip next to the orb state. */
+const modelChip = document.createElement("span");
+modelChip.id = "orb-model";
+modelChip.style.cssText = "margin-left:.6em;font-size:.8em;opacity:.7";
+orbState.after(modelChip);
+function routedBy(msg: Extract<ServerMsg, { kind: "routed" }>): void {
+  modelChip.textContent = `routed by ${msg.model}${msg.open ? " (open weights)" : ""}${msg.fellBack ? " (open timed out)" : ""} · ${msg.ms} ms`;
+}
 const builds = createBuilds(orbSay.parentElement ?? document.body, () => {});
 const feedback = initFeedback({
   send: (msg) => send(msg),
@@ -98,7 +109,16 @@ app.stage.addChild(gfx);
 app.stage.sortableChildren = true;
 gfx.zIndex = -100;
 const fx = new Fx(app.stage);
+const urlFlags = new URLSearchParams(location.search);
+// Synthesized WebAudio sound (bead 6d3): silent until the first gesture; ?mute starts muted, ?vol=0..1 sets master volume, M toggles mute.
+const sound = new Sound({ muted: urlFlags.has("mute"), volume: urlFlags.has("vol") ? Number(urlFlags.get("vol")) : undefined });
+const unlockSound = (): void => sound.unlock();
+const syncSoundButton = createSoundButton(sound, stageWrapEl, unlockSound);
+addEventListener("pointerdown", unlockSound);
+addEventListener("keydown", unlockSound);
+const feel = new Feel(app.stage, (amp) => fx.kick(amp), !urlFlags.has("noshake"), (ev) => sound.playEvent(ev));
 const portal = new Portal(app.stage); // screen-rip entrance for new entities (bead yzd)
+portal.onRip = () => sound.play("portal");
 let lastRenderAt = performance.now();
 const isEffectType = (type: string): boolean => kindOf(type)?.kind === "effect";
 
@@ -417,6 +437,7 @@ function applyMood(m: MoodSpec | null): void {
   setSnowy(!!m && (m.ambient === "snow" || m.name === "christmas" || m.name === "snowy"));
   fx.setMood(m);
   portal.setMood(m);
+  sound.setMood(m);
 }
 function revertMood(): void {
   restoreSheets();
@@ -429,6 +450,7 @@ function onMood(m: MoodSpec | null): void {
   if (mood && mood.name === m.name) return; // duplicate of the mood already on
   restoreSheets();
   applyMood(m);
+  sound.play("swell");
   moodModCount = loader.list().length;
   renderMods();
   // Only sheets something in the world actually uses (no image spend on art nobody can see).
@@ -627,13 +649,16 @@ function render(): void {
   gfx.clear();
   const W = app.screen.width;
   const H = app.screen.height;
-  const desiredCamX = desiredCamXFor(W);
+  const camDt = Math.min(0.05, Math.max(0.001, (performance.now() - lastRenderAt) / 1000));
+  const camPlayer = world.entities.find((e) => e.type === "player");
+  const desiredCamX = desiredCamXFor(W) + feel.cam.lookahead(camPlayer, camDt);
   if (camXSmooth === null) camXSmooth = desiredCamX;
-  else camXSmooth += (desiredCamX - camXSmooth) * 0.12;
+  else camXSmooth = feel.cam.smoothX(camXSmooth, desiredCamX, camDt);
   const camX = camXSmooth;
   const desiredCamY = desiredCamYFor(H);
   if (camYSmooth === null) camYSmooth = desiredCamY;
-  else camYSmooth += (desiredCamY - camYSmooth) * 0.12;
+  else camYSmooth = feel.cam.smoothY(camYSmooth, desiredCamY, camDt, camPlayer?.onGround ?? true);
+  feel.update(world.entities, camDt);
   // Radial menu follows its entity; close if it is gone.
   if (radialTargetId !== null) {
     const target = world.entities.find((e) => e.id === radialTargetId);
@@ -678,7 +703,7 @@ function render(): void {
   drawRidge(ridgeNear, camX, 0.55, horizon + 34, 1, mixC(pal.ridgeNear, SKY[SKY_BANDS - 1], fog.near));
   // Starter-world scenery, unless a mod brings its own parallax backdrop (bead 5fl)
   if (world.entities.some((e) => e.type === "ground") && !world.entities.some(isParallaxOrSkyEntity)) {
-    drawScenery(gfx, camX, camYSmooth, W, pal, SKY[SKY_BANDS - 1], fog.far, isDaytime);
+    drawScenery(gfx, camX, camYSmooth, W, pal, SKY[SKY_BANDS - 1], fog.far, isDaytime, mood?.name);
   }
   drawParallaxEntities(gfx, world.entities, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1], grade);
   drawHorizonMist(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
@@ -744,13 +769,16 @@ function render(): void {
     const targetH = visualHeightOf(e);
     const scale = targetH / frame.height;
     s.texture = frame;
-    s.scale.set(scale * e.facing, scale);
+    const sq = feel.scaleOf(e.id);
+    s.scale.set(scale * e.facing * sq.sx, scale * sq.sy);
+    s.tint = feel.tintOf(e.id);
     s.position.set(e.x - camX + e.w / 2, e.y - camYSmooth + e.h + 2);
     s.zIndex = layerOf(e, subjectKey);
     s.visible = true;
   }
   for (const [id, s] of spritePool) if (!seen.has(id)) { s.visible = false; scaleOverride.delete(id); }
   const nowMs = performance.now();
+  feel.draw(camX, camYSmooth);
   fx.render(world, camX, camYSmooth, W, H, (nowMs - lastRenderAt) / 1000, isEffectType);
   portal.render(world, camX, camYSmooth, (nowMs - lastRenderAt) / 1000, (t) => isEffectType(t) || !canUseSpriteSheet(t));
   lastRenderAt = nowMs;
@@ -803,6 +831,9 @@ requestAnimationFrame(frame);
 const keys = new Set<string>();
 addEventListener("keydown", (e) => {
   if (e.target === inputEl || e.target === orbInputEl || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+  if (e.code === "KeyM" && !e.repeat) { log(sound.toggleMute() ? "sound muted (M)" : "sound on (M)"); syncSoundButton(); return; }
+  if (["KeyA", "KeyD", "KeyW", "Space", "ArrowLeft", "ArrowRight", "ArrowUp"].includes(e.code)) onboarding.event("move");
+  if (e.code === "BracketLeft" || e.code === "BracketRight") sound.setVolume(sound.volume + (e.code === "BracketRight" ? 0.1 : -0.1));
   keys.add(e.code);
   syncInput();
   if (["ArrowUp", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
@@ -1678,20 +1709,26 @@ function connect(): void {
     }
     if (msg.kind === "say") say(msg.text);
     else if (msg.kind === "stage") {
-      log(`${msg.stage}: ${msg.detail}`);
+      // A non-coder never sees a raw rejection or error: rejected and failed builds are reworded (onboard.ts).
+      const shown = msg.stage === "rejected" || msg.stage === "failed" ? plainBuildMessage(msg.stage, msg.detail) : msg.detail;
+      log(`${msg.stage}: ${shown}`);
+      onboarding.event(msg.stage === "done" ? "built" : "working");
+      const sx = buildSfx(msg.stage);
+      if (sx) sound.play(sx);
       if (msg.command) builds.stage(msg.command, msg.stage, msg.detail);
       if (builds.active() > 1) sayWhileBuilding();
-      else if (msg.stage === "rejected") { rejectedAt = performance.now(); say(msg.detail, "failed"); }
+      else if (msg.stage === "rejected") { rejectedAt = performance.now(); say(shown, "failed"); }
       else if (msg.stage === "fixing") {
         // Keep the red "why" on screen long enough to read before the fix status replaces it.
         const wait = Math.max(0, 2200 - (performance.now() - rejectedAt));
-        window.setTimeout(() => say("Fixing it: Wonder is replaying the playtest…", "building"), wait);
-      } else say(msg.detail, msg.stage === "failed" ? "failed" : "building");
+        window.setTimeout(() => say("Fixing it: building a better version…", "building"), wait);
+      } else say(shown, msg.stage === "failed" ? "failed" : "building");
       if (msg.stage === "done" || msg.stage === "failed") ghost.hideSoon();
     }
     else if (msg.kind === "playtest") {
       void ghost.play({ base: loader.list().map((m) => ({ def: m.def, values: m.values })), candidate: msg.mod, replaces: msg.replaces, seed: msg.seed, inputs: msg.inputs, ok: msg.ok, plain: msg.plain });
     }
+    else if (msg.kind === "routed") { routedBy(msg); }
     else if (msg.kind === "timing") { builds.finish(msg.command); log(`timing route ${msg.ms.route}ms write ${msg.ms.write}ms compile ${msg.ms.compile}ms verify ${msg.ms.verify}ms total ${msg.ms.total}ms`); }
     else if (msg.kind === "tweak") tweak(msg.modId, msg.knob, msg.value, "Tweaked.");
     else if (msg.kind === "removed") { loader.unload(msg.modId); renderMods(); }
@@ -1738,7 +1775,10 @@ function submitCommand(text: string): void {
   if (sketchIntent === "open") { sketch.open(); return; }
   if (sketchIntent === "close") { sketch.close(); say("Sketch closed — the world is running again."); return; }
   say(`Building: ${text}`, "building");
-  if (!handleLocal(text)) {
+  onboarding.event("submit");
+  const modsBefore = loader.list().length;
+  if (handleLocal(text)) { if (loader.list().length > modsBefore) onboarding.event("built"); }
+  else {
     if (ws?.readyState === WebSocket.OPEN) send({ kind: "worldState", mods: loader.list().map((m) => ({ id: m.id, values: m.values })) });
     if (ws?.readyState === WebSocket.OPEN) send({ kind: "command", text });
     else say("That needs the AI server. Start it with: npm run server — local builds above still work.", "failed");
@@ -1767,6 +1807,7 @@ document.querySelectorAll<HTMLButtonElement>("#chips button").forEach((b) => {
 
 renderMods();
 say("Say something — or type below. Try “add a player”.");
+const onboarding = createOnboarding({ submit: (t) => submitCommand(t), orbInput: orbInputEl, mount: stageWrapEl, flags: urlFlags });
 if (!worldParam) autoLoadStarterOnce();
 
 // Test hooks: deterministic stepping + text view of the world (no DOM reads needed to playtest).

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Graphics } from "pixi.js";
-import { drawScenery } from "../src/client/scenery";
+import { drawScenery, sceneryStyle } from "../src/client/scenery";
 import { groundMod } from "../src/mods/ground";
 
 function counter(): { gfx: Graphics; calls: () => number } {
@@ -23,6 +23,19 @@ describe("starter scenery (bead 5fl)", () => {
       expect(a.calls()).toBeGreaterThan(20);
       expect(b.calls()).toBeGreaterThan(20);
     }
+  });
+
+  it("dresses the scenery per mood and draws more detail when snowy or neon", () => {
+    expect(sceneryStyle("christmas").snow).toBe(true);
+    expect(sceneryStyle("snowy").snow).toBe(true);
+    expect(sceneryStyle("spooky").spooky).toBe(true);
+    expect(sceneryStyle("neon").neon).toBe(true);
+    expect(sceneryStyle(undefined)).toEqual({ snow: false, spooky: false, neon: false });
+    const plain = counter();
+    const snowy = counter();
+    drawScenery(plain.gfx, 500, 0, 1920, pal, 0x1e3557, 0.3, false);
+    drawScenery(snowy.gfx, 500, 0, 1920, pal, 0x1e3557, 0.3, false, "christmas");
+    expect(snowy.calls()).toBeGreaterThan(plain.calls());
   });
 
   it("keeps the new ledges out of the overhang tunnel and well above hop height", () => {

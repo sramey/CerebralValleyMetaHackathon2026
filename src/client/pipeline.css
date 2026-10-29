@@ -96,3 +96,16 @@
 }
 .pl-code:empty { display: none; }
 .pl-code.live { color: rgba(255, 224, 150, .95); }
+/* Wonder's tool loop inside a build lane (ADR 0033). Sized to read on a 1080p recording. */
+.pl-steps { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.pl-chain { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pl-chip { padding: 3px 10px; border-radius: 999px; font: 700 clamp(13px, 1.5vh, 16px)/1.2 ui-monospace, Consolas, monospace; background: rgba(255, 255, 255, .09); }
+.pl-chip + .pl-chip::before { content: "→"; margin-right: 6px; opacity: .5; }
+.pl-chip { display: inline-flex; }
+.pl-chip.inspect { background: rgba(159, 208, 255, .22); }
+.pl-chip.playtest { background: rgba(255, 201, 77, .22); }
+.pl-chip.reject { background: rgba(255, 106, 106, .3); color: #ffd0d0; }
+.pl-chip.fix { background: rgba(201, 182, 255, .3); }
+.pl-chip.pass { background: rgba(95, 208, 122, .3); color: #d6ffe0; }
+.pl-step { font: 500 clamp(12px, 1.4vh, 15px)/1.3 ui-monospace, Consolas, monospace; opacity: .9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-step.bad { color: #ff9a9a; }

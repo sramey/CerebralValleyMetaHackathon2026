@@ -73,6 +73,11 @@ export class Fx {
   /** ms spent in the last render(), for the frame-cost report. */
   lastMs = 0;
 
+  /** Ask for a small screen shake (game-feel impacts); never lowers a bigger shake already running. */
+  kick(amp: number): void {
+    this.shake = Math.max(this.shake, amp);
+  }
+
   constructor(stage: Container) {
     this.layer.zIndex = 10;
     this.g.zIndex = 11;
