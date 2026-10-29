@@ -38,7 +38,7 @@ You need **Node 22+** and a **Meta Model API key**. Get one from the [Meta Model
 ```sh
 git clone https://github.com/sramey/CerebralValleyMetaHackathon2026.git
 cd CerebralValleyMetaHackathon2026
-npm install
+npm install                 # npm 11 may warn that install scripts were skipped (esbuild); the build still works
 cp .env.example .env        # Windows cmd: copy .env.example .env; then set MODEL_API_KEY=<your Meta key>
 npm run build && npm start  # game + AI server on one port
 ```
@@ -65,9 +65,9 @@ Open **http://127.0.0.1:8787/** (or your configured `PORT`) in Chrome, click the
 | Press **P** | Pipeline view with live build numbers (landed %, first-try %, median time) |
 | Click **👍** or **👎** on any mod card or radial menu | Feedback modal lets you teach the engine rules, distill skills, or auto-fix the mod live |
 
-Move with A/D or the arrows, jump with W or Space, shoot with X, use items with F. Sound is synthesized in the browser: M mutes, [ and ] change volume, ?mute starts muted, ?noshake turns off screen shake. First visit shows a skippable 3-step coach (?coach shows it again, ?nocoach hides it); in a scripted fresh-browser run the first build landed 15.5 s after page load. Watch the top-left HUD (health, mod counters). Fresh-clone test (2026-10-29): `npm install` ~6 s, build ~4 s, first AI build landed in ~10 s.
+Move with A/D or the arrows, jump with W or Space, shoot with X, use items with F. Sound is synthesized in the browser: M mutes, [ and ] change volume, ?mute starts muted, ?noshake turns off screen shake. First visit shows a skippable 3-step coach (?coach shows it again, ?nocoach hides it); in a scripted fresh-browser run the first build landed 15.5 s after page load. Watch the top-left HUD (health, mod counters). **Fresh-clone check (2026-10-29, brand-new Chrome profile, README steps only):** local clone ~1 s, `npm install` ~7 s, `npm run build` ~5 s, page connected 0.6 s after open, first AI build verified and landed 9.8 s after typing the command.
 
-**No key?** The game still runs: built-in mods and curated demo worlds (for example `http://127.0.0.1:8787/?w=demo-bouncy`) play without any AI calls. Developing instead? `npm run dev` (Vite on :5173) plus `npm run server` (:8787) in a second terminal, then `npm test`.
+**No key?** The game still runs: built-in mods and curated demo worlds (for example `http://127.0.0.1:8787/?w=demo-bouncy`) play without any AI calls. Developing instead? `npm run dev` (Vite on :5173) plus `npm run server` (:8787) in a second terminal, then `npm test`. Both ports come from `.env` (`VITE_PORT` / `PORT` / `VITE_WS_URL`), so a second checkout can run beside the first. Port 8787 busy? Set `PORT=8788` in `.env` and reopen on that port — the production build finds its server on the page's own origin, no rebuild needed.
 
 ## Built during the event
 
@@ -158,7 +158,7 @@ Never commit keys. `.env` is gitignored.
 - **"It can't break":** every AI-written mod is playtested by a scripted bot in a copy of *your* world (3 seeds × 2 worlds, 1–6 ms). A ghost window replays the actual run. A failing change is rejected with a one-line reason, and Wonder, as a tool-using agent (`run_playtest`), fixes and re-playtests it before it lands. Live on main: "make me huge" → *"You'd be too big to fit through the gap"* → fixed → landed, 2/2 (7/7 across the lease's runs once tuned) ([ADR 0013](docs/adr/0013-visible-verifier.md)).
 - **Visual kinds and effects:** Spark's router also decides what kind of thing you asked for (shape, effect, prop or creature) in the same call. Shapes (ball, ring, spikes, star…) and effects are drawn in code with no image wait; only props and creatures go to Muse Image. Rain has slanted streaks, splashes and mist, fog drifts as soft puffs, and explosions have a flash, fire, sparks, smoke and a shockwave (~0.1 ms/frame) ([ADR 0015](docs/adr/0015-spark-visual-kind-shapes-fx.md)).
 - **Share links, spend guard, visitor mode:** a live check builds 3 AI mods, saves the world, reopens the link in a fresh session with byte-identical code, and remixes it (`scripts/deploy-check.ts`, 8/8 on main).
-- Tests: 75 passing (`npm test`), typecheck clean, production build green.
+- Tests: 441 passing (`npm test`, green in a fresh clone), typecheck clean, production build green.
 
 **Art pipeline: first proof (2026-10-27)**
 
