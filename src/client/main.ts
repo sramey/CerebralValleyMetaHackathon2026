@@ -1,3 +1,4 @@
+import { createBuilds } from "./builds";
 import { Application, Graphics, Sprite, Texture } from "pixi.js";
 import { framesFor, loadSpriteSheet, loadSubjects } from "./sprites";
 import chickenMod from "../mods/chicken";
@@ -49,6 +50,14 @@ function say(text: string, state = "idle"): void {
   const orbClass = state === "building" ? "building" : state === "failed" ? "failed" : state === "done" ? "done" : "listening";
   orbDot.className = `orb ${orbClass}`;
   orbFeedback.textContent = text;
+}
+const builds = createBuilds(orbSay.parentElement ?? document.body, () => {});
+/** While other builds are in flight the orb keeps saying "building"; returns true if it did. */
+function sayWhileBuilding(): boolean {
+  if (builds.active() === 0) return false;
+  const head = builds.headline();
+  if (head) say(head, "building");
+  return true;
 }
 function log(text: string): void {
   const li = document.createElement("li");
@@ -1395,7 +1404,9 @@ function connect(): void {
     if (msg.kind === "say") say(msg.text);
     else if (msg.kind === "stage") {
       log(`${msg.stage}: ${msg.detail}`);
-      if (msg.stage === "rejected") { rejectedAt = performance.now(); say(msg.detail, "failed"); }
+      if (msg.command) builds.stage(msg.command, msg.stage, msg.detail);
+      if (builds.active() > 1) sayWhileBuilding();
+      else if (msg.stage === "rejected") { rejectedAt = performance.now(); say(msg.detail, "failed"); }
       else if (msg.stage === "fixing") {
         // Keep the red "why" on screen long enough to read before the fix status replaces it.
         const wait = Math.max(0, 2200 - (performance.now() - rejectedAt));
@@ -1406,7 +1417,7 @@ function connect(): void {
     else if (msg.kind === "playtest") {
       void ghost.play({ base: loader.list().map((m) => ({ def: m.def, values: m.values })), candidate: msg.mod, replaces: msg.replaces, seed: msg.seed, inputs: msg.inputs, ok: msg.ok, plain: msg.plain });
     }
-    else if (msg.kind === "timing") log(`timing route ${msg.ms.route}ms write ${msg.ms.write}ms compile ${msg.ms.compile}ms verify ${msg.ms.verify}ms total ${msg.ms.total}ms`);
+    else if (msg.kind === "timing") { builds.finish(msg.command); log(`timing route ${msg.ms.route}ms write ${msg.ms.write}ms compile ${msg.ms.compile}ms verify ${msg.ms.verify}ms total ${msg.ms.total}ms`); }
     else if (msg.kind === "tweak") tweak(msg.modId, msg.knob, msg.value, "Tweaked.");
     else if (msg.kind === "removed") { loader.unload(msg.modId); renderMods(); }
     else if (msg.kind === "mod") {
@@ -1418,7 +1429,7 @@ function connect(): void {
         URL.revokeObjectURL(url);
         loader.load(loaded.default);
         registerLook(msg.mod.look);
-        say(`${msg.mod.title} verified and live.`, "done");
+        if (!sayWhileBuilding()) say(`${msg.mod.title} verified and live.`, "done");
         renderMods();
         const artPending = (msg.mod as { artPending?: string }).artPending;
         if (artPending) { if (framesBySubject[artPending]) pendingArt.delete(artPending); else pendingArt.add(artPending); }
