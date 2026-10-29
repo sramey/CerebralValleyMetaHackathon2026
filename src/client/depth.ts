@@ -366,6 +366,11 @@ export function drawGround25D(
  * Distant mountain silhouette behind ridgeFar (0.16x parallax) + volumetric celestial shafts
  * in the sky plane (occluded naturally by the mountains and terrain in front).
  */
+/** Sun/moon spot: left of the starter cliff and clear of the orb bar, so the overhang never hides it. */
+export function celestialPos(W: number): { x: number; y: number } {
+  return { x: W * 0.76, y: 96 };
+}
+
 export function drawDistantMountains(
   gfx: Graphics,
   camX: number,
@@ -378,8 +383,7 @@ export function drawDistantMountains(
   const horizon = H * 0.62 - camY * 0.1;
 
   // Subtle diagonal volumetric sky shafts behind the mountain ridges (occluded at the bottom by the ridges)
-  const cx = W - 70;
-  const cy = 60;
+  const { x: cx, y: cy } = celestialPos(W);
   for (let i = 0; i < 3; i++) {
     const topX = cx - 14 + i * 14;
     const topY = cy + 6;
@@ -588,7 +592,9 @@ export function drawSkyAndCelestials(
   hasSunEntity: boolean,
   skyEntityColor?: number,
 ): void {
-  const bandH = Math.ceil(H / skyBands);
+  // Enough bands that the steps are finer than the gradient's colour steps (12 bands read as visible stripes at 1080p).
+  const bands = Math.max(skyBands, 72);
+  const bandH = Math.ceil(H / bands);
   let topColor = skyColors[0] ?? 0x05070a;
   let bottomColor = skyColors[skyColors.length - 1] ?? 0x0d2229;
   if (skyEntityColor !== undefined && skyEntityColor > 0) {
@@ -596,8 +602,8 @@ export function drawSkyAndCelestials(
     bottomColor = mixColor(bottomColor, skyEntityColor, 0.88);
   }
 
-  for (let i = 0; i < skyBands; i++) {
-    const col = mixColor(topColor, bottomColor, i / (skyBands - 1));
+  for (let i = 0; i < bands; i++) {
+    const col = mixColor(topColor, bottomColor, i / (bands - 1));
     gfx.rect(0, i * bandH, W, bandH + 1).fill(col);
   }
 
@@ -611,8 +617,7 @@ export function drawSkyAndCelestials(
 
   // Celestial body: only drawn if mod did not spawn an explicit sun entity
   if (!hasSunEntity) {
-    const cx = W - 70;
-    const cy = 60;
+    const { x: cx, y: cy } = celestialPos(W);
     if (isDaytime) {
       // Radiant Sun: multi-ring warm golden glow + bright sun disc (NO crescent shadow cutout!)
       gfx.circle(cx, cy, 38).fill({ color: 0xffd952, alpha: 0.16 });
