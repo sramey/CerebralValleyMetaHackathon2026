@@ -5,7 +5,8 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Budget, DEFAULT_SESSION, readLimits } from "../server/budget";
-import { WorldStore, isWorldId, parseWorld, sanitizeValues, snapshotWorld } from "../server/worlds";
+import { WorldStore, isWorldId, parseWorld, restyledForWorld, sanitizeValues, snapshotWorld } from "../server/worlds";
+import { moodSpecFor } from "../server/mood";
 import type { SessionMod } from "../server/worlds";
 import { createStaticHandler, resolveInside } from "../server/static";
 
@@ -143,6 +144,33 @@ describe("worlds", () => {
   it("sanitizes knob values and parseWorld rejects wrong versions", () => {
     expect(sanitizeValues({ a: 1, b: "x", c: true, d: NaN, e: {}, f: "y".repeat(200) })).toEqual({ a: 1, b: "x", c: true });
     expect(parseWorld(JSON.stringify({ v: 2, id: "abcd", mods: [] }))).toBeNull();
+  });
+
+  it("saves and restores mood + restyled sheet URLs, while old worlds without a mood still load", async () => {
+    const root = tmp();
+    const store = new WorldStore(join(root, "w"), join(root, "demo"));
+    const spooky = await moodSpecFor("spooky");
+    mkdirSync(join(root, "public", "art", "gen"), { recursive: true });
+    writeFileSync(join(root, "public", "art", "gen", "ninja--spooky.webp"), "RIFF");
+    const mods = snapshotWorld([{ id: "player", values: {} }], new Map(), builtins);
+    const restyled = restyledForWorld(spooky, mods, { chicken: "/art/gen/chicken--spooky.webp", "../bad": "/etc/passwd" }, root);
+    expect(restyled).toEqual({
+      chicken: "/art/gen/chicken--spooky.webp",
+      ninja: "/art/gen/ninja--spooky.webp",
+    });
+    const saved = store.save(mods, spooky, restyled);
+    if ("error" in saved) throw new Error(saved.error);
+    const back = store.get(saved.id)!;
+    expect(back.mood).toEqual(spooky);
+    expect(back.restyled).toEqual({
+      chicken: "/art/gen/chicken--spooky.webp",
+      ninja: "/art/gen/ninja--spooky.webp",
+    });
+
+    // Old world without mood still loads with mood undefined.
+    const old = parseWorld(JSON.stringify({ v: 1, id: "oldworld", createdAt: "", mods: [{ builtin: true, id: "player", values: {} }] }))!;
+    expect(old.mood).toBeUndefined();
+    expect(old.restyled).toBeUndefined();
   });
 });
 

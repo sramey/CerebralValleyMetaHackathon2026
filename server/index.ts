@@ -28,7 +28,7 @@ import { learnFromFix, learnRuleFromFeedback, learnSkillFromFeedback } from "./l
 import { segmentPhoto } from "./photo";
 import { Budget, readLimits } from "./budget";
 import type { Kind } from "./budget";
-import { isWorldId, snapshotWorld, WorldStore } from "./worlds";
+import { isWorldId, restyledForWorld, snapshotWorld, WorldStore } from "./worlds";
 import { createStaticHandler } from "./static";
 import { createVoiceHub } from "./voice";
 
@@ -46,7 +46,7 @@ interface ManifestRec {
 }
 
 // Each connection has its own world (ADR 0014): a public server must never mix visitors' mods.
-interface Session { manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string>; mood?: MoodSpec; moodMods?: Set<string> }
+interface Session { manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string>; mood?: MoodSpec; moodMods?: Set<string>; restyled?: Record<string, string> }
 const sessions = new WeakMap<WebSocket, Session>();
 function sess(ws: WebSocket): Session {
   let s = sessions.get(ws);
@@ -530,6 +530,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     const bare = /^\s*(undo|undo (that|it|this)|revert( it)?|go back|put it back|back to normal)\W*$/i.test(command);
     if (sess(ws).mood && ((!id || !manifest.has(id)) || (bare && moodLatest)) && (!id || bare || /mood|style|theme|look|atmosphere/i.test(id) || id.toLowerCase() === sess(ws).mood!.name)) {
       sess(ws).mood = undefined;
+      sess(ws).restyled = undefined;
       send(ws, { kind: "mood", mood: null });
       send(ws, { kind: "say", text: "Back to normal." });
       send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
@@ -851,6 +852,7 @@ async function handleMood(ws: WebSocket, moodWords: string): Promise<void> {
   const spec = await moodSpecFor(words);
   sess(ws).mood = spec;
   sess(ws).moodMods = new Set(sess(ws).manifest.keys()); // to tell whether the mood is still the latest change
+  sess(ws).restyled = {};
   send(ws, { kind: "mood", mood: spec });
 }
 
@@ -859,20 +861,25 @@ async function handleRestyle(ws: WebSocket, msg: Extract<ClientMsg, { kind: "res
   const spec = sess(ws).mood;
   if (!spec || spec.name !== moodKey(String(msg.mood))) return;
   const keys = (Array.isArray(msg.keys) ? msg.keys : []).filter((k): k is string => typeof k === "string").slice(0, 12);
-  await pool(keys, 6, async (key) => {
+  await pool(keys, 4, async (key) => {
     if (sess(ws).mood !== spec) return;
     const skip = () => send(ws, { kind: "restyled", mood: spec.name, key, url: null });
     if (!sheetPath(key)) { skip(); return; }
     const cached = existsSync(join(process.cwd(), "public", "art", "gen", `${key}--${moodKey(spec.name)}.webp`));
     if (!cached && !spend(ws, "image")) { skip(); return; }
     const r = await restyleSheet(key, spec);
-    if (sess(ws).mood === spec) send(ws, { kind: "restyled", mood: spec.name, key, url: r ? r.url : null });
+    if (sess(ws).mood === spec) {
+      if (r) (sess(ws).restyled ??= {})[key] = r.url;
+      send(ws, { kind: "restyled", mood: spec.name, key, url: r ? r.url : null });
+    }
   });
 }
 
 function handleWorldSave(ws: WebSocket, msg: Extract<ClientMsg, { kind: "worldSave" }>): void {
   const requested = Array.isArray(msg.mods) ? msg.mods.filter((m) => m && typeof m.id === "string") : [];
-  const saved = worlds.save(snapshotWorld(requested, sess(ws).manifest, BUILTIN_IDS));
+  const s = sess(ws);
+  const mods = snapshotWorld(requested, s.manifest, BUILTIN_IDS);
+  const saved = worlds.save(mods, s.mood, restyledForWorld(s.mood, mods, s.restyled));
   if ("error" in saved) send(ws, { kind: "say", text: saved.error });
   else send(ws, { kind: "worldSaved", id: saved.id });
 }
@@ -881,12 +888,17 @@ function handleWorldLoad(ws: WebSocket, msg: Extract<ClientMsg, { kind: "worldLo
   const w = isWorldId(msg.id) ? worlds.get(msg.id) : null;
   if (!w) { send(ws, { kind: "say", text: "That world link doesn't exist (any more). Start fresh or open a demo world." }); return; }
   // The session now holds exactly this world, so remixing (edit/undo/tweak) works on it.
-  const manifest = sess(ws).manifest;
+  const s = sess(ws);
+  const manifest = s.manifest;
   manifest.clear();
   for (const m of w.mods) {
-    if (m.builtin !== true) manifest.set(m.id, { id: m.id, title: m.title, source: m.source, compiled: m.compiled, knobs: structuredClone(m.knobs), ...(m.art ? { art: m.art } : {}) });
+    if (m.builtin !== true) manifest.set(m.id, { id: m.id, title: m.title, source: m.source, compiled: m.compiled, knobs: structuredClone(m.knobs), ...(m.art ? { art: m.art } : {}), ...(m.look ? { look: m.look } : {}) });
   }
-  send(ws, { kind: "world", id: w.id, mods: w.mods as WorldMod[] });
+  s.mood = w.mood;
+  s.moodMods = w.mood ? new Set(manifest.keys()) : undefined;
+  const restyled = restyledForWorld(w.mood, w.mods, w.restyled);
+  s.restyled = restyled;
+  send(ws, { kind: "world", id: w.id, mods: w.mods as WorldMod[], ...(w.mood ? { mood: w.mood } : {}), ...(restyled ? { restyled } : {}) });
 }
 
 async function handleFeedback(ws: WebSocket, msg: Extract<ClientMsg, { kind: "feedback" }>): Promise<void> {
@@ -999,6 +1011,7 @@ function handleMessage(ws: WebSocket, raw: string): void {
   } else if (msg.kind === "undo") {
     if (msg.modId === "mood") {
       sess(ws).mood = undefined;
+      sess(ws).restyled = undefined;
     } else if (manifest.has(msg.modId)) {
       manifest.delete(msg.modId);
       send(ws, { kind: "removed", modId: msg.modId });

@@ -5,7 +5,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
-import type { DemoWorld, KnobDefs, Look, KnobValue, KnobValues, WorldMod } from "../src/contract";
+import type { DemoWorld, KnobDefs, Look, KnobValue, KnobValues, MoodSpec, WorldMod } from "../src/contract";
+import { moodKey, restyledUrl } from "./mood";
 
 export const MAX_WORLD_MODS = 40;
 export const MAX_WORLD_BYTES = 600_000;
@@ -17,7 +18,11 @@ export interface StoredWorld {
   blurb?: string;
   createdAt: string;
   mods: WorldMod[];
+  mood?: MoodSpec;
+  restyled?: Record<string, string>;
 }
+
+const AMBIENTS: readonly MoodSpec["ambient"][] = ["none", "fog", "snow", "embers", "sparks"];
 
 export const isWorldId = (id: unknown): id is string => typeof id === "string" && /^[A-Za-z0-9_-]{4,40}$/.test(id);
 
@@ -34,6 +39,73 @@ export function sanitizeValues(raw: unknown): KnobValues {
     }
   }
   return out;
+}
+
+const clampColor = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.min(0xffffff, Math.round(v))) : null);
+const clampFloat = (v: unknown, lo: number, hi: number): number | null => (typeof v === "number" && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : null);
+
+/** Validate a stored MoodSpec so a hand-edited file cannot poison client palette state. */
+export function sanitizeMood(raw: unknown): MoodSpec | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const m = raw as Record<string, unknown>;
+  if (typeof m.name !== "string" || !m.name.trim() || typeof m.anchor !== "string" || !m.anchor.trim()) return undefined;
+  const skyTop = clampColor(m.skyTop), skyBottom = clampColor(m.skyBottom);
+  const ridgeFar = clampColor(m.ridgeFar), ridgeNear = clampColor(m.ridgeNear);
+  const moon = clampColor(m.moon), star = clampColor(m.star);
+  const grass = clampColor(m.grass), soil = clampColor(m.soil), tint = clampColor(m.tint);
+  const grade = clampFloat(m.grade, 0, 1), dim = clampFloat(m.dim, 0, 2);
+  const fog = clampFloat(m.fog, 0, 1), vignette = clampFloat(m.vignette, 0, 1);
+  if ([skyTop, skyBottom, ridgeFar, ridgeNear, moon, star, grass, soil, tint, grade, dim, fog, vignette].some((x) => x === null)) return undefined;
+  const ambient = AMBIENTS.includes(m.ambient as MoodSpec["ambient"]) ? (m.ambient as MoodSpec["ambient"]) : "none";
+  return {
+    name: moodKey(m.name),
+    anchor: m.anchor.slice(0, 240),
+    skyTop: skyTop!, skyBottom: skyBottom!, ridgeFar: ridgeFar!, ridgeNear: ridgeNear!,
+    moon: moon!, star: star!, grass: grass!, soil: soil!, tint: tint!,
+    grade: grade!, dim: dim!, fog: fog!, vignette: vignette!, ambient,
+  };
+}
+
+/** Validate restyled sheet map: only valid sprite keys -> `/art/gen/<key>--<mood>.webp` URLs. */
+export function sanitizeRestyled(raw: unknown, moodName?: string): Record<string, string> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const suffix = moodName ? `--${moodKey(moodName)}.webp` : undefined;
+  const out: Record<string, string> = {};
+  let n = 0;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (n >= 24) break;
+    if (!/^[a-z0-9-]{1,64}$/.test(k) || k.startsWith("photo") || k.includes("--")) continue;
+    if (typeof v !== "string" || !/^\/art\/gen\/[a-z0-9-]+--[a-z0-9-]+\.webp$/.test(v)) continue;
+    if (suffix && v !== `/art/gen/${k}${suffix}`) continue;
+    out[k] = v;
+    n++;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** Gather restyled sheet URLs for a world's active mood from session state + cached files on disk. */
+export function restyledForWorld(
+  mood: MoodSpec | undefined,
+  mods: readonly WorldMod[],
+  sessionRestyled?: Record<string, string>,
+  root = process.cwd(),
+): Record<string, string> | undefined {
+  if (!mood) return undefined;
+  const out: Record<string, string> = sanitizeRestyled(sessionRestyled, mood.name) ?? {};
+  const keys = new Set<string>();
+  for (const m of mods) {
+    if (m.id === "player") keys.add("ninja");
+    else if (m.id === "chicken") keys.add("chicken");
+    if (!m.builtin && m.art?.key) keys.add(m.art.key);
+  }
+  const mk = moodKey(mood.name);
+  for (const k of keys) {
+    if (out[k] || !/^[a-z0-9-]{1,64}$/.test(k) || k.startsWith("photo") || k.includes("--")) continue;
+    if (existsSync(join(root, "public", "art", "gen", `${k}--${mk}.webp`))) {
+      out[k] = restyledUrl(k, mood.name);
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 export interface SessionMod {
@@ -87,7 +159,18 @@ export function parseWorld(text: string): StoredWorld | null {
         mods.push({ id: m.id, title: m.title, source: m.source, compiled: m.compiled, knobs: m.knobs, values: sanitizeValues(m.values), ...(m.art ? { art: m.art } : {}), ...(m.look ? { look: m.look } : {}) });
       }
     }
-    return { v: 1, id: w.id, title: w.title, blurb: w.blurb, createdAt: String(w.createdAt ?? ""), mods };
+    const mood = sanitizeMood(w.mood);
+    const restyled = mood ? sanitizeRestyled(w.restyled, mood.name) : undefined;
+    return {
+      v: 1,
+      id: w.id,
+      title: w.title,
+      blurb: w.blurb,
+      createdAt: String(w.createdAt ?? ""),
+      mods,
+      ...(mood ? { mood } : {}),
+      ...(restyled ? { restyled } : {}),
+    };
   } catch {
     return null;
   }
@@ -96,10 +179,19 @@ export function parseWorld(text: string): StoredWorld | null {
 export class WorldStore {
   constructor(private userDir: string, private demoDir: string) {}
 
-  save(mods: WorldMod[]): StoredWorld | { error: string } {
+  save(mods: WorldMod[], mood?: MoodSpec, restyled?: Record<string, string>): StoredWorld | { error: string } {
     if (mods.length === 0) return { error: "There's nothing in this world to share yet." };
     const id = randomBytes(6).toString("base64url");
-    const world: StoredWorld = { v: 1, id, createdAt: new Date().toISOString(), mods };
+    const cleanMood = sanitizeMood(mood);
+    const cleanRestyled = cleanMood ? sanitizeRestyled(restyled, cleanMood.name) : undefined;
+    const world: StoredWorld = {
+      v: 1,
+      id,
+      createdAt: new Date().toISOString(),
+      mods,
+      ...(cleanMood ? { mood: cleanMood } : {}),
+      ...(cleanRestyled ? { restyled: cleanRestyled } : {}),
+    };
     const text = JSON.stringify(world);
     if (text.length > MAX_WORLD_BYTES) return { error: "This world is too big to share." };
     mkdirSync(this.userDir, { recursive: true });
