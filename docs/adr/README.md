@@ -48,3 +48,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0013](0013-visible-verifier.md) | Visible verifier: bot playtest in a copy of the player's world, ghost replay, Wonder `run_playtest` agent fix | Draft |
 | [0015](0015-spark-visual-kind-shapes-fx.md) | Spark picks each entity's visual kind in the router call; shapes and effects drawn in code | Draft |
 | [0016](0016-parallel-agentic-builds.md) | Parallel build pool, Wonder as a Meta tool-calling agent, pronoun memory | Draft |
+| [0018](0018-unstick-casual-locomotion.md) | One-way floating platforms, engine stuck recovery, casual hop over the player | Draft |
