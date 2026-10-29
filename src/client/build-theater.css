@@ -1,15 +1,15 @@
 /* Build theater (ADR 0022): translucent code stream behind the gameplay + stage stepper. */
 .bt-stream {
   position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 3; pointer-events: none; opacity: 0; transition: opacity .5s ease;
-  display: flex; flex-direction: column; justify-content: flex-end; padding: 0 clamp(18px, 4vw, 70px) 54px;
-  /* Fade top and bottom so it never forms a hard edge over the game. */
-  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 28%, #000 62%, transparent 100%);
-  mask-image: linear-gradient(180deg, transparent 0%, #000 28%, #000 62%, transparent 100%);
+  display: flex; flex-direction: column; justify-content: flex-end; padding: 0 clamp(18px, 4vw, 70px) 78px;
+  /* Fade top and bottom so it never forms a hard edge over the game or collides with bottom hint. */
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 24%, #000 64%, transparent 92%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 24%, #000 64%, transparent 92%);
 }
 .bt-stream.on { opacity: 1; }
-.bt-label { font: 600 11px/1 ui-monospace, Consolas, monospace; letter-spacing: .2em; text-transform: uppercase; color: rgba(255, 201, 77, .75); margin-bottom: 8px; min-height: 11px; }
-.bt-code { font: 500 clamp(12px, 1.7vh, 16px)/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace; color: rgba(190, 225, 255, .5); white-space: pre; overflow: hidden; text-shadow: 0 0 14px rgba(90, 170, 255, .35); }
-.bt-line { min-height: 1.5em; }
+.bt-label { font: 600 clamp(10px, 1.2vh, 11px)/1 ui-monospace, Consolas, monospace; letter-spacing: .2em; text-transform: uppercase; color: rgba(255, 201, 77, .75); margin-bottom: 6px; min-height: 11px; }
+.bt-code { font: 500 clamp(11px, 1.5vh, 15px)/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; color: rgba(190, 225, 255, .5); white-space: pre; overflow: hidden; text-shadow: 0 0 14px rgba(90, 170, 255, .35); }
+.bt-line { min-height: 1.45em; }
 .bt-tail::after { content: "▍"; color: rgba(255, 201, 77, .9); margin-left: 1px; animation: bt-blink .8s steps(2) infinite; }
 .bt-c { color: rgba(120, 150, 150, .6); }
 .bt-s { color: rgba(110, 224, 200, .75); }
@@ -19,13 +19,13 @@
 
 .bt-stepper {
   position: absolute; top: 94px; left: 50%; transform: translateX(-50%); z-index: 24; pointer-events: none; opacity: 0; transition: opacity .35s;
-  display: flex; align-items: center; gap: 4px; padding: 5px 12px; border-radius: 999px;
+  display: flex; align-items: center; gap: clamp(2px, 0.5vw, 4px); padding: clamp(4px, 0.6vh, 6px) clamp(8px, 1vw, 14px); border-radius: 999px;
   background: rgba(14, 19, 28, .72); border: 1px solid rgba(255, 201, 77, .3); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
 }
 .bt-stepper.on { opacity: 1; }
-.bt-pip { display: flex; align-items: center; gap: 6px; font: 600 11px/1 "Segoe UI", system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: rgba(232, 228, 216, .4); padding-right: 10px; position: relative; transition: color .25s; }
-.bt-pip:not(:last-child)::after { content: ""; width: 14px; height: 2px; margin-left: 4px; background: rgba(255, 255, 255, .15); border-radius: 1px; transition: background .3s; }
-.bt-pip i { width: 10px; height: 10px; border-radius: 50%; border: 2px solid currentColor; box-sizing: border-box; transition: background .25s, box-shadow .25s; }
+.bt-pip { display: flex; align-items: center; gap: clamp(4px, 0.6vw, 6px); font: 600 clamp(9.5px, 1.2vh, 11px)/1 "Segoe UI", system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: rgba(232, 228, 216, .4); padding-right: clamp(6px, 0.8vw, 10px); position: relative; transition: color .25s; }
+.bt-pip:not(:last-child)::after { content: ""; width: clamp(8px, 1vw, 14px); height: 2px; margin-left: 4px; background: rgba(255, 255, 255, .15); border-radius: 1px; transition: background .3s; }
+.bt-pip i { width: 9px; height: 9px; border-radius: 50%; border: 2px solid currentColor; box-sizing: border-box; transition: background .25s, box-shadow .25s; }
 .bt-pip.now { color: #ffc94d; }
 .bt-pip.now i { animation: bt-pulse .7s ease-in-out infinite; }
 .bt-pip.done { color: #7ee081; }

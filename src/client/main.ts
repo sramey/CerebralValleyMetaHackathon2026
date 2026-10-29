@@ -451,7 +451,7 @@ drawerToggle.addEventListener("click", () => {
 addEventListener("resize", fitRenderer);
 const RADIAL_PAD_X = 104;
 const RADIAL_PAD_TOP = 134;
-const RADIAL_PAD_BOTTOM = 104;
+const RADIAL_PAD_BOTTOM = 128;
 function formatRadialLabel(type: string): string {
   return type.replace(/^photo-\d+-?/, "").replace(/[-_]+/g, " ").trim() || type;
 }

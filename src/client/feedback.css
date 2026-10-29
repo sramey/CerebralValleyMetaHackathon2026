@@ -1,5 +1,5 @@
 /* Radial menu thumbs-up / thumbs-down + mod card rating buttons + feedback modal (ADR 0020) */
-#radial-menu { --r: 78px; }
+#radial-menu { --r: clamp(66px, 8.5vh, 76px); }
 #radial-menu button[data-action="thumbs-up"] {
   background: rgba(16, 36, 26, 0.82);
   border-color: rgba(63, 208, 106, 0.55);
@@ -77,6 +77,7 @@
 }
 .feedback-card {
   width: min(440px, 100%);
+  border-radius: 10px;
   background: #10141b;
   border: 1px solid #2a3342;
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.65);
