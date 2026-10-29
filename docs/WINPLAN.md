@@ -33,3 +33,8 @@ Post a camera-import clip on X **now**, a voice clip when voice lands, the "it c
 
 ## Judging facts (CV office hours, 2026-10-29)
 Judges review the repo, the 3-minute video and the live product; a hosted version is optional. **Every judging stage requires a working demo that runs from the repo setup instructions** (CV #judging, 10-28). They run the integration with their own key, so the README setup must work cold. Building started when kickoff ended, Oct 26 12:24 PM ET. Keep keys out of the repo.
+- **Deadline:** Wed Nov 4, 9:00 PM ET = **02:00 UTC Thu Nov 5**. Submit at cerebralvalley.ai/e/meta-ai-developer-hackathon/hackathon/submit.
+- **Video:** judges stop at **3:00** exactly. Submit an unlisted YouTube link with anyone-with-the-link access.
+- **Coding tools** (Claude Code etc.) are allowed and needn't be disclosed. **Every model called at runtime must be Meta.**
+- **Open-weights bonus ($10K):** serving Muse Spark Open through Baseten qualifies (no self-hosting needed). The demo must explain where and how the open model is used. Bonuses stack and are opted into via the submission and demo; there's no separate form.
+- **Finals:** Mon Nov 9, 12 PM ET, top 5 per track, at the closing ceremony.
