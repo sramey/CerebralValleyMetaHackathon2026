@@ -16,7 +16,7 @@ Replaces `docs/WORKERS.md` (kept as the spike-era record).
 C:\Users\srame\source\metabuild              main (orchestrator only)          server :8787  vite :5173
 C:\Users\srame\source\metabuild-wt\<task>    branch wt/<task> (one worker)     server :8790+slot  vite :5180+slot
 ```
-Slot 1 = `top`, slot 2 = `bottom`.
+Slot 1 = `top`, slot 2 = `bottom`, slot 3 = Antigravity (headless), further slots = OpenCode (headless) or overflow; each lease gets the next free slot so ports never clash. Headless workers can't receive messages: the orchestrator writes a brief file (rules + bead), runs them in the background, and reviews their final report and branch.
 
 ## Lease lifecycle
 1. **Lease.** The orchestrator commits anything pending on `main`, runs `scripts/wt.sh new <task> <slot>`, makes sure the bead holds goal, acceptance, files owned/off-limits and a pre-assigned ADR number, and messages the window with the bead id, worktree and ports. The worker claims it (`bd update <id> --claim`).
