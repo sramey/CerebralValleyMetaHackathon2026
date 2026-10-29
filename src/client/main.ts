@@ -1258,10 +1258,11 @@ cameraConfirm.addEventListener("click", () => {
   send({ kind: "photoBring", key } as unknown as ClientMsg);
   closeCameraModal(false);
 });
+const WS_URL: string = import.meta.env.VITE_WS_URL ?? "ws://127.0.0.1:8787";
 function connect(): void {
-  try { ws = new WebSocket("ws://127.0.0.1:8787"); }
+  try { ws = new WebSocket(WS_URL); }
   catch { serverStatus.textContent = "Server: offline (local mods still work)"; return; }
-  ws.addEventListener("open", () => { serverStatus.textContent = "Server: connected on 8787"; });
+  ws.addEventListener("open", () => { serverStatus.textContent = `Server: connected on ${WS_URL}`; });
   ws.addEventListener("close", () => {
     serverStatus.textContent = "Server: offline (local mods still work)";
     setTimeout(connect, 3000);

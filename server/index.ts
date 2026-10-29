@@ -1,4 +1,4 @@
-// WebSocket game server on port 8787. Route (Spark) -> write (Wonder) ->
+// WebSocket game server on port 8787 (override with PORT). Route (Spark) -> write (Wonder) ->
 // compile -> verify -> one auto-fix -> hot-load message. Never crashes on a
 // bad mod or a missing MODEL_API_KEY (answers with say in that case).
 import { readFileSync } from "node:fs";
@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
 import { SIM } from "../src/contract";
 import type { ClientMsg, KnobDefs, KnobValue, ServerMsg } from "../src/contract";
-import { chat, hasApiKey, SPARK, WONDER } from "./meta";
+import { chat, hasApiKey, loadEnv, SPARK, WONDER } from "./meta";
 import { compileMod } from "./compile";
 import { verifyMod } from "./verify";
 import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, formatManifest, ROUTER_SYSTEM, WONDER_SYSTEM } from "./prompt";
@@ -14,7 +14,8 @@ import { logBuild, saveModSources } from "./createlog";
 import { artCachedUrl, artKeyForType, deriveSubject, generateSubjectArt, isScenerySubject, pickArtType } from "./art";
 import { segmentPhoto } from "./photo";
 
-const PORT = 8787;
+loadEnv();
+const PORT = Number(process.env.PORT ?? 8787);
 
 interface ManifestRec {
   id: string;
