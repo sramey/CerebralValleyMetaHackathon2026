@@ -6,6 +6,7 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
 import { SIM } from "../src/contract";
+import { detectMoodCommand, entityKind, extractSpawnedEntities, isHeldItemType, isPlayerAbilityCommand } from "../src/ontology";
 import { moodKey, moodSpecFor, pool, restyleSheet, sheetPath } from "./mood";
 import { fallbackVisual, lookFor, parseShape, parseVisual } from "./visual";
 import type { Visual } from "./visual";
@@ -185,7 +186,7 @@ function knobValues(rec: ManifestRec): Record<string, unknown> {
 }
 
 function manifestText(ws: WebSocket): string {
-  return formatManifest([...sess(ws).manifest.values()].map((m) => ({ id: m.id, title: m.title, knobs: knobValues(m) })));
+  return formatManifest([...sess(ws).manifest.values()].map((m) => ({ id: m.id, title: m.title, knobs: knobValues(m), entities: extractSpawnedEntities(m.source).map((e) => ({ type: e.type, kind: e.kind })) })));
 }
 
 function photoTitle(prompt: string): string {
@@ -478,8 +479,13 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
       route = { action: "new" };
     }
     // Safety net: a whole-world mood phrase Spark routed as a build is still a mood (ADR 0017).
-    const moodWord = /^(?:please\s+)?(?:make|turn|set|change)\s+(?:it|everything|the\s+(?:world|game|level|map|place|scene))(?:\s+look(?:\s+like)?)?(?:\s+(?:more|so|very))?\s+(spooky|scary|creepy|haunted|halloween|snowy|wintry|winter|neon|cyberpunk|synthwave)/i.exec(command.trim());
-    if (route && route.action === "new" && moodWord) route = { action: "mood", mood: moodWord[1].toLowerCase() };
+    const moodWord = detectMoodCommand(command);
+    if (moodWord && (!route || route.action === "new" || route.action === "edit" || route.action === "question")) route = { action: "mood", mood: moodWord };
+    // Player abilities (double jump, wall stick/climb, dash) are ALWAYS new standalone ability mods hooking api.player(), never edit on an NPC.
+    if (isPlayerAbilityCommand(command) && (!route || route.action === "edit" || route.action === "tweak")) {
+      console.log(`[route] player ability -> new for: ${command}`);
+      route = { action: "new" };
+    }
     // Pronoun commands ("make it bigger") act on the mod touched last, not on a fresh build.
     const pronounTarget = resolvePronoun(command, sess(ws).recent);
     if (route && pronounTarget && manifest.has(pronounTarget) && route.action === "new") {
@@ -518,7 +524,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     return;
   }
   if (route.action === "mood") {
-    await handleMood(ws, route.mood ?? command.replace(/^(make|turn|set)\s+(it|everything|the\s+\w+)\s+/i, ""));
+    await handleMood(ws, route.mood ?? detectMoodCommand(command) ?? command.replace(/^(make|turn|set|change)\s+(it|this|everything|the\s+\w+)\s+/i, ""));
     send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
     return;
   }
@@ -781,7 +787,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
       const subject = deriveSubject(command, artType);
       const key = artKeyForType(artType);
       if (key) {
-        const scenery = visual === "prop" || (visual !== "creature" && (isScenerySubject(subject) || isScenerySubject(artType)));
+        const scenery = visual === "prop" || isHeldItemType(subject) || isHeldItemType(artType) || entityKind(artType) === "prop" || (visual !== "creature" && (isScenerySubject(subject) || isScenerySubject(artType)));
         const cachedUrl = artCachedUrl(key);
         if (cachedUrl) {
           art = { key, url: cachedUrl, ...(scenery ? { scenery: true } : {}) };

@@ -2,6 +2,7 @@
 // the player's current world with and without the new mod, over a few seeds,
 // and judges the difference. Headless, deterministic, a few ms per run.
 import { SIM } from "../src/contract";
+import { entityKind } from "../src/ontology";
 import type { KnobValues, ModDefinition } from "../src/contract";
 import { World } from "../src/sim/world";
 import { ModLoader } from "../src/sim/loader";
@@ -106,7 +107,7 @@ export async function inspectWorld(worldMods: PlaytestWorldMod[], titles: Record
   for (const e of world.entities) {
     const t = types.get(e.type);
     if (t) { t.count++; continue; }
-    types.set(e.type, { count: 1, sample: { owner: e.owner, x: Math.round(e.x), y: Math.round(e.y), w: Math.round(e.w), h: Math.round(e.h), solid: e.solid, gravityScale: e.gravityScale, hostile: e.data.hostile === true } });
+    types.set(e.type, { count: 1, sample: { kind: e.kind ?? entityKind(e), owner: e.owner, x: Math.round(e.x), y: Math.round(e.y), w: Math.round(e.w), h: Math.round(e.h), solid: e.solid, gravityScale: e.gravityScale, hostile: e.data.hostile === true } });
   }
   return {
     note: "y grows down; ground top is y=400",

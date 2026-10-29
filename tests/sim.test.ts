@@ -182,4 +182,137 @@ describe("sim", () => {
     expect(w.entities.some((e) => e.id === junkIds[junkIds.length - 1])).toBe(true);
     expect(w.entities.filter((e) => e.type === "junk").length).toBeLessThan(600);
   });
+
+  it("auto-step-up: smooth horizontal movement on low stair steps (<= 28px) without zeroing vx (cjj)", () => {
+    const w = new World(42);
+    // Ground at y=400, player height=40 standing at y=360 (y+h=400), onGround=true
+    w.spawn({ type: "ground", x: 0, y: 400, w: 800, h: 40, solid: true, gravityScale: 0 }, "level");
+    const p = w.spawn({ type: "player", x: 100, y: 360, w: 26, h: 40, solid: true, gravityScale: 1 }, "level");
+    p.onGround = true;
+    p.vx = 120; // moving right
+
+    // A low stair step 20px high (top at y=380, h=20, base at y=400) directly ahead at x=101
+    const step = w.spawn({ type: "stair", x: 101, y: 380, w: 40, h: 20, solid: true, gravityScale: 0 }, "level");
+
+    w.step();
+    // Player should have stepped up onto the step (y = 380 - 40 = 340) with vx preserved
+    expect(p.y).toBeCloseTo(340, 0);
+    expect(p.onGround).toBe(true);
+    expect(p.vx).toBe(120);
+    expect(p.x).toBeGreaterThan(100);
+  });
+
+  it("tall walls (> 28px) block horizontal movement and zero vx (cjj)", () => {
+    const w = new World(42);
+    w.spawn({ type: "ground", x: 0, y: 400, w: 800, h: 40, solid: true, gravityScale: 0 }, "level");
+    const p = w.spawn({ type: "player", x: 100, y: 360, w: 26, h: 40, solid: true, gravityScale: 1 }, "level");
+    p.onGround = true;
+    p.vx = 120;
+
+    // A tall wall 50px high (top at y=350, step height = 400 - 350 = 50 > 28)
+    w.spawn({ type: "wall", x: 101, y: 350, w: 40, h: 50, solid: true, gravityScale: 0 }, "level");
+
+    w.step();
+    expect(p.vx).toBe(0);
+    expect(p.x).toBe(101 - p.w); // clamped to wall left face
+  });
+
+  it("overhead ceiling blocks step-up when head space is obstructed (cjj)", () => {
+    const w = new World(42);
+    w.spawn({ type: "ground", x: 0, y: 400, w: 800, h: 40, solid: true, gravityScale: 0 }, "level");
+    const p = w.spawn({ type: "player", x: 100, y: 360, w: 26, h: 40, solid: true, gravityScale: 1 }, "level");
+    p.onGround = true;
+    p.vx = 120;
+
+    // Step of 20px (top y=380), but with an obstacle at y=330 (steppedBox would be y=340..380, overlapping y=330..350)
+    w.spawn({ type: "stair", x: 101, y: 380, w: 40, h: 20, solid: true, gravityScale: 0 }, "level");
+    w.spawn({ type: "ceiling-block", x: 101, y: 330, w: 40, h: 20, solid: true, gravityScale: 0 }, "level");
+
+    w.step();
+    expect(p.vx).toBe(0);
+    expect(p.x).toBe(101 - p.w);
+  });
+
+  it("player double-jump works reliably as a standalone ability mod on rising-edge of Space (7hl)", () => {
+    const w = new World(123);
+    const l = new ModLoader(w);
+    l.load(groundMod);
+    l.load(playerMod);
+
+    // Standalone double-jump mod pattern (per prompt.ts guidance)
+    const doubleJumpMod: ModDefinition = {
+      id: "double-jump",
+      title: "Double Jump",
+      setup(api) {
+        let prevJump = false;
+        let jumpsLeft = 1;
+        let wasOnGround = true;
+        api.onTick(() => {
+          const p = api.player();
+          if (!p) return;
+          const input = api.input();
+          const jumpPressed = input.jump && !prevJump;
+          prevJump = input.jump;
+          if (p.onGround) {
+            jumpsLeft = 1;
+            wasOnGround = true;
+          } else {
+            if (jumpPressed && !wasOnGround && jumpsLeft > 0) {
+              jumpsLeft--;
+              p.vy = -600;
+              api.burst(p.x + p.w / 2, p.y + p.h, 0x00f0ff, 8);
+            }
+            wasOnGround = false;
+          }
+        });
+      },
+      dispose() {},
+      test(t) {
+        if (!t.api.player()) t.api.spawn({ type: "player", x: 100, y: 366, w: 26, h: 34, gravityScale: 1 });
+        if (t.api.byType("ground").length === 0) t.api.spawn({ type: "ground", x: 0, y: 400, w: 800, h: 40, solid: true, gravityScale: 0 });
+        const p = t.api.player()!;
+        p.onGround = true;
+        p.vy = -600;
+        p.onGround = false;
+        t.step(1, { jump: true });
+        t.step(8, { jump: false });
+        t.step(1, { jump: true });
+        t.expect(p.vy < -200, "double jump triggered mid-air");
+      },
+    };
+
+    l.load(doubleJumpMod);
+    const p = w.entities.find((e) => e.type === "player")!;
+
+    // Let player land on ground first (player spawns at y=40, ground at y=400)
+    for (let i = 0; i < 40; i++) w.step();
+    expect(p.onGround).toBe(true);
+
+    // 1. Initial jump off ground: hold Space for 2 frames
+    w.input.jump = true;
+    w.step();
+    w.step();
+    expect(p.onGround).toBe(false);
+    expect(p.vy).toBeLessThan(0); // airborne from initial jump
+
+    // 2. Release Space for 10 frames while climbing/falling
+    w.input.jump = false;
+    for (let i = 0; i < 10; i++) w.step();
+    expect(p.onGround).toBe(false);
+
+    // 3. Press Space again in mid-air (rising edge): double jump triggers!
+    w.input.jump = true;
+    w.step();
+    expect(p.vy).toBeLessThan(-200);
+    expect(p.vy).toBeCloseTo(-575, 0); // upward impulse applied
+
+    // 4. Holding Space longer mid-air does NOT consume extra jumps
+    w.step();
+    expect(p.vy).toBeGreaterThan(-600); // gravity acting normally
+
+    // 5. Test runner also verifies the mod self-test
+    const r = runModTest(doubleJumpMod);
+    expect(r.ok).toBe(true);
+    expect(r.errors).toEqual([]);
+  });
 });
