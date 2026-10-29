@@ -61,4 +61,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0027](0027-in-app-stats-feed.md) | In-app stats feed: GET /api/stats + impact panel in the pipeline view | Draft |
 | [0028](0028-sketch-mode-phrases-pause-side-palette.md) | Sketch mode: local phrases, frozen sim, side palette | Draft |
 | [0032](0032-open-weights-router-on-baseten.md) | Open-weights router: Muse Spark Open on Baseten with hosted fallback | Draft |
-| [0033](0033-visible-agent-tool-loop.md) | Visible agent tool loop + autonomy stats | Draft |
+| [0033](0033-visible-agent-loop-and-autonomy-stats.md) | Visible agent tool loop + autonomy stats | Draft |
