@@ -107,7 +107,7 @@ export function localUnsafe(text: string): SafetyCategory | null {
 /** Checked in this order; each list holds only phrases with no playful reading in a family game. */
 const LOCAL_PATTERNS: readonly (readonly [SafetyCategory, readonly RegExp[]])[] = [
   ["self-harm", [
-    /\b(kill|killing|hurt|hurting|cut|cutting|starve|starving) (my ?self|myself)\b/,
+    /\b(kill|killing|hurt|hurting|cut|cutting|stab|stabbing|starve|starving) (my ?self|myself)\b/,
     /\b(suicide|suicidal|self[- ]harm|end my life|want to die|wanna die)\b/,
   ]],
   ["sexual", [
@@ -116,7 +116,10 @@ const LOCAL_PATTERNS: readonly (readonly [SafetyCategory, readonly RegExp[]])[] 
   ["violence", [
     /\b(blood|bloody|bloodbath|gore|gory|guts|entrails|corpse|corpses|dead bod(y|ies)|murder|murdered|massacre|torture|tortured)\b/,
     /\b(decapitat\w*|dismember\w*|mutilat\w*|disembowel\w*|behead\w*|massacr\w*)\b/,
-    /\b(stab|stabbed|stabbing|slit (a |the )?throat)\b/,
+    // "stab" used to be here and declined "add a sword that stabs enemies" (bead 82z): stabbing
+    // a game enemy is an ordinary platformer move (owner rule: game weapons and fighting pass).
+    // Graphic knife work is still the model lane's call; "slit throat" has no playful reading.
+    /\bslit (a |the )?throat\b/,
   ]],
   ["hate", [
     /\bhate speech\b/,
@@ -148,7 +151,9 @@ UNSAFE:
 - self-harm or suicide;
 - personal information: real full names, addresses, phone numbers, schools, passwords.
 
-SAFE: ordinary video-game action — guns, flamethrowers, swords, bombs, rockets, lasers, fireballs, fighting and defeating enemies and bosses, explosions, cartoon heroes and monsters, friendly animals, silly jokes, mild spooky stuff, sports, cars, food, magic, weather, music, tools, family-friendly adventure.
+SAFE (build it as asked, do not soften it): ordinary video-game action — guns, flamethrowers, swords, bows, bombs, rockets, lasers, fireballs, and weapons of every kind; a weapon used on monsters, robots, bosses or other game enemies; stabbing, slashing, shooting, punching, kicking and defeating enemies; enemies and bosses that explode, blow up, chase, attack or get destroyed; health bars, lives, respawn; explosions, fire, lava, traps; cartoon heroes and monsters; zombies, skeletons, ghosts, spiders and other spooky or scary characters; silly jokes, mild spooky stuff, sports, cars, food, magic, weather, music, tools, family-friendly adventure.
+
+A weapon, a fight, an explosion or a scary character is NEVER on its own a reason to refuse: those are what this game is made of. Only refuse when the request is explicitly about graphic harm to a real person or a real group, or about one of the other UNSAFE items.
 
 Reply with ONLY one JSON object, no markdown, no prose:
 {"safe":true}

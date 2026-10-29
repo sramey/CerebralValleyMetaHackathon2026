@@ -2,6 +2,7 @@
 // and a Muse Spark classification with a hard time budget. These tests never touch the
 // network — the classifier is a mock — so the whole suite is headless and costs nothing.
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { generateSubjectArt } from "../server/art";
 import {
   DECLINE,
@@ -89,12 +90,39 @@ describe("local lane: normal requests and innocent readings are untouched", () =
     "add a giant rubber duck",
     "add my dog",
     "add lots of coins and a mushroom",
+    // Game weapons and fighting are ordinary platformer content (ADR 0044, bead 82z). These used
+    // to be at risk of a local hit: "stabs" was in the word list until this set went live.
+    "lets add a flame thrower",
+    "give me a gun",
+    "add a sword that stabs enemies",
+    "add a boss that explodes",
+    "add some enemies to fight",
+    "let me shoot fireballs",
+    "add a swarm of zombies to fight",
   ];
   for (const text of INNOCENT) {
     it(`passes "${text}"`, () => {
       expect(localUnsafe(text)).toBeNull();
     });
   }
+
+  it("passes every command in the three rehearsal sets without a model call", async () => {
+    const dir = new URL("../scripts/", import.meta.url);
+    for (const file of ["rehearse.json", "rehearse-aware.json", "rehearse-weapons.json"]) {
+      const parsed = JSON.parse(readFileSync(new URL(file, dir), "utf8")) as unknown[];
+      for (const entry of parsed) {
+        const cmd = typeof entry === "string" ? entry : (entry as { cmd?: unknown }).cmd;
+        expect(typeof cmd).toBe("string");
+        expect({ cmd, local: localUnsafe(String(cmd)) }).toEqual({ cmd, local: null });
+      }
+    }
+  });
+
+  it("still refuses graphic harm, weapons or not", () => {
+    expect(localUnsafe("add a bloody corpse")).toBe("violence");
+    expect(localUnsafe("add a slit throat")).toBe("violence");
+    expect(localUnsafe("a mod where I stab myself")).toBe("self-harm");
+  });
 
   it("lets a normal request through with the model's permission", async () => {
     const calls: string[] = [];
