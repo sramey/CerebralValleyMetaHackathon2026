@@ -5,7 +5,7 @@ import { SIM } from "../contract";
 import type { ClientMsg, Entity, KnobValue, ModDefinition, ServerMsg } from "../contract";
 import { initVoice } from "./voice";
 import { Fx } from "./fx";
-import { drawShape, kindOf, registerLook } from "./shapes";
+import { drawCliff, drawShape, isCliff, kindOf, registerLook } from "./shapes";
 import { ModLoader } from "../sim/loader";
 import { createGhost } from "./ghost";
 import { World } from "../sim/world";
@@ -277,6 +277,7 @@ function drawEntity(e: Entity, camX: number, camY: number): void {
       if (t.includes(k)) { drawDigitize(e, x, y); return; }
     }
   }
+  if (isCliff(e)) { drawCliff(gfx, e, x, y); return; }
   // dark outline behind every code-drawn entity
   gfx.rect(x - 1.5, y - 1.5, e.w + 3, e.h + 3).fill(OUTLINE);
   if (t === "player") {

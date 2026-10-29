@@ -119,3 +119,62 @@ export function drawShape(g: Graphics, e: Entity, x: number, y: number, shape: S
       g.rect(x, y + h - Math.max(2, h * 0.14), w, Math.max(2, h * 0.14)).fill({ color: scale(c, 0.6), alpha: 0.8 });
   }
 }
+
+/** True for the level's cliff overhang: a platform far taller than any ledge (the starter ground's `overhang` knob). */
+export function isCliff(e: Entity): boolean {
+  return e.type.toLowerCase().includes("platform") && e.h >= 300 && e.w >= 120;
+}
+
+/** A hanging rock mass with strata, cracks and a jagged underside. Draws only inside the collision box. */
+export function drawCliff(g: Graphics, e: Entity, x: number, y: number): void {
+  const w = e.w, h = e.h;
+  const bottom = y + h;
+  const teeth = 22;
+  g.rect(x - 2, y - 2, w + 4, h - teeth + 2).fill(OUTLINE);
+  g.rect(x, y, w, h - teeth).fill(0x5b4a3a);
+  // irregular rock blocks, anchored to the world so they stay put as the camera moves
+  const hash = (a: number, b: number) => (((a * 73856093) ^ (b * 19349663)) >>> 0) % 1000 / 1000;
+  const cell = 30;
+  const first = Math.max(0, Math.floor((Math.max(y, -40) - y) / cell));
+  for (let r = first; r * cell < h - teeth; r++) {
+    const ry = y + r * cell;
+    if (ry > 760) break;
+    const rh = Math.min(cell, h - teeth - r * cell);
+    let cx = 0;
+    while (cx < w) {
+      const hv = hash(r + 7, Math.floor(cx / 10) + 3);
+      const bw = Math.min(w - cx, 26 + Math.floor(hv * 44));
+      const tone = hv < 0.33 ? 0x66523f : hv < 0.66 ? 0x5b4a3a : 0x51402f;
+      g.rect(x + cx, ry, bw, rh).fill(tone);
+      g.rect(x + cx, ry, bw, 2).fill({ color: 0x8a7258, alpha: 0.4 });
+      g.rect(x + cx, ry + rh - 2, bw, 2).fill({ color: 0x2a2018, alpha: 0.5 });
+      g.rect(x + cx + bw - 1.5, ry, 1.5, rh).fill({ color: 0x2a2018, alpha: 0.6 });
+      cx += bw;
+    }
+  }
+  // lit left face, shaded right face
+  g.rect(x, y, 7, h - teeth).fill({ color: 0x9b8264, alpha: 0.45 });
+  g.rect(x + w - 10, y, 10, h - teeth).fill({ color: 0x2a2018, alpha: 0.5 });
+  // deterministic cracks
+  for (let i = 0; i < 4; i++) {
+    const cx = x + 22 + i * 44 + (Math.floor(e.x) % 7);
+    let py = Math.max(y, bottom - 260) + i * 17;
+    let px = cx;
+    for (let s = 0; s < 6 && py < bottom - teeth - 8; s++) {
+      const nx = px + (s % 2 === 0 ? 5 : -4), ny = py + 18 + ((i + s) % 3) * 4;
+      g.moveTo(px, py).lineTo(nx, ny).stroke({ width: 1.5, color: 0x2a2018, alpha: 0.7 });
+      px = nx; py = ny;
+    }
+  }
+  // jagged underside: stalactite teeth inside the box
+  const n = Math.max(3, Math.round(w / 26));
+  const tw = w / n;
+  for (let i = 0; i < n; i++) {
+    const tx = x + i * tw;
+    const th = teeth - ((i * 5) % 4);
+    g.poly([tx - 1.5, bottom - teeth - 1, tx + tw + 1.5, bottom - teeth - 1, tx + tw / 2, bottom - teeth + th + 1.5]).fill(OUTLINE);
+    g.poly([tx, bottom - teeth, tx + tw, bottom - teeth, tx + tw / 2, bottom - teeth + th]).fill(i % 2 ? 0x4a3b2d : 0x5b4a3a);
+  }
+  // drip of moss at the lip so it reads as a ledge, not a wall
+  g.rect(x, bottom - teeth - 4, w, 3).fill({ color: 0x3fd06a, alpha: 0.5 });
+}
