@@ -230,7 +230,8 @@ export function validateClientMsg(value: unknown): Validation {
       return accept({ kind: "photoBringLocal", key: k, prompt, aspect });
     }
     case "worldState":
-    case "worldSave": {
+    case "worldSave":
+    case "worldExport": {
       const mods = modList(value.mods);
       return mods ? accept({ kind, mods }) : reject(REPLY.bad);
     }
