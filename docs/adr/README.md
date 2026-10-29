@@ -67,3 +67,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0031](0031-art-decisions-derive-from-ontology.md) | Art decisions derive from the entity ontology | Draft |
 | [0034](0034-anonymous-tester-metrics.md) | Anonymous family-test metrics (?tester=N) → aggregates-only page | Draft |
 | [0039](0039-pickup-reach-and-sketch-replaces-level.md) | Pickup reach matches the drawn player; a sketched level replaces the level | Draft |
+| [0041](0041-time-travel-timeline.md) | Time-travel timeline: snapshot every world change, restore as a new step | Draft |

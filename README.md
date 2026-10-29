@@ -42,6 +42,7 @@ Open **http://127.0.0.1:8787/** (or your configured `PORT`) in Chrome, click the
 | `add some stairs` | Wonder builds code-drawn stone steps; the player walks up them |
 | `give me a gun`, then press **F** | Equips a hand cannon; F (or X) fires shots that damage enemies |
 | **✏️ Draw a level** (or say "let me draw a level") | Sketch ledges, coins and enemies over the game; Wonder reads the drawing and builds it |
+| **⏪ Time travel** (strip under the stage) | Every build, mood and undo is a dot; hover one to see that world, Restore brings it back as a new step (nothing is ever deleted) |
 | Press **P** | Pipeline view with live build numbers (landed %, first-try %, median time) |
 | Click **👍** or **👎** on any mod card or radial menu | Feedback modal lets you teach the engine rules, distill skills, or auto-fix the mod live |
 
