@@ -172,6 +172,7 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
   let cameraAtOpen: SketchCamera = { x: 0, y: 0 };
   let ctx: CanvasRenderingContext2D | null = null;
   let settleTimer = 0;
+  let watchdog = 0;
 
   function selectBrush(tag: SketchTag): void {
     const b = SKETCH_BRUSHES.find((x) => x.tag === tag);
@@ -313,6 +314,15 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
     deps.send({ kind: "sketch", ...payload });
     deps.say("Reading your sketch...", "building");
     deps.log?.(`sketch sent: ${payload.strokes.length} strokes, image ${Math.round(payload.image.length / 1024)} KB`);
+    // No answer (visitor mode, dead server): hand the sketch back instead of hanging.
+    window.clearTimeout(watchdog);
+    watchdog = window.setTimeout(() => {
+      if (state !== "building") return;
+      state = "drawing";
+      root.dataset.state = "drawing";
+      palette.classList.remove("busy");
+      setStatus("No answer from the builder — press Done to try again.", "error");
+    }, 60000);
   });
 
   function open(): void {
@@ -336,6 +346,7 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
 
   /** Fade the sketch out once its mod is live (the real level pops in underneath). */
   function finish(state_: "done" | "failed"): void {
+    window.clearTimeout(watchdog);
     root.dataset.state = state_;
     root.classList.add("settle");
     settleTimer = window.setTimeout(() => { close(); }, 700);
@@ -343,6 +354,7 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
 
   function close(): void {
     window.clearTimeout(settleTimer);
+    window.clearTimeout(watchdog);
     root.hidden = true;
     root.classList.remove("settle", "building");
     delete root.dataset.state;
@@ -352,6 +364,10 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
   }
 
   addEventListener("resize", () => { if (state !== "closed") resize(); });
+  // Escape leaves sketch mode without building anything.
+  addEventListener("keydown", (ev) => {
+    if (state !== "closed" && ev.key === "Escape") { close(); ev.preventDefault(); }
+  });
 
   return {
     open,
@@ -365,6 +381,7 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
       }
       if (msg.kind === "stage" && (msg.stage === "failed" || msg.stage === "rejected")) {
         // Let the player draw again instead of losing the sketch.
+        window.clearTimeout(watchdog);
         state = "drawing";
         root.dataset.state = "drawing";
         palette.classList.remove("busy");
