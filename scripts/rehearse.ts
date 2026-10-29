@@ -11,6 +11,12 @@ const TIMEOUT_MS = 180_000;
 const LOG_FILE = join("logs", "rehearse.jsonl");
 
 export type Outcome = "landed" | "rejected" | "failed";
+export type Expectation = "landed" | "rejected-then-fixed" | "rejected";
+
+export interface RehearsalSpec {
+  cmd: string;
+  expect?: Expectation;
+}
 
 export interface RehearsalRow {
   run: number;
@@ -19,6 +25,8 @@ export interface RehearsalRow {
   totalMs: number;
   autoFixRounds: number;
   rejectedThenFixed: boolean;
+  expect?: Expectation;
+  metExpect?: boolean;
 }
 
 export interface CommandSummary {
@@ -30,6 +38,17 @@ export interface CommandSummary {
   p90Ms: number;
   autoFixRounds: number;
   rejectedThenFixed: number;
+  expect?: Expectation;
+  expected?: number;
+  expectPct?: number;
+}
+
+const EXPECTATIONS: readonly Expectation[] = ["landed", "rejected-then-fixed", "rejected"];
+
+export function metExpectation(row: Pick<RehearsalRow, "outcome" | "rejectedThenFixed">, expect: Expectation = "landed"): boolean {
+  if (expect === "rejected-then-fixed") return row.outcome === "landed" && row.rejectedThenFixed;
+  if (expect === "rejected") return row.outcome === "rejected";
+  return row.outcome === "landed";
 }
 
 export function percentile(values: readonly number[], p: number): number {
@@ -41,6 +60,10 @@ export function percentile(values: readonly number[], p: number): number {
 
 function summarizeGroup(command: string, rows: readonly RehearsalRow[]): CommandSummary {
   const passed = rows.filter((row) => row.outcome === "landed").length;
+  const hasExpect = rows.some((row) => row.expect !== undefined);
+  const groupExpect = command === "ALL" ? undefined : rows.find((row) => row.expect !== undefined)?.expect;
+  const expected = rows.filter((row) => row.metExpect ?? metExpectation(row, row.expect)).length;
+  const expectPct = rows.length === 0 ? 0 : Math.round((expected / rows.length) * 1000) / 10;
   return {
     command,
     runs: rows.length,
@@ -50,6 +73,7 @@ function summarizeGroup(command: string, rows: readonly RehearsalRow[]): Command
     p90Ms: percentile(rows.map((row) => row.totalMs), 90),
     autoFixRounds: rows.reduce((sum, row) => sum + row.autoFixRounds, 0),
     rejectedThenFixed: rows.filter((row) => row.rejectedThenFixed).length,
+    ...(hasExpect ? { ...(groupExpect ? { expect: groupExpect } : {}), expected, expectPct } : {}),
   };
 }
 
@@ -97,16 +121,34 @@ function parseArgs(argv: readonly string[], defaultPort: number): Options {
   return options;
 }
 
-function readCommands(only?: string): string[] {
-  const parsed: unknown = JSON.parse(readFileSync(new URL("./rehearse.json", import.meta.url), "utf8"));
-  if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every((command) => typeof command === "string" && command.trim().length > 0)) {
-    throw new Error("scripts/rehearse.json must be a non-empty array of command strings");
+export function parseCommandList(parsed: unknown, only?: string): RehearsalSpec[] {
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    throw new Error("scripts/rehearse.json must be a non-empty array of command strings or {cmd, expect} objects");
   }
-  const commands = parsed as string[];
-  if (only === undefined) return commands;
-  const selected = commands.filter((command) => command === only);
+  const specs: RehearsalSpec[] = parsed.map((entry) => {
+    if (typeof entry === "string" && entry.trim().length > 0) {
+      return { cmd: entry };
+    }
+    if (entry && typeof entry === "object") {
+      const obj = entry as { cmd?: unknown; expect?: unknown };
+      if (typeof obj.cmd === "string" && obj.cmd.trim().length > 0) {
+        if (obj.expect === undefined) return { cmd: obj.cmd };
+        if (typeof obj.expect === "string" && EXPECTATIONS.includes(obj.expect as Expectation)) {
+          return { cmd: obj.cmd, expect: obj.expect as Expectation };
+        }
+      }
+    }
+    throw new Error("scripts/rehearse.json entries must be non-empty strings or {cmd, expect} objects");
+  });
+  if (only === undefined) return specs;
+  const selected = specs.filter((spec) => spec.cmd === only);
   if (selected.length === 0) throw new Error(`--only did not match a command: ${only}`);
   return selected;
+}
+
+function readCommands(only?: string): RehearsalSpec[] {
+  const parsed: unknown = JSON.parse(readFileSync(new URL("./rehearse.json", import.meta.url), "utf8"));
+  return parseCommandList(parsed, only);
 }
 
 async function connect(port: number): Promise<WebSocket> {
@@ -120,7 +162,8 @@ async function connect(port: number): Promise<WebSocket> {
 
 type WorldMod = { id: string; values: Record<string, KnobValue> };
 
-function runCommand(ws: WebSocket, world: WorldMod[], command: string, run: number): Promise<RehearsalRow> {
+function runCommand(ws: WebSocket, world: WorldMod[], spec: RehearsalSpec, run: number): Promise<RehearsalRow> {
+  const command = spec.cmd;
   return new Promise((resolveCommand) => {
     const started = performance.now();
     let landed = false;
@@ -131,7 +174,17 @@ function runCommand(ws: WebSocket, world: WorldMod[], command: string, run: numb
       clearTimeout(timer);
       ws.off("message", onMessage);
       const outcome: Outcome = landed ? "landed" : rejected ? "rejected" : "failed";
-      resolveCommand({ run, command, outcome, totalMs, autoFixRounds, rejectedThenFixed: rejected && landed });
+      const rejectedThenFixed = rejected && landed;
+      const base: RehearsalRow = {
+        run,
+        command,
+        outcome,
+        totalMs,
+        autoFixRounds,
+        rejectedThenFixed,
+        ...(spec.expect ? { expect: spec.expect, metExpect: metExpectation({ outcome, rejectedThenFixed }, spec.expect) } : {}),
+      };
+      resolveCommand(base);
     };
 
     const timer = setTimeout(() => {
@@ -176,15 +229,35 @@ function runCommand(ws: WebSocket, world: WorldMod[], command: string, run: numb
   });
 }
 
-function printTable(rows: readonly RehearsalRow[]): void {
+function formatExpectCell(row: CommandSummary): string {
+  if (row.expect) {
+    return `${row.expected ?? 0}/${row.runs} (${(row.expectPct ?? 0).toFixed(1)}%) ${row.expect}`;
+  }
+  if (row.command === "ALL" && row.expected !== undefined) {
+    return `${row.expected}/${row.runs} (${(row.expectPct ?? 0).toFixed(1)}%)`;
+  }
+  return "-";
+}
+
+export function formatTable(rows: readonly RehearsalRow[]): string {
   const summaries = [...summarize(rows), summarizeAll(rows)];
   const commandWidth = Math.max(...summaries.map((row) => row.command.length), "command".length);
+  const expectCells = summaries.map((row) => formatExpectCell(row));
+  const expectWidth = Math.max(...expectCells.map((cell) => cell.length), "expect".length);
   const pad = (value: string, width: number): string => value.padEnd(width, " ");
-  console.log(`\n${pad("command", commandWidth)}  ${pad("pass", 12)} ${pad("p50 ms", 8)} ${pad("p90 ms", 8)} ${pad("fixes", 5)} rescued`);
-  for (const row of summaries) {
+  const lines = [
+    `${pad("command", commandWidth)}  ${pad("pass", 12)} ${pad("expect", expectWidth)} ${pad("p50 ms", 8)} ${pad("p90 ms", 8)} ${pad("fixes", 5)} rescued`,
+  ];
+  for (let i = 0; i < summaries.length; i++) {
+    const row = summaries[i];
     const pass = `${row.passed}/${row.runs} (${row.passPct.toFixed(1)}%)`;
-    console.log(`${pad(row.command, commandWidth)}  ${pad(pass, 12)} ${pad(String(row.p50Ms), 8)} ${pad(String(row.p90Ms), 8)} ${pad(String(row.autoFixRounds), 5)} ${row.rejectedThenFixed}`);
+    lines.push(`${pad(row.command, commandWidth)}  ${pad(pass, 12)} ${pad(expectCells[i], expectWidth)} ${pad(String(row.p50Ms), 8)} ${pad(String(row.p90Ms), 8)} ${pad(String(row.autoFixRounds), 5)} ${row.rejectedThenFixed}`);
   }
+  return lines.join("\n");
+}
+
+function printTable(rows: readonly RehearsalRow[]): void {
+  console.log(`\n${formatTable(rows)}`);
 }
 
 async function main(): Promise<void> {
@@ -199,11 +272,12 @@ async function main(): Promise<void> {
     const ws = await connect(options.port);
     const world: WorldMod[] = [{ id: "player", values: {} }, { id: "ground", values: {} }];
     try {
-      for (const command of commands) {
-        const row = await runCommand(ws, world, command, run);
+      for (const spec of commands) {
+        const row = await runCommand(ws, world, spec, run);
         rows.push(row);
         appendFileSync(join(process.cwd(), LOG_FILE), `${JSON.stringify({ ...row, at: new Date().toISOString() })}\n`);
-        console.log(`run ${run}/${options.runs}  ${row.outcome.padEnd(8)} ${String(row.totalMs).padStart(7)} ms  ${command}`);
+        const expectNote = row.expect ? `  [expect ${row.expect}: ${row.metExpect ? "pass" : "miss"}]` : "";
+        console.log(`run ${run}/${options.runs}  ${row.outcome.padEnd(8)} ${String(row.totalMs).padStart(7)} ms  ${spec.cmd}${expectNote}`);
       }
     } finally {
       ws.close();

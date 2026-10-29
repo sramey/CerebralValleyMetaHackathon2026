@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { percentile, summarize, summarizeAll } from "../scripts/rehearse";
+import { formatTable, metExpectation, parseCommandList, percentile, summarize, summarizeAll } from "../scripts/rehearse";
 import type { RehearsalRow } from "../scripts/rehearse";
 
 function row(command: string, outcome: RehearsalRow["outcome"], totalMs: number, extra: Partial<RehearsalRow> = {}): RehearsalRow {
@@ -45,5 +45,53 @@ describe("rehearsal summarizer", () => {
     expect(percentile(values, 0)).toBe(10);
     expect(percentile([], 90)).toBe(0);
     expect(values).toEqual([50, 10, 40, 20, 30]);
+  });
+
+  it("parses plain string commands and {cmd, expect} objects", () => {
+    const list = parseCommandList([
+      "add a bouncing green slime",
+      { cmd: "make me huge", expect: "rejected-then-fixed" },
+      "undo",
+    ]);
+    expect(list).toEqual([
+      { cmd: "add a bouncing green slime" },
+      { cmd: "make me huge", expect: "rejected-then-fixed" },
+      { cmd: "undo" },
+    ]);
+    expect(parseCommandList(list, "make me huge")).toEqual([{ cmd: "make me huge", expect: "rejected-then-fixed" }]);
+    expect(() => parseCommandList([{ cmd: "x", expect: "nope" }])).toThrow();
+  });
+
+  it("evaluates per-command expectations and formats the expect column", () => {
+    expect(metExpectation({ outcome: "landed", rejectedThenFixed: true }, "rejected-then-fixed")).toBe(true);
+    expect(metExpectation({ outcome: "landed", rejectedThenFixed: false }, "rejected-then-fixed")).toBe(false);
+    expect(metExpectation({ outcome: "landed", rejectedThenFixed: false }, "landed")).toBe(true);
+
+    const rows: RehearsalRow[] = [
+      row("make it rain", "landed", 400),
+      row("make me huge", "landed", 1400, { autoFixRounds: 1, rejectedThenFixed: true, expect: "rejected-then-fixed" }),
+      row("make me huge", "landed", 900, { run: 2, rejectedThenFixed: false, expect: "rejected-then-fixed" }),
+    ];
+    const [rain, huge] = summarize(rows);
+    expect(rain.expect).toBeUndefined();
+    expect(huge).toMatchObject({
+      command: "make me huge",
+      passed: 2,
+      passPct: 100,
+      expect: "rejected-then-fixed",
+      expected: 1,
+      expectPct: 50,
+    });
+    expect(summarizeAll(rows)).toMatchObject({
+      command: "ALL",
+      runs: 3,
+      passed: 3,
+      expected: 2,
+      expectPct: 66.7,
+    });
+    const table = formatTable(rows);
+    expect(table).toContain("expect");
+    expect(table).toContain("1/2 (50.0%) rejected-then-fixed");
+    expect(table).toContain("2/3 (66.7%)");
   });
 });
