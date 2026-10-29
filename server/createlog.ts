@@ -3,7 +3,9 @@
 //
 // FILE: logs/builds.jsonl (directory auto-created; gitignored). Append-only —
 // nothing here ever rewrites or deletes existing lines. Logging never throws:
-// a logging failure must not break a live build.
+// a logging failure must not break a live build. npm run stats aggregates this
+// file into docs/evidence/build-stats.md; tests redirect it with setLogFile()
+// so a test run never pollutes the real evidence.
 //
 // LINE FORMATS (one JSON object per line):
 //   Build: { kind? (absent = build), ts ISO, command, route: "new"|"tweak"|"edit",
@@ -33,6 +35,20 @@ import { dirname, join } from "node:path";
 
 export const LOG_FILE = join(process.cwd(), "logs", "builds.jsonl");
 export const MODS_DIR = join(process.cwd(), "logs", "mods");
+
+// Tests point the log at a temp file so a test run can never write into the real
+// evidence log (npm run stats reads it). Production never calls the setter.
+let activeLog = LOG_FILE;
+
+/** Point every log*() call at another file (null restores the repo default). */
+export function setLogFile(file: string | null): void {
+  activeLog = file ?? LOG_FILE;
+}
+
+/** Where log*() calls are writing right now. */
+export function activeLogFile(): string {
+  return activeLog;
+}
 
 export interface BuildTimings {
   route: number;
@@ -100,8 +116,8 @@ export function saveModSources(sources: string[], modId?: string): string[] {
 /** Append one build entry as a single JSON line. Never throws. */
 export function logBuild(entry: BuildEntry): void {
   try {
-    mkdirSync(dirname(LOG_FILE), { recursive: true });
-    appendFileSync(LOG_FILE, JSON.stringify({ ts: new Date().toISOString(), ...entry }) + "\n");
+    mkdirSync(dirname(activeLog), { recursive: true });
+    appendFileSync(activeLog, JSON.stringify({ ts: new Date().toISOString(), ...entry }) + "\n");
   } catch {
     /* logging must not break builds */
   }
@@ -110,9 +126,9 @@ export function logBuild(entry: BuildEntry): void {
 /** Append one art-generation record to the same JSONL file. Never throws. */
 export function logArt(rec: { subject: string; key?: string; file: string; ms: number; samOk?: boolean }): void {
   try {
-    mkdirSync(dirname(LOG_FILE), { recursive: true });
+    mkdirSync(dirname(activeLog), { recursive: true });
     appendFileSync(
-      LOG_FILE,
+      activeLog,
       JSON.stringify({ kind: "art", ts: new Date().toISOString(), ...rec }) + "\n",
     );
   } catch {
@@ -126,8 +142,8 @@ export function logArt(rec: { subject: string; key?: string; file: string; ms: n
  */
 export function logMood(rec: { mood: string; ms?: number }): void {
   try {
-    mkdirSync(dirname(LOG_FILE), { recursive: true });
-    appendFileSync(LOG_FILE, JSON.stringify({ kind: "mood", ts: new Date().toISOString(), ...rec }) + "\n");
+    mkdirSync(dirname(activeLog), { recursive: true });
+    appendFileSync(activeLog, JSON.stringify({ kind: "mood", ts: new Date().toISOString(), ...rec }) + "\n");
   } catch {
     /* logging must not break anything */
   }

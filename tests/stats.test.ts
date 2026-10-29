@@ -180,12 +180,13 @@ describe("build stats (npm run stats)", () => {
 
   it("round-trips a real mood line from server/createlog.ts", async () => {
     const dir = mkdtempSync(join(tmpdir(), "metabuild-stats-"));
-    const cwd = vi.spyOn(process, "cwd").mockReturnValue(dir);
+    vi.resetModules();
+    const { logMood, setLogFile } = await import("../server/createlog");
+    const logPath = join(dir, "builds.jsonl");
+    setLogFile(logPath);
     try {
-      vi.resetModules();
-      const { logMood } = await import("../server/createlog");
       logMood({ mood: "spooky", ms: 120 });
-      const line = readFileSync(join(dir, "logs", "builds.jsonl"), "utf8").trim();
+      const line = readFileSync(logPath, "utf8").trim();
       const row = JSON.parse(line) as Record<string, unknown>;
       // Only the resolved mood name and a duration: the player's words never reach the log.
       expect(Object.keys(row).sort()).toEqual(["kind", "mood", "ms", "ts"]);
@@ -194,7 +195,7 @@ describe("build stats (npm run stats)", () => {
       expect(s.moods).toEqual({ requests: 1, byName: [{ name: "spooky", count: 1 }] });
       expect(s.requests).toBe(0); // a mood is not a code build
     } finally {
-      cwd.mockRestore();
+      setLogFile(null);
       rmSync(dir, { recursive: true, force: true });
     }
   });
