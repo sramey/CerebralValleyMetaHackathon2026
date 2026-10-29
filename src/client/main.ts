@@ -25,11 +25,12 @@ import coinsMod from "../mods/coins";
 import movingPlatformMod from "../mods/platform-moving";
 import fireArrowMod from "../mods/fire-arrow";
 import parallaxMod from "../mods/parallax";
+import { resolveItemMod, gunMod } from "./items";
 
 const BUILTINS: Record<string, ModDefinition> = {
   player: playerMod, ground: groundMod, enemies: enemyMod, rain: rainMod,
   coins: coinsMod, "moving-platform": movingPlatformMod, "fire-arrow": fireArrowMod,
-  chicken: chickenMod, parallax: parallaxMod,
+  chicken: chickenMod, parallax: parallaxMod, gun: gunMod,
 };
 
 const world = new World(1337);
@@ -767,7 +768,8 @@ function syncInput(): void {
   world.input.left = keys.has("ArrowLeft") || keys.has("KeyA");
   world.input.right = keys.has("ArrowRight") || keys.has("KeyD");
   world.input.jump = keys.has("ArrowUp") || keys.has("KeyW") || keys.has("Space");
-  world.input.shoot = keys.has("KeyX") || keys.has("KeyJ");
+  world.input.shoot = keys.has("KeyX") || keys.has("KeyJ") || keys.has("KeyF");
+  world.input.use = keys.has("KeyF") || keys.has("KeyE") || keys.has("KeyX") || keys.has("KeyJ");
 }
 
 // --- mod cards -----------------------------------------------------------------
@@ -869,6 +871,8 @@ function handleLocal(text: string): boolean {
   // Exact matches only: anything with extra descriptive words falls through to the server.
   // Extra aliases are the normalized forms of the index.html chip commands, which must keep working:
   // "add some ground" -> "some ground", "make it rain" -> "it rain", "shoot fire arrows" (unchanged).
+  const itemMod = resolveItemMod(t);
+  if (itemMod) { loadLocal(itemMod); return true; }
   if (n === "starter world" || n === "starter") { loadLocal(playerMod); loadLocal(groundMod); return true; }
   if (n === "player" || n === "ninja") { loadLocal(playerMod); return true; }
   if (n === "ground" || n === "some ground") { loadLocal(groundMod); return true; }
@@ -1733,7 +1737,7 @@ if (!worldParam) autoLoadStarterOnce();
     particles: world.particles.length,
     hud: world.hudList().map((h) => ({
       id: h.id, owner: h.owner, kind: h.kind, label: h.label,
-      value: h.value === undefined ? undefined : Math.round(h.value * 10) / 10,
+      value: h.value === undefined ? undefined : typeof h.value === "number" ? Math.round(h.value * 10) / 10 : h.value,
       max: h.max, text: h.text, position: h.position,
     })),
   });
