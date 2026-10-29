@@ -12,13 +12,13 @@
       <main id="stage-wrap">
         <div id="stage"></div>
         <div id="hint">Move: A/D or arrows &nbsp; Jump: W / Space &nbsp; Shoot: X &nbsp; Talk: hold Shift</div>
-        <div id="radial-menu" hidden>
+        <div id="radial-menu" role="toolbar" aria-label="Object actions" hidden>
           <div id="radial-center">object</div>
-          <button type="button" data-action="bigger" style="--a:-90deg; animation-delay:0ms" title="Bigger">＋</button>
-          <button type="button" data-action="front" style="--a:-18deg; animation-delay:40ms" title="Bring to front">Front</button>
-          <button type="button" data-action="remove" style="--a:54deg; animation-delay:80ms" title="Remove">Remove</button>
-          <button type="button" data-action="back" style="--a:126deg; animation-delay:120ms" title="Send to back">Back</button>
-          <button type="button" data-action="smaller" style="--a:198deg; animation-delay:160ms" title="Smaller">－</button>
+          <button type="button" data-action="bigger" style="--a:-90deg; animation-delay:0ms" title="Bigger" aria-label="Bigger"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+          <button type="button" data-action="front" style="--a:-18deg; animation-delay:40ms" title="Bring to front" aria-label="Bring to front"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h14"/><path d="M12 20V8"/><path d="m7 13 5-5 5 5"/></svg></button>
+          <button type="button" data-action="remove" style="--a:54deg; animation-delay:80ms" title="Remove" aria-label="Remove"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M10 11v6M14 11v6"/></svg></button>
+          <button type="button" data-action="back" style="--a:126deg; animation-delay:120ms" title="Send to back" aria-label="Send to back"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20h14"/><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/></svg></button>
+          <button type="button" data-action="smaller" style="--a:198deg; animation-delay:160ms" title="Smaller" aria-label="Smaller"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
         </div>
       </main>
       <aside id="rail">
