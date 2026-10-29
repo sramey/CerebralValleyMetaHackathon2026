@@ -152,6 +152,7 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #
 #sketch-overlay { position: absolute; inset: 0; z-index: 40; background: rgba(5,7,10,.55); display: block; transition: opacity .55s ease; }
 #sketch-overlay[hidden] { display: none; }
 #sketch-overlay.settle { opacity: 0; pointer-events: none; }
+#stage-wrap:has(#sketch-overlay:not([hidden])) #pipeline-btn { display: none; }
 #sketch-canvas { position: absolute; inset: 0; display: block; touch-action: none; cursor: crosshair; }
 #sketch-overlay[data-state="building"] #sketch-canvas { animation: sketch-shimmer 1.5s ease-in-out infinite; cursor: progress; }
 #sketch-overlay[data-state="building"] #sketch-palette .sketch-brushes,
