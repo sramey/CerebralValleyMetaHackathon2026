@@ -461,8 +461,14 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
       console.log(`[route] fallback to new for: ${command}`);
       route = { action: "new" };
     }
+    // Pronoun commands ("make it bigger") act on the mod touched last, not on a fresh build.
+    const pronounTarget = resolvePronoun(command, sess(ws).recent);
+    if (route && pronounTarget && manifest.has(pronounTarget) && route.action === "new") {
+      console.log(`[route] pronoun -> edit ${pronounTarget} for: ${command}`);
+      route = { action: "edit", target: pronounTarget };
+    }
     // Guard: "add/make/create ..." is always a build, never a tweak/question.
-    if (route && /^(add|make|create|spawn|build)\b/i.test(command.trim()) && route.action !== "new" && route.action !== "edit" && route.action !== "undo") {
+    if (route && !(pronounTarget && route.action === "tweak") && /^(add|make|create|spawn|build)\b/i.test(command.trim()) && route.action !== "new" && route.action !== "edit" && route.action !== "undo") {
       console.log(`[route] coerced ${route.action} -> new for: ${command}`);
       route = { action: "new" };
     }

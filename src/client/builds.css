@@ -1,0 +1,14 @@
+/* Per-build chips under the orb while a compound command builds in parallel (ADR 0016). */
+.builds { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.builds:empty { display: none; }
+.builds-chip {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px;
+  padding: 4px 8px; border-left: 3px solid #6aa7ff; border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06); font-size: 12px; line-height: 1.3;
+  transition: border-color 0.2s, opacity 0.4s;
+}
+.builds-chip[data-phase="landed"] { border-left-color: #5fd07a; opacity: 0.85; }
+.builds-chip[data-phase="failed"] { border-left-color: #ff6a6a; opacity: 0.85; }
+.builds-name { font-weight: 600; }
+.builds-trail { opacity: 0.7; font-variant-numeric: tabular-nums; }
+.builds-chip[data-phase="running"] .builds-trail::after { content: " …"; }
