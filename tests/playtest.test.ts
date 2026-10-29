@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { compileMod } from "../server/compile";
 import { importMod } from "../server/verify";
 import { playtestMod } from "../server/playtest";
-import type { WorldMod } from "../server/playtest";
+import type { PlaytestWorldMod as WorldMod } from "../server/playtest";
 import { PLAYTEST, rleDecode, rleEncode, runBot, unpackInput } from "../src/sim/playtest";
 import { World } from "../src/sim/world";
 import { ModLoader } from "../src/sim/loader";

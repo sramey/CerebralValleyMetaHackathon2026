@@ -10,7 +10,7 @@ import type { PlaytestVerdict } from "../src/sim/playtest";
 import { importMod } from "./verify";
 
 /** One mod of the player's current world, in load order. */
-export interface WorldMod { id: string; compiled: string; values?: KnobValues }
+export interface PlaytestWorldMod { id: string; compiled: string; values?: KnobValues }
 
 export interface PlaytestOutcome {
   ok: boolean;
@@ -49,7 +49,7 @@ function buildWorld(seed: number, entries: Entry[]): World {
 }
 
 /** The mods that make up the world the player sees now, plus (or replacing) the candidate. */
-export async function playtestMod(worldMods: WorldMod[], candidate: { def: ModDefinition; values?: KnobValues; replaces?: string }): Promise<PlaytestOutcome> {
+export async function playtestMod(worldMods: PlaytestWorldMod[], candidate: { def: ModDefinition; values?: KnobValues; replaces?: string }): Promise<PlaytestOutcome> {
   const t0 = performance.now();
   const base: Entry[] = [];
   for (const m of worldMods) {

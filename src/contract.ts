@@ -96,8 +96,22 @@ export type ClientMsg =
   | { kind: "photoFind"; key: string; image: string; prompt: string }
   | { kind: "photoBring"; key: string }
   | { kind: "photoBringLocal"; key: string; prompt: string; aspect: number }
-  /** The mods in the player's world right now, in load order, sent before each command so the playtest runs in a copy of it. */
-  | { kind: "world"; mods: { id: string; values: Record<string, KnobValue> }[] };
+  /** The mods in the player's world right now, in load order, sent before each command so the playtest runs in a copy of it (ADR 0013). */
+  | { kind: "worldState"; mods: { id: string; values: Record<string, KnobValue> }[] }
+  // Voice (ADR 0012). Mic audio itself travels as binary frames: PCM16 mono 16 kHz.
+  | { kind: "voiceWarm" }
+  | { kind: "voiceStart" }
+  | { kind: "voiceEnd"; cancel?: boolean }
+  // Share links (ADR 0014). The server only ever saves mods it verified itself; the client just says which are loaded.
+  | { kind: "worldSave"; mods: { id: string; values: KnobValues }[] }
+  | { kind: "worldLoad"; id: string };
+
+/** One mod in a saved world: a built-in the client bundles, or a verified AI mod with its source. */
+export type WorldMod =
+  | { builtin: true; id: string; values: KnobValues }
+  | { builtin?: false; id: string; title: string; source: string; compiled: string; knobs: KnobDefs; values: KnobValues; art?: { key: string; url: string; scenery?: boolean } };
+
+export interface DemoWorld { id: string; title: string; blurb: string }
 
 export type BuildStage = "routing" | "writing" | "compiling" | "verifying" | "rejected" | "fixing" | "done" | "failed";
 
@@ -111,7 +125,13 @@ export type ServerMsg =
   | { kind: "segment"; key: string; box: { x: number; y: number; w: number; h: number } | null }
   /** One bot playtest. The client replays `inputs` (RLE of input masks) in a copy of its own world plus `mod`. */
   | { kind: "playtest"; command: string; attempt: number; ok: boolean; plain: string; seed: number; frames: number; inputs: number[]; mod: { id: string; compiled: string }; replaces?: string; ms: number }
-  | { kind: "timing"; command: string; ms: { route: number; write: number; compile: number; verify: number; total: number } };
+  | { kind: "timing"; command: string; ms: { route: number; write: number; compile: number; verify: number; total: number } }
+  | { kind: "voiceState"; state: "ready" | "listening" | "error"; detail?: string }
+  | { kind: "transcript"; text: string; final: boolean; ms?: { firstPartial: number; final: number } }
+  | { kind: "worldSaved"; id: string }
+  | { kind: "world"; id: string; mods: WorldMod[] }
+  // Visitor mode (no key, kill-switch, or budget spent): the game still plays; offer these instead.
+  | { kind: "visitor"; reason: "nokey" | "killswitch" | "budget"; demos: DemoWorld[] };
 
 export interface VerifyResult {
   ok: boolean;

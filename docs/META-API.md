@@ -17,6 +17,7 @@ Sources: dev.meta.ai/docs/models, /speech-to-text, /media-segmentation, /pricing
 
 ## Realtime facts
 - **Voice Transcribe realtime:** `wss://api.meta.ai/v1/asr/realtime?sessionId=<id>`.
+  - Verified handshake (2026-10-29): first frame `{authorization:{accessToken:"Bearer KEY"}, audioEncoding:"PCM_16KHZ", model:"muse-voice-transcribe-1.0", mode:"PUSH_TO_TALK", partialMode:"CUMULATIVE", keywords, languageBias}`; ack is `{"sessionId":...}`. In PUSH_TO_TALK, `endStream` ends the whole session, so it's one session per utterance; the final arrives ~100 ms after `endStream`, close 1000 ~500 ms later.
   - Send a JSON handshake as the first text frame within 10 s, with auth in `authorization.accessToken` = `Bearer <key>`. The HTTP Authorization header is ignored.
   - Audio is PCM signed 16-bit little-endian mono at 16 or 24 kHz, sent as binary frames **paced at real time**. Keep sending silence while live.
   - Partial transcripts stream as you speak. End with `{"type":"endStream"}` and keep reading until close code 1000.
@@ -41,6 +42,6 @@ Per team, not per key. Read the `x-ratelimit-*` headers.
 | Wonder mod (~80 lines) | ~8s | ~13s | Full command median 8.7s / p95 12.3s across the 10-command spike run (`scripts/spike-run.ts`), incl. route+compile+verify |
 | Muse Image sprite sheet | ~8s | — | `POST /v1/images/generations`, model `muse-image-1.0` -> WebP `b64_json`. One consistent character, 4 poses, flat magenta |
 | SAM 3.1 single image | ~1.2s | — | `POST /v1/responses`, model `sam-3.1` -> box coords + encoded mask string (format not yet decoded; client chroma-keys instead, ADR 0007) |
-| Transcribe: speech → partial | — | — | Not yet measured (voice not built) |
+| Transcribe: speech onset → first partial | ~0.86 s | ~0.99 s | Meta emits after the first word. Release → final ~0.13 s p50. Cold handshake 0.5–0.8 s, hidden by a warm session (ADR 0012) |
 
 Critical finding: at the default reasoning effort, Wonder/Spark replies come back **empty** on our prompts (reasoning tokens eat the whole budget). All calls use `reasoning_effort: minimal` — see [ADR 0001](adr/0001-reasoning-effort-minimal.md).

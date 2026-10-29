@@ -3,6 +3,7 @@ import { framesFor, loadSpriteSheet, loadSubjects } from "./sprites";
 import chickenMod from "../mods/chicken";
 import { SIM } from "../contract";
 import type { ClientMsg, Entity, KnobValue, ModDefinition, ServerMsg } from "../contract";
+import { initVoice } from "./voice";
 import { ModLoader } from "../sim/loader";
 import { createGhost } from "./ghost";
 import { World } from "../sim/world";
@@ -1261,11 +1262,86 @@ cameraConfirm.addEventListener("click", () => {
   send({ kind: "photoBring", key } as unknown as ClientMsg);
   closeCameraModal(false);
 });
-const WS_URL: string = import.meta.env.VITE_WS_URL ?? "ws://127.0.0.1:8787";
+// Dev: the lease's VITE_WS_URL. Production build: same origin as the page (ws:// or wss:// behind HTTPS), ADR 0014.
+const WS_URL: string = import.meta.env.DEV
+  ? (import.meta.env.VITE_WS_URL ?? "ws://127.0.0.1:8787")
+  : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
+// --- worlds, share links, visitor mode (ADR 0014) ----------------------------
+const worldParam = new URLSearchParams(location.search).get("w");
+let worldRequested = false;
+
+async function importMod(compiled: string): Promise<ModDefinition> {
+  const url = URL.createObjectURL(new Blob([compiled], { type: "text/javascript" }));
+  try { return ((await import(/* @vite-ignore */ url)) as { default: ModDefinition }).default; }
+  finally { URL.revokeObjectURL(url); }
+}
+
+/** Replace the running world with a saved one: built-ins from the bundle, AI mods from their verified compiled source. */
+async function applyWorld(msg: Extract<ServerMsg, { kind: "world" }>): Promise<void> {
+  for (const m of loader.list()) loader.unload(m.id);
+  let loaded = 0;
+  for (const m of msg.mods) {
+    try {
+      if (m.builtin) {
+        const def = BUILTINS[m.id];
+        if (!def) continue;
+        loader.load(def, m.values);
+      } else {
+        loader.load(await importMod(m.compiled), m.values);
+        if (m.art) { pendingArt.add(m.art.key); loadArtWithRetry(m.art.key, m.art.url, m.art.scenery === true); }
+      }
+      loaded++;
+    } catch { /* one bad mod must not stop the rest of the world loading */ }
+  }
+  renderMods();
+  history.replaceState(null, "", `?w=${msg.id}`);
+  say(`Opened a world with ${loaded} mods. Keep building to remix it.`, "done");
+}
+
+function showDemos(demos: { id: string; title: string; blurb: string }[]): void {
+  const box = $("#demo-worlds");
+  box.replaceChildren();
+  if (demos.length === 0) { box.hidden = true; return; }
+  const h = document.createElement("h2");
+  h.textContent = "Demo worlds";
+  box.append(h);
+  for (const d of demos) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = d.title;
+    b.title = d.blurb;
+    b.addEventListener("click", () => send({ kind: "worldLoad", id: d.id }));
+    box.append(b);
+  }
+  box.hidden = false;
+}
+
+$("#share-btn").addEventListener("click", () => {
+  if (ws?.readyState !== WebSocket.OPEN) { say("Sharing needs the server — start it with: npm run server", "failed"); return; }
+  send({ kind: "worldSave", mods: loader.list().map((m) => ({ id: m.id, values: m.values })) });
+});
+
+function shareUrl(id: string): string {
+  return `${location.origin}${location.pathname}?w=${id}`;
+}
+
+const voice = initVoice({
+  bar: $("#orb-bar"), feedback: orbFeedback,
+  isOpen: () => ws?.readyState === WebSocket.OPEN,
+  sendJson: send, sendBinary: (b) => ws?.send(b),
+  say, submit: (text) => submitCommand(text), log,
+});
+
 function connect(): void {
   try { ws = new WebSocket(WS_URL); }
   catch { serverStatus.textContent = "Server: offline (local mods still work)"; return; }
-  ws.addEventListener("open", () => { serverStatus.textContent = `Server: connected on ${WS_URL}`; });
+  ws.addEventListener("open", () => { serverStatus.textContent = `Server: connected on ${WS_URL}`; voice.onOpen();
+    if (worldParam && !worldRequested) {
+      worldRequested = true;
+      send({ kind: "worldLoad", id: worldParam });
+      setTimeout(() => { if (loader.list().length === 0) autoLoadStarterOnce(); }, 8000); // bad link: fall back to the starter world
+    }
+  });
   ws.addEventListener("close", () => {
     serverStatus.textContent = "Server: offline (local mods still work)";
     setTimeout(connect, 3000);
@@ -1273,6 +1349,17 @@ function connect(): void {
   ws.addEventListener("message", async (ev) => {
     let msg: ServerMsg;
     try { msg = JSON.parse(String(ev.data)) as ServerMsg; } catch { return; }
+    if (voice.onServerMsg(msg)) return;
+    if (msg.kind === "world") { await applyWorld(msg); return; }
+    if (msg.kind === "visitor") { showDemos(msg.demos); return; }
+    if (msg.kind === "worldSaved") {
+      const url = shareUrl(msg.id);
+      history.replaceState(null, "", `?w=${msg.id}`);
+      navigator.clipboard?.writeText(url).catch(() => {});
+      say(`Share link copied: ${url}`, "done");
+      log(`shared world: ${url}`);
+      return;
+    }
     if (msg.kind === "say") say(msg.text);
     else if (msg.kind === "stage") {
       log(`${msg.stage}: ${msg.detail}`);
@@ -1328,7 +1415,7 @@ function submitCommand(text: string): void {
   if (!text) return;
   say(`Building: ${text}`, "building");
   if (!handleLocal(text)) {
-    if (ws?.readyState === WebSocket.OPEN) send({ kind: "world", mods: loader.list().map((m) => ({ id: m.id, values: m.values })) });
+    if (ws?.readyState === WebSocket.OPEN) send({ kind: "worldState", mods: loader.list().map((m) => ({ id: m.id, values: m.values })) });
     if (ws?.readyState === WebSocket.OPEN) send({ kind: "command", text });
     else say("That needs the AI server. Start it with: npm run server — local builds above still work.", "failed");
   }
@@ -1356,7 +1443,7 @@ document.querySelectorAll<HTMLButtonElement>("#chips button").forEach((b) => {
 
 renderMods();
 say("Say something — or type below. Try “add a player”.");
-autoLoadStarterOnce();
+if (!worldParam) autoLoadStarterOnce();
 
 // Test hooks: deterministic stepping + text view of the world (no DOM reads needed to playtest).
 (window as unknown as Record<string, unknown>).advanceTime = (ms: number) => {
