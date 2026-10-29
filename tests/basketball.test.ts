@@ -6,6 +6,7 @@ import { HOOP_SIZE, hoopBox, isHoopType, rimOf } from "../src/sim/hoop";
 import { drawHoop, drawShape, kindOf } from "../src/client/shapes";
 import { inputFromKeys } from "../src/client/keys";
 import { resolveItemMod } from "../src/client/items";
+import { artPlanFor, entityKind } from "../src/ontology";
 import basketballMod from "../src/mods/basketball";
 
 /** A Graphics stand-in that records every draw call, so a visual can be asserted without a browser. */
@@ -51,6 +52,13 @@ describe("basketball & hoop (bead z1d)", () => {
     }
     for (const t of ["soccer-goal", "football-goal", "hockey-goal", "goalpost", "goalkeeper", "tree", "basketball"]) {
       expect(isHoopType(t)).toBe(false);
+    }
+  });
+
+  it("keeps goals and backboards in code: never a sprite sheet, never Muse art", () => {
+    for (const t of ["basketball-hoop", "basketball-goal", "goal", "backboard"]) {
+      expect(entityKind(t)).toBe("shape");
+      expect(artPlanFor(t)).toBe("none");
     }
   });
 

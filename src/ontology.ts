@@ -205,6 +205,8 @@ const SHAPE_TOKENS: ReadonlySet<string> = new Set([
   "rings",
   "halo",
   "hoop",
+  "backboard",
+  "goal",
   "donut",
   "spike",
   "spikes",
