@@ -92,7 +92,7 @@ describe("2.5D visual depth & lighting (bead 1z7)", () => {
     drawGround25D(m.gfx, g, g.x, g.y, pal, 1920, 1080);
     drawGround25D(m.gfx, pl, pl.x, pl.y, pal, 1920, 1080);
     expect(m.rects).toBeGreaterThan(20);
-    expect(m.polys).toBe(4); // 3 volumetric sky shafts + 1 distant mountain ridge
+    expect(m.polys).toBe(8); // 3 volumetric sky shafts + 1 distant mountain ridge + 2 top faces (outline + face) on each of the ground and the platform
 
     const puffs: { x: number; y: number; r: number; color: number; alpha: number; add?: boolean }[] = [];
     drawDynamicLighting(
