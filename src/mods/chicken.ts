@@ -21,6 +21,7 @@ export const chickenMod: ModDefinition = {
         x, y: 360, w: 30, h: 26,
         color: 0xfff3c4, gravityScale: 1,
         data: {
+          casual: true,
           speed,
           turnCd: 60 + Math.floor(api.rand() * 120),
           peckCd: 120 + Math.floor(api.rand() * 120),
