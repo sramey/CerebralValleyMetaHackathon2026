@@ -22,7 +22,8 @@ import { forget, newRecent, noteCommand, noteTouched, recentText, resolvePronoun
 import type { Recent } from "./context";
 import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, formatManifest, ROUTER_SYSTEM, WONDER_SYSTEM } from "./prompt";
 import { logBuild, saveModSources } from "./createlog";
-import { artCachedUrl, artKeyForType, deriveSubject, generateSubjectArt, isScenerySubject, pickArtType } from "./art";
+import { artCachedUrl, artKeyForType, clearCachedArt, deriveSubject, generateSubjectArt, isScenerySubject, pickArtType } from "./art";
+import { learnFromFix, learnRuleFromFeedback, learnSkillFromFeedback } from "./learn";
 import { segmentPhoto } from "./photo";
 import { Budget, readLimits } from "./budget";
 import type { Kind } from "./budget";
@@ -435,7 +436,7 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
   await handleSingle(ws, text);
 }
 
-async function handleSingle(ws: WebSocket, text: string, batch?: { size: number; parallel: number }): Promise<void> {
+async function handleSingle(ws: WebSocket, text: string, batch?: { size: number; parallel: number }, forceEditModId?: string): Promise<void> {
   await adoptingOf.get(ws);
   if (!batch) noteCommand(sess(ws).recent, text);
   const t0 = performance.now();
@@ -465,6 +466,9 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     routeMs = Math.round(performance.now() - r0);
     void res.ms;
     route = parseRoute(res.text);
+    if (forceEditModId && manifest.has(forceEditModId)) {
+      route = { ...(route ?? { action: "edit" }), action: "edit", target: forceEditModId };
+    }
     // Fallback: a build-shaped command never dead-ends on a router miss.
     if (!route && /^(add|make|create|spawn|give|put|build)\b/i.test(command.trim())) {
       console.log(`[route] fallback to new for: ${command}`);
@@ -699,6 +703,8 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
 
   stage(ws, { kind: "stage", stage: "compiling", detail: "compiling the mod", command });
   let first = await attempt(source);
+  const badSource = source;
+  const firstErrors = first.ok ? [] : first.errors;
   if (!first.ok) {
     // ONE auto-fix round.
     stage(ws, { kind: "stage", stage: "fixing", detail: "fixing the mod", command });
@@ -730,6 +736,9 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     }
   }
   releaseBuild();
+  if (fixAttempted && firstErrors.length > 0) {
+    void learnFromFix(command, firstErrors, badSource, first.ok ? source : undefined);
+  }
 
   if (first.ok) {
     const def = first.res.def!;
@@ -830,6 +839,60 @@ function handleWorldLoad(ws: WebSocket, msg: Extract<ClientMsg, { kind: "worldLo
   send(ws, { kind: "world", id: w.id, mods: w.mods as WorldMod[] });
 }
 
+async function handleFeedback(ws: WebSocket, msg: Extract<ClientMsg, { kind: "feedback" }>): Promise<void> {
+  await adoptingOf.get(ws);
+  const manifest = sess(ws).manifest;
+  const modId = typeof msg.modId === "string" ? msg.modId.trim() : "";
+  if (modId && !manifest.has(modId)) await adoptBuiltins(manifest, [modId]);
+  const rec = modId ? manifest.get(modId) : undefined;
+  const vote = msg.vote === "up" ? "up" : "down";
+  const note = typeof msg.note === "string" ? msg.note.trim() : "";
+  const entityType = typeof msg.entityType === "string" ? msg.entityType.trim() : undefined;
+  const fixNow = msg.fixNow === true;
+
+  if (!spend(ws, "build")) return;
+
+  if (vote === "up") {
+    const skill = await learnSkillFromFeedback({
+      modId: modId || "mod",
+      title: rec?.title,
+      entityType,
+      vote: "up",
+      note,
+      source: rec?.source,
+    });
+    send(ws, { kind: "say", text: `Learned skill: ${skill.title} (saved to skills/${skill.slug}.md)` });
+    return;
+  }
+
+  const distilled = await learnRuleFromFeedback({
+    modId: modId || "mod",
+    title: rec?.title,
+    entityType,
+    vote: "down",
+    note,
+    source: rec?.source,
+    hasArt: Boolean(rec?.art),
+    look: rec?.look,
+  });
+
+  if (distilled.clearArt) {
+    if (rec?.art?.key) clearCachedArt(rec.art.key);
+    if (entityType) clearCachedArt(artKeyForType(entityType));
+    if (modId) clearCachedArt(artKeyForType(modId));
+    if (rec) delete rec.art;
+  }
+
+  if (fixNow && rec) {
+    send(ws, { kind: "say", text: `Learned: ${distilled.rule.rule} — rebuilding ${rec.title}…` });
+    noteTouched(sess(ws).recent, rec.id);
+    await handleSingle(ws, distilled.editInstruction, undefined, rec.id);
+    send(ws, { kind: "say", text: `Learned: ${distilled.rule.rule}` });
+  } else {
+    send(ws, { kind: "say", text: `Learned: ${distilled.rule.rule}` });
+  }
+}
+
 function handleMessage(ws: WebSocket, raw: string): void {
   let msg: ClientMsg;
   try {
@@ -853,6 +916,11 @@ function handleMessage(ws: WebSocket, raw: string): void {
     adoptingOf.set(ws, adoptBuiltins(manifest, (worldOf.get(ws) ?? []).map((m) => m.id)));
   } else if (msg.kind === "worldSave") handleWorldSave(ws, msg);
   else if (msg.kind === "worldLoad") handleWorldLoad(ws, msg);
+  else if (msg.kind === "feedback") {
+    handleFeedback(ws, msg).catch((err) => {
+      send(ws, { kind: "say", text: `Feedback failed: ${err instanceof Error ? err.message : String(err)}` });
+    });
+  }
   else if (msg.kind === "command") {
     handleCommand(ws, msg.text).catch((err) => {
       send(ws, { kind: "say", text: `Command failed: ${err instanceof Error ? err.message : String(err)}` });

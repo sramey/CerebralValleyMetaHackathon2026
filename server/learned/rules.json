@@ -19,5 +19,15 @@
     "rule": "Sprite sheets must keep a flat solid #FF00FF magenta background with wide gaps between poses and no ground lines or text.",
     "source": "seed",
     "createdAt": "2026-10-29T00:00:00.000Z"
+  },
+  {
+    "id": "rule-1793293716769-i1cl",
+    "subsystem": "wonder",
+    "rule": "Weather rain drops must fall with wind-driven slant/angle and spawn a small splash burst effect on ground impact.",
+    "source": "feedback",
+    "modId": "rain",
+    "note": "raindrops should slant slightly with the wind and splash with a small burst on ground impact",
+    "clearArt": false,
+    "createdAt": "2026-10-29T17:08:36.769Z"
   }
 ]
