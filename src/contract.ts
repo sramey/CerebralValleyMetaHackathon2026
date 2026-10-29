@@ -209,7 +209,7 @@ export type ServerMsg =
   | { kind: "voiceState"; state: "ready" | "listening" | "error"; detail?: string }
   | { kind: "transcript"; text: string; final: boolean; ms?: { firstPartial: number; final: number } }
   | { kind: "worldSaved"; id: string }
-  | { kind: "world"; id: string; mods: WorldMod[] }
+  | { kind: "world"; id: string; mods: WorldMod[]; mood?: MoodSpec | null; restyled?: Record<string, string> }
   // Visitor mode (no key, kill-switch, or budget spent): the game still plays; offer these instead.
   | { kind: "visitor"; reason: "nokey" | "killswitch" | "budget"; demos: DemoWorld[] };
 

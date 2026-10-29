@@ -1,6 +1,6 @@
 [
   "add a bouncing green slime",
-  "make me huge",
+  { "cmd": "make me huge", "expect": "rejected-then-fixed" },
   "make me giant",
   "make it rain",
   "add trees",

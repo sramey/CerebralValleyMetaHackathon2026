@@ -833,7 +833,8 @@ function loadArtWithRetry(key: string, url: string, scenery = false): void {
   const attempt = (u: string, isRetry: boolean): void => {
     loadSpriteSheet(u).then((frames) => {
       if (frames.length > 0) {
-        framesBySubject[key] = frames;
+        if (mood && origFrames.has(key)) origFrames.set(key, frames);
+        else framesBySubject[key] = frames;
         if (scenery) scenerySubjects.add(key);
         pendingArt.delete(key);
         log(`art loaded for ${key} (${frames.length} frames)`);
@@ -1451,6 +1452,8 @@ async function importMod(compiled: string): Promise<ModDefinition> {
 
 /** Replace the running world with a saved one: built-ins from the bundle, AI mods from their verified compiled source. */
 async function applyWorld(msg: Extract<ServerMsg, { kind: "world" }>): Promise<void> {
+  restoreSheets();
+  applyMood(msg.mood ?? null);
   for (const m of loader.list()) loader.unload(m.id);
   let loaded = 0;
   for (const m of msg.mods) {
@@ -1466,6 +1469,16 @@ async function applyWorld(msg: Extract<ServerMsg, { kind: "world" }>): Promise<v
       }
       loaded++;
     } catch { /* one bad mod must not stop the rest of the world loading */ }
+  }
+  moodModCount = mood ? loader.list().length : 0;
+  if (msg.mood && msg.restyled) {
+    for (const [key, url] of Object.entries(msg.restyled)) {
+      void loadSpriteSheet(url).then((frames) => {
+        if (frames.length < 1 || !mood || mood.name !== msg.mood?.name) return;
+        if (!origFrames.has(key)) origFrames.set(key, framesBySubject[key] ?? []);
+        framesBySubject[key] = frames;
+      }).catch(() => {});
+    }
   }
   renderMods();
   history.replaceState(null, "", `?w=${msg.id}`);
