@@ -12,6 +12,11 @@
       <main id="stage-wrap">
         <div id="stage"></div>
         <div id="hint">Move: A/D or arrows &nbsp; Jump: W / Space &nbsp; Shoot: X &nbsp; Talk: hold Shift</div>
+        <div id="orb-bar">
+          <div id="orb-dot" class="orb listening"></div>
+          <form id="orb-form"><input id="orb-input" type="text" placeholder="Tell the orb what to build..." autocomplete="off"></form>
+          <div id="orb-feedback">Say it. It builds itself.</div>
+        </div>
         <div id="radial-menu" role="toolbar" aria-label="Object actions" hidden>
           <div id="radial-center">object</div>
           <button type="button" data-action="bigger" style="--a:-90deg; animation-delay:0ms" title="Bigger" aria-label="Bigger"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
@@ -60,11 +65,6 @@
       </aside>
     </div>
     <div id="hud">
-      <div id="orb-bar">
-        <div id="orb-dot" class="orb listening"></div>
-        <form id="orb-form"><input id="orb-input" type="text" placeholder="Tell the orb what to build..." autocomplete="off"></form>
-        <div id="orb-feedback">Say it. It builds itself.</div>
-      </div>
       <button id="drawer-toggle" type="button" aria-label="Toggle panel" title="Toggle panel">»</button>
     </div>
     <div id="camera-modal" hidden>

@@ -24,13 +24,14 @@ const SHAPE_WORDS: [ShapeName, RegExp][] = [
   ["circle", /ball|orb|bubble|sphere|circle|marble|pearl|bomb/],
 ];
 const EFFECT_RE = /rain|fog|mist|haze|smoke|snow|explosion|blast|shockwave|spark|ember/;
+const PROJECTILE_RE = /bullet|shot|projectile|arrow|fireball|laser|bolt|pellet|plasma/i;
 
 export type Kind = { kind: "shape"; shape: ShapeName } | { kind: "effect" };
 
 /** The code-drawn kind of an entity type, or undefined for sprites and the engine's own looks. */
 export function kindOf(type: string): Kind | undefined {
   const t = type.toLowerCase();
-  if (t === "player" || t === "ground" || t.includes("platform") || t.includes("coin")) return undefined;
+  if (t === "player" || t === "ground" || t.includes("platform") || t.includes("coin") || PROJECTILE_RE.test(t)) return undefined;
   for (const l of looks) {
     if (l.types.some((x) => t.includes(x))) return l.visual === "effect" ? { kind: "effect" } : { kind: "shape", shape: l.shape ?? "circle" };
   }

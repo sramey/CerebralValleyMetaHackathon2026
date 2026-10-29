@@ -19,9 +19,11 @@ const CODE = [
 ];
 
 function codeTexture(): Texture {
+  if (typeof document === "undefined") return Texture.EMPTY;
   const c = document.createElement("canvas");
   c.width = 256; c.height = 512;
-  const ctx = c.getContext("2d")!;
+  const ctx = c.getContext("2d");
+  if (!ctx) return Texture.EMPTY;
   ctx.fillStyle = "#04070d";
   ctx.fillRect(0, 0, 256, 512);
   ctx.font = "bold 13px monospace";
@@ -34,6 +36,13 @@ function codeTexture(): Texture {
   return Texture.from(c);
 }
 
+export const PROJECTILE_OR_ATTACHMENT_RE = /bullet|shot|arrow|projectile|fireball|laser|bolt|beam|pellet|missile/i;
+
+export function isProjectileOrAttachment(e: { type: string; data?: Record<string, unknown> }): boolean {
+  if (e.data?.fromPlayer || e.data?.heldByPlayer) return true;
+  return PROJECTILE_OR_ATTACHMENT_RE.test(e.type);
+}
+
 interface Rip { x: number; y: number; w: number; h: number; age: number; seed: number }
 
 export class Portal {
@@ -43,6 +52,7 @@ export class Portal {
   private sprites: Sprite[] = [];
   private masks: Graphics[] = [];
   private seen = new Set<number>();
+  private seenOwnerTypes = new Set<string>();
   private rips: Rip[] = [];
   private primed = false;
   private accent = 0x58e6ff;
@@ -59,6 +69,10 @@ export class Portal {
     }
   }
 
+  get ripCount(): number { return this.rips.length; }
+  get activeMaskCount(): number { return this.masks.filter((m) => m.visible).length; }
+  isTypeSeen(owner: string, type: string): boolean { return this.seenOwnerTypes.has(`${owner || "world"}:${type}`); }
+
   /** The mood recolors the rift (rim glow and the dark behind the screen) so it fits a spooky or neon world. */
   setMood(m: MoodSpec | null): void {
     this.accent = m ? m.star : 0x58e6ff;
@@ -68,7 +82,8 @@ export class Portal {
   /** Call once per frame. `isEffect` skips weather and explosions. */
   render(world: World, camX: number, camY: number, dt: number, isEffect: (type: string) => boolean): void {
     const t0 = performance.now();
-    dt = Math.min(0.05, Math.max(0, dt)) * ((window as unknown as { __portalSlow?: number }).__portalSlow ?? 1); // __portalSlow: slow-mo for review captures
+    const slow = typeof window !== "undefined" ? (window as unknown as { __portalSlow?: number }).__portalSlow ?? 1 : 1;
+    dt = Math.min(0.05, Math.max(0, dt)) * slow; // __portalSlow: slow-mo for review captures
     this.watch(world.entities, isEffect);
     this.rim.clear();
     let used = 0;
@@ -78,7 +93,17 @@ export class Portal {
       if (r.age >= LIFE) { this.rips.splice(i, 1); continue; }
       used += this.draw(r, used, camX, camY);
     }
-    for (let i = used; i < this.sprites.length; i++) { this.sprites[i].visible = false; this.sprites[i].mask = null; }
+    const maxAllocated = Math.max(this.sprites.length, this.masks.length);
+    for (let i = used; i < maxAllocated; i++) {
+      if (this.sprites[i]) {
+        this.sprites[i].visible = false;
+        this.sprites[i].mask = null;
+      }
+      if (this.masks[i]) {
+        this.masks[i].clear();
+        this.masks[i].visible = false;
+      }
+    }
     this.lastMs = performance.now() - t0;
   }
 
@@ -91,12 +116,22 @@ export class Portal {
       if (this.seen.has(e.id)) continue;
       this.seen.add(e.id);
       fresh++;
-      if (e.w > MAX_BIG || e.h > MAX_BIG || e.w < 6 || isEffect(e.type)) continue;
+      if (e.w > MAX_BIG || e.h > MAX_BIG || e.w < 6 || isEffect(e.type) || isProjectileOrAttachment(e)) continue;
+      const key = `${e.owner || "world"}:${e.type}`;
+      if (this.seenOwnerTypes.has(key)) continue;
+      this.seenOwnerTypes.add(key);
       found.push(e);
     }
-    if (!this.primed) { this.primed = true; return; }
+    if (!this.primed) {
+      this.primed = true;
+      for (let i = 0; i < entities.length; i++) {
+        this.seenOwnerTypes.add(`${entities[i].owner || "world"}:${entities[i].type}`);
+      }
+      return;
+    }
     if (fresh > 4) return; // a world load, not a spawn
     if (this.seen.size > 4000) this.seen = new Set(entities.map((e) => e.id));
+    if (this.seenOwnerTypes.size > 2000) this.seenOwnerTypes.clear();
     for (const e of found) {
       if (this.rips.length >= MAX_LIVE) break;
       this.rips.push({ x: e.x + e.w / 2, y: e.y + e.h / 2, w: e.w, h: e.h, age: 0, seed: (e.id * 2654435761) >>> 0 });
@@ -135,6 +170,7 @@ export class Portal {
     if (!s) { s = new Sprite(this.tex); this.sprites.push(s); this.layer.addChildAt(s, 0); }
     let m = this.masks[slot];
     if (!m) { m = new Graphics(); this.masks.push(m); this.layer.addChild(m); }
+    m.visible = true;
     m.clear().poly(pts).fill(0xffffff);
     s.visible = true;
     s.mask = m;

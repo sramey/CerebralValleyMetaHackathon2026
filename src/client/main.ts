@@ -1,7 +1,7 @@
 import { createBuilds } from "./builds";
 import { initFeedback } from "./feedback";
 import { Application, Graphics, Sprite, Texture } from "pixi.js";
-import { framesFor, loadSpriteSheet, loadSubjects } from "./sprites";
+import { computePrimaries, framesFor, isProjectileType, loadSpriteSheet, loadSubjects } from "./sprites";
 import chickenMod from "../mods/chicken";
 import { SIM } from "../contract";
 import type { ClientMsg, Entity, KnobValue, ModDefinition, MoodSpec, ServerMsg } from "../contract";
@@ -289,6 +289,16 @@ function drawHealthBar(e: Entity, x: number, y: number): void {
   gfx.rect(x, y - 9, e.w * health / 100, 4).fill(color);
 }
 
+let lastPrimariesTick = -1;
+let cachedPrimaries = new Set<number>();
+function getActivePrimaries(): Set<number> {
+  if (lastPrimariesTick !== world.tickCount) {
+    lastPrimariesTick = world.tickCount;
+    cachedPrimaries = computePrimaries(world.entities, framesBySubject, (type) => !!kindOf(type));
+  }
+  return cachedPrimaries;
+}
+
 function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   const x = e.x - camX;
   const y = e.y - camY;
@@ -299,7 +309,7 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   if (morph.size > 0 && isMorphing(e)) { drawDigitize(e, x, y); return; } // a restyled sheet is about to swap in (ADR 0017)
   const look = kindOf(t); // code-drawn shapes and engine effects never use sprites or the outline (ADR 0015)
   if (look) { if (look.kind === "shape") drawShape(gfx, e, x, y, look.shape); return; }
-  if (framesFor(framesBySubject, t, t === "player").length >= 1) return; // sprite pass below
+  if (getActivePrimaries().has(e.id)) return; // sprite pass below
   if (t !== "player") {
     for (const k of pendingArt) {
       if (t.includes(k)) { drawDigitize(e, x, y); return; }
@@ -314,7 +324,7 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   }
   if (t.indexOf("coin") >= 0) { drawCoin(e, x, y); return; }
   if (t.indexOf("ground") >= 0 || t.indexOf("platform") >= 0) { drawGround(e, x, y); return; }
-  if (t.indexOf("projectile") >= 0 || t.indexOf("arrow") >= 0 || t.indexOf("fire") >= 0) { drawShot(e, x, y); return; }
+  if (isProjectileType(t) || t.indexOf("arrow") >= 0 || t.indexOf("fire") >= 0) { drawShot(e, x, y); return; }
   if (t.indexOf("slime") >= 0 || t.indexOf("gel") >= 0 || t.indexOf("enemy") >= 0 ||
     t.indexOf("walker") >= 0 || t.indexOf("turtle") >= 0) { drawBlob(e, x, y); return; }
   gfx.rect(x, y, e.w, e.h).fill(e.color);
@@ -455,9 +465,20 @@ const RADIAL_PAD_BOTTOM = 128;
 function formatRadialLabel(type: string): string {
   return type.replace(/^photo-\d+-?/, "").replace(/[-_]+/g, " ").trim() || type;
 }
+const scaleOverride = new Map<number, number>();
+
+function visualHeightOf(e: Entity): number {
+  const frames = framesFor(framesBySubject, e.type, e.type === "player");
+  if (frames.length >= 1 && !kindOf(e.type)) {
+    return e.type === "player" ? 56 * (e.h / 34) : Math.min(630, Math.max(34, e.h * 1.5));
+  }
+  return e.h;
+}
+
 function positionRadialMenu(e: Entity, camX: number, camY: number): void {
+  const visH = visualHeightOf(e);
   const rawX = e.x - camX + e.w / 2;
-  const rawY = e.y - camY + e.h / 2;
+  const rawY = e.y - camY + e.h - visH / 2;
   const w = app.screen.width || stageWrapEl.clientWidth;
   const h = app.screen.height || stageWrapEl.clientHeight;
   const x = w > RADIAL_PAD_X * 2 ? Math.min(w - RADIAL_PAD_X, Math.max(RADIAL_PAD_X, rawX)) : w / 2;
@@ -468,7 +489,7 @@ function positionRadialMenu(e: Entity, camX: number, camY: number): void {
   radialMenu.style.top = `${Math.round(y)}px`;
   radialMenu.style.setProperty("--ring-dx", `${Math.round(rawX - x)}px`);
   radialMenu.style.setProperty("--ring-dy", `${Math.round(rawY - y)}px`);
-  radialMenu.style.setProperty("--ring-size", `${Math.round(Math.min(110, Math.max(44, Math.hypot(e.w, e.h) + 12)))}px`);
+  radialMenu.style.setProperty("--ring-size", `${Math.round(Math.min(140, Math.max(44, Math.hypot(e.w, visH) + 12)))}px`);
 }
 function closeRadialMenu(): void {
   radialTargetId = null;
@@ -538,6 +559,13 @@ document.querySelectorAll<HTMLButtonElement>("#radial-menu [data-action]").forEa
       e.x -= (nw - e.w) / 2;
       e.y -= (nh - e.h);
       e.w = nw; e.h = nh;
+      const currentScale = (scaleOverride.get(e.id) ?? 1) * factor;
+      scaleOverride.set(e.id, currentScale);
+      if (e.data) {
+        e.data.scale = currentScale;
+        e.data.targetW = nw;
+        e.data.targetH = nh;
+      }
       positionRadialMenu(e, camXSmooth ?? world.camera.x, camYSmooth ?? world.camera.y);
     } else if (action === "front") {
       layerOverride.set(e.id, 5);
@@ -546,6 +574,7 @@ document.querySelectorAll<HTMLButtonElement>("#radial-menu [data-action]").forEa
     } else if (action === "remove") {
       world.despawn(e.id);
       layerOverride.delete(e.id);
+      scaleOverride.delete(e.id);
       closeRadialMenu();
     } else if (action === "thumbs-up" || action === "thumbs-down") {
       const modTitle = loader.list().find((m) => m.id === e.owner)?.title ?? formatRadialLabel(e.type);
@@ -639,7 +668,7 @@ function render(): void {
   spriteDraw.sort((a, b) => layerOf(a.e, a.subjectKey) - layerOf(b.e, b.subjectKey));
   for (const { e, frame, subjectKey } of spriteDraw) {
     const s = spriteFor(e.id);
-    const targetH = e.type === "player" ? 56 : Math.min(240, Math.max(34, e.h * 1.5));
+    const targetH = visualHeightOf(e);
     const scale = targetH / frame.height;
     s.texture = frame;
     s.scale.set(scale * e.facing, scale);
@@ -647,7 +676,7 @@ function render(): void {
     s.zIndex = layerOf(e, subjectKey);
     s.visible = true;
   }
-  for (const [id, s] of spritePool) if (!seen.has(id)) s.visible = false;
+  for (const [id, s] of spritePool) if (!seen.has(id)) { s.visible = false; scaleOverride.delete(id); }
   const nowMs = performance.now();
   fx.render(world, camX, camYSmooth, W, H, (nowMs - lastRenderAt) / 1000, isEffectType);
   portal.render(world, camX, camYSmooth, (nowMs - lastRenderAt) / 1000, isEffectType);
@@ -679,6 +708,19 @@ function frame(now: number): void {
   const stepMs = SIM.dt * 1000;
   while (acc >= stepMs) {
     world.step(); acc -= stepMs;
+    for (const [id, mult] of scaleOverride) {
+      const ent = world.entities.find((x) => x.id === id);
+      if (ent && ent.data?.targetW && ent.data?.targetH) {
+        const tw = Number(ent.data.targetW);
+        const th = Number(ent.data.targetH);
+        if (ent.w !== tw || ent.h !== th) {
+          ent.x -= (tw - ent.w) / 2;
+          ent.y -= (th - ent.h);
+          ent.w = tw;
+          ent.h = th;
+        }
+      }
+    }
     if (!loader.has("player") || world.entities.some((e) => e.type === "player")) noPlayerTicks = 0;
     else if (++noPlayerTicks > 90) { noPlayerTicks = 0; loadLocal(playerMod); say("Knocked out — you're back in!", "done"); }
   }
@@ -1669,4 +1711,9 @@ if (!worldParam) autoLoadStarterOnce();
       max: h.max, text: h.text, position: h.position,
     })),
   });
+};
+(window as unknown as Record<string, unknown>).openRadialOn = (type: string): boolean => {
+  const ent = world.entities.find((e) => e.type === type);
+  if (ent) { openRadialMenu(ent); return true; }
+  return false;
 };
