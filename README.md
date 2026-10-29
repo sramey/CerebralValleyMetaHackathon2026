@@ -45,7 +45,7 @@ Open **http://127.0.0.1:8787/** (or your configured `PORT`) in Chrome, click the
 | Press **P** | Pipeline view with live build numbers (landed %, first-try %, median time) |
 | Click **👍** or **👎** on any mod card or radial menu | Feedback modal lets you teach the engine rules, distill skills, or auto-fix the mod live |
 
-Move with A/D or the arrows, jump with W or Space, shoot with X, use items with F. Sound is synthesized in the browser: M mutes, [ and ] change volume, ?mute starts muted, ?noshake turns off screen shake. Watch the top-left HUD (health, mod counters). Fresh-clone test (2026-10-29): `npm install` ~6 s, build ~4 s, first AI build landed in ~10 s.
+Move with A/D or the arrows, jump with W or Space, shoot with X, use items with F. Sound is synthesized in the browser: M mutes, [ and ] change volume, ?mute starts muted, ?noshake turns off screen shake. First visit shows a skippable 3-step coach (?coach shows it again, ?nocoach hides it); in a scripted fresh-browser run the first build landed 15.5 s after page load. Watch the top-left HUD (health, mod counters). Fresh-clone test (2026-10-29): `npm install` ~6 s, build ~4 s, first AI build landed in ~10 s.
 
 **No key?** The game still runs: built-in mods and curated demo worlds (for example `http://127.0.0.1:8787/?w=demo-bouncy`) play without any AI calls. Developing instead? `npm run dev` (Vite on :5173) plus `npm run server` (:8787) in a second terminal, then `npm test`.
 

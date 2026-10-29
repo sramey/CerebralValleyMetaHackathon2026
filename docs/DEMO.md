@@ -50,3 +50,5 @@ Run `npm run demo:prep` before every take (add `--dry` to only report, `--skip-a
 - **Risk ranking (rehearse most):** beat 5 (needs a real rejection on camera), beat 3 (three parallel builds), beat 7 (webcam lighting).
 - **Not in the cut (cut for time):** radial menu and 👍/👎 teaching, camera-free demos, stairs, snow, daytime.
 - **Check before recording:** run `npm run rehearse -- --runs 20` (demo set) and `npm run rehearse -- --runs 5 --file rehearse-aware.json` against the live server; fix flakiness only.
+
+**Recording tip:** open the game with `?nocoach` so the first-run coach does not cover the stage (or show it on purpose for the non-coder beat).
