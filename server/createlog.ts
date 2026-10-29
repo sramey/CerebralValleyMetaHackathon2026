@@ -22,6 +22,8 @@
 //     sourceFile = latest saved Wonder source; sourceFiles = all saved
 //     versions (initial + fixed) for this build.
 //   Art: { kind: "art", ts ISO, subject, file, ms, samOk } (see logArt).
+//   Mood: { kind: "mood", ts ISO, mood (resolved slug), ms } (see logMood) — the
+//         player's own words are not written, only the mood name the game picked.
 //
 // MOD SOURCES: every Wonder-written source (initial + fixed versions) is saved
 // to logs/mods/<yyyymmdd-hhmmss>-<modId-or-unknown>-v<n>.ts (UTC stamp).
@@ -113,6 +115,19 @@ export function logArt(rec: { subject: string; key?: string; file: string; ms: n
       LOG_FILE,
       JSON.stringify({ kind: "art", ts: new Date().toISOString(), ...rec }) + "\n",
     );
+  } catch {
+    /* logging must not break anything */
+  }
+}
+
+/**
+ * Append one mood-restyle record (ADR 0017) to the same JSONL file. Only the
+ * resolved mood name is written — never the player's sentence. Never throws.
+ */
+export function logMood(rec: { mood: string; ms?: number }): void {
+  try {
+    mkdirSync(dirname(LOG_FILE), { recursive: true });
+    appendFileSync(LOG_FILE, JSON.stringify({ kind: "mood", ts: new Date().toISOString(), ...rec }) + "\n");
   } catch {
     /* logging must not break anything */
   }
