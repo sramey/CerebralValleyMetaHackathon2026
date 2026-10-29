@@ -1,0 +1,131 @@
+{
+ "v": 1,
+ "id": "demo-bouncy",
+ "createdAt": "2026-10-29T16:19:08.848Z",
+ "mods": [
+  {
+   "builtin": true,
+   "id": "player",
+   "values": {}
+  },
+  {
+   "builtin": true,
+   "id": "ground",
+   "values": {}
+  },
+  {
+   "id": "bouncing-ball",
+   "title": "Bouncing Ball",
+   "source": "export default {\n  id: \"bouncing-ball\",\n  title: \"Bouncing Ball\",\n  knobs: {\n    size: { value: 36, min: 16, max: 80, label: \"Ball size\" },\n    bounciness: { value: 0.82, min: 0.3, max: 0.98, label: \"Bounciness\" },\n    speed: { value: 160, min: 0, max: 400, label: \"Horizontal speed\" },\n    gravity: { value: 1500, min: 500, max: 3000, label: \"Gravity\" }\n  },\n  setup(api: any, knobs: Record<string, number | string | boolean>) {\n    const size = Number(knobs.size) || 36;\n    const bounce = Number(knobs.bounciness) || 0.82;\n    const speed = Number(knobs.speed) || 160;\n    const gravity = Number(knobs.gravity) || 1500;\n    const groundY = 400;\n    api.spawn({ type: \"ground\", x: -200, y: groundY, w: 1200, h: 48, solid: true, gravityScale: 0, color: 0x4a7c3a });\n    const ball = api.spawn({ type: \"bouncing-ball\", x: 120, y: groundY - size - 160, w: size, h: size, vx: 0, vy: 0, solid: false, gravityScale: 0, color: 0xff5533, data: { vy: 0, vx: speed, bounces: 0, groundY } });\n    api.onTick((dt: number) => {\n      const b = api.byType(\"bouncing-ball\")[0];\n      if (!b) return;\n      b.data.vy = (Number(b.data.vy) || 0) + gravity * dt;\n      b.data.vx = Number(b.data.vx) || speed;\n      b.x += b.data.vx * dt;\n      b.y += b.data.vy * dt;\n      if (b.x < 0) { b.x = 0; b.data.vx = Math.abs(b.data.vx); }\n      if (b.x + b.w > 800) { b.x = 800 - b.w; b.data.vx = -Math.abs(b.data.vx); }\n      const floor = Number(b.data.groundY) || groundY;\n      if (b.y + b.h >= floor && b.data.vy > 0) {\n        b.y = floor - b.h;\n        b.data.vy = -b.data.vy * bounce;\n        if (Math.abs(b.data.vy) < 120) b.data.vy = -320 - api.rand() * 120;\n        b.data.bounces = (Number(b.data.bounces) || 0) + 1;\n        api.burst(b.x + b.w / 2, floor, 0xff5533, 6);\n      }\n      if (b.y < 0 && b.data.vy < 0) { b.y = 0; b.data.vy = -b.data.vy; }\n      b.vx = b.data.vx;\n      b.vy = b.data.vy;\n      void ball;\n    });\n  },\n  dispose(api: any) {\n    for (const e of [...api.byType(\"bouncing-ball\")]) api.despawn(e.id);\n    for (const e of [...api.byType(\"ground\")]) api.despawn(e.id);\n  },\n  test(t: any) {\n    const balls = t.api.byType(\"bouncing-ball\");\n    t.expect(balls.length === 1, \"one bouncing ball spawned\");\n    const startY = balls[0].y;\n    t.step(30);\n    t.expect(balls[0].y !== startY, \"ball falls under gravity\");\n    t.step(120);\n    t.expect((Number(balls[0].data.bounces) || 0) >= 1, \"ball bounced on the ground\");\n    t.expect(balls[0].y + balls[0].h <= 401, \"ball stays above ground\");\n  }\n};",
+   "compiled": "var stdin_default = {\n  id: \"bouncing-ball\",\n  title: \"Bouncing Ball\",\n  knobs: {\n    size: { value: 36, min: 16, max: 80, label: \"Ball size\" },\n    bounciness: { value: 0.82, min: 0.3, max: 0.98, label: \"Bounciness\" },\n    speed: { value: 160, min: 0, max: 400, label: \"Horizontal speed\" },\n    gravity: { value: 1500, min: 500, max: 3e3, label: \"Gravity\" }\n  },\n  setup(api, knobs) {\n    const size = Number(knobs.size) || 36;\n    const bounce = Number(knobs.bounciness) || 0.82;\n    const speed = Number(knobs.speed) || 160;\n    const gravity = Number(knobs.gravity) || 1500;\n    const groundY = 400;\n    api.spawn({ type: \"ground\", x: -200, y: groundY, w: 1200, h: 48, solid: true, gravityScale: 0, color: 4881466 });\n    const ball = api.spawn({ type: \"bouncing-ball\", x: 120, y: groundY - size - 160, w: size, h: size, vx: 0, vy: 0, solid: false, gravityScale: 0, color: 16733491, data: { vy: 0, vx: speed, bounces: 0, groundY } });\n    api.onTick((dt) => {\n      const b = api.byType(\"bouncing-ball\")[0];\n      if (!b) return;\n      b.data.vy = (Number(b.data.vy) || 0) + gravity * dt;\n      b.data.vx = Number(b.data.vx) || speed;\n      b.x += b.data.vx * dt;\n      b.y += b.data.vy * dt;\n      if (b.x < 0) {\n        b.x = 0;\n        b.data.vx = Math.abs(b.data.vx);\n      }\n      if (b.x + b.w > 800) {\n        b.x = 800 - b.w;\n        b.data.vx = -Math.abs(b.data.vx);\n      }\n      const floor = Number(b.data.groundY) || groundY;\n      if (b.y + b.h >= floor && b.data.vy > 0) {\n        b.y = floor - b.h;\n        b.data.vy = -b.data.vy * bounce;\n        if (Math.abs(b.data.vy) < 120) b.data.vy = -320 - api.rand() * 120;\n        b.data.bounces = (Number(b.data.bounces) || 0) + 1;\n        api.burst(b.x + b.w / 2, floor, 16733491, 6);\n      }\n      if (b.y < 0 && b.data.vy < 0) {\n        b.y = 0;\n        b.data.vy = -b.data.vy;\n      }\n      b.vx = b.data.vx;\n      b.vy = b.data.vy;\n      void ball;\n    });\n  },\n  dispose(api) {\n    for (const e of [...api.byType(\"bouncing-ball\")]) api.despawn(e.id);\n    for (const e of [...api.byType(\"ground\")]) api.despawn(e.id);\n  },\n  test(t) {\n    const balls = t.api.byType(\"bouncing-ball\");\n    t.expect(balls.length === 1, \"one bouncing ball spawned\");\n    const startY = balls[0].y;\n    t.step(30);\n    t.expect(balls[0].y !== startY, \"ball falls under gravity\");\n    t.step(120);\n    t.expect((Number(balls[0].data.bounces) || 0) >= 1, \"ball bounced on the ground\");\n    t.expect(balls[0].y + balls[0].h <= 401, \"ball stays above ground\");\n  }\n};\nexport {\n  stdin_default as default\n};\n",
+   "knobs": {
+    "size": {
+     "value": 36,
+     "min": 16,
+     "max": 80,
+     "label": "Ball size"
+    },
+    "bounciness": {
+     "value": 0.82,
+     "min": 0.3,
+     "max": 0.98,
+     "label": "Bounciness"
+    },
+    "speed": {
+     "value": 160,
+     "min": 0,
+     "max": 400,
+     "label": "Horizontal speed"
+    },
+    "gravity": {
+     "value": 1500,
+     "min": 500,
+     "max": 3000,
+     "label": "Gravity"
+    }
+   },
+   "values": {
+    "size": 36,
+    "bounciness": 0.82,
+    "speed": 160,
+    "gravity": 1500
+   },
+   "art": {
+    "key": "ball",
+    "url": "/art/gen/ball.webp"
+   }
+  },
+  {
+   "id": "patrolling-robot",
+   "title": "Patrolling Robot",
+   "source": "export default {\n  id: \"patrolling-robot\",\n  title: \"Patrolling Robot\",\n  knobs: {\n    speed: { value: 90, min: 20, max: 240, label: \"Patrol speed\" },\n    range: { value: 130, min: 40, max: 320, label: \"Patrol range\" },\n    size: { value: 46, min: 28, max: 80, label: \"Robot size\" }\n  },\n  setup(api: any, knobs: any) {\n    const size = Number(knobs.size) || 46;\n    const robot = api.spawn({\n      type: \"robot\",\n      x: 160,\n      y: 400 - size,\n      w: Math.round(size * 0.82),\n      h: size,\n      vx: Number(knobs.speed) || 90,\n      vy: 0,\n      color: 0x8fa3b8,\n      solid: false,\n      gravityScale: 1,\n      data: { homeX: 160, dir: 1, patrol: true }\n    });\n    robot.facing = 1;\n    api.onTick(() => {\n      const speed = Math.abs(Number(knobs.speed) || 90);\n      const range = Math.max(10, Number(knobs.range) || 130);\n      const r = api.byType(\"robot\")[0];\n      if (!r) return;\n      if (typeof r.data.homeX !== \"number\") r.data.homeX = r.x;\n      if (typeof r.data.dir !== \"number\") r.data.dir = 1;\n      if (r.x > r.data.homeX + range) r.data.dir = -1;\n      else if (r.x < r.data.homeX - range) r.data.dir = 1;\n      if (r.onGround && Math.abs(r.vx) < 1 && api.tick() % 30 === 0) r.data.dir *= -1;\n      r.vx = r.data.dir * speed;\n      r.facing = r.data.dir >= 0 ? 1 : -1;\n      if (api.tick() % 45 === 0) api.burst(r.x + r.w / 2, r.y - 2, 0x66d9ff, 1);\n    });\n  },\n  dispose(api: any) {\n    for (const e of api.byType(\"robot\")) api.despawn(e.id);\n  },\n  test(t: any) {\n    t.api.spawn({ type: \"ground\", x: -200, y: 400, w: 1200, h: 48, solid: true, gravityScale: 0 });\n    const robots = t.api.byType(\"robot\");\n    t.expect(robots.length === 1, \"exactly one robot spawned\");\n    const r = robots[0];\n    const startX = r.x;\n    t.step(30);\n    t.expect(r.x > startX + 10, \"robot patrols to the right\");\n    t.expect(Math.abs(r.vx) > 0, \"robot keeps moving\");\n    t.step(240);\n    t.expect(r.x < r.data.homeX + 145, \"robot stays within patrol range\");\n    t.expect(r.data.dir === 1 || r.data.dir === -1, \"robot has a patrol direction\");\n    t.expect(r.y + r.h <= 402, \"robot lands on the ground\");\n  }\n};",
+   "compiled": "var stdin_default = {\n  id: \"patrolling-robot\",\n  title: \"Patrolling Robot\",\n  knobs: {\n    speed: { value: 90, min: 20, max: 240, label: \"Patrol speed\" },\n    range: { value: 130, min: 40, max: 320, label: \"Patrol range\" },\n    size: { value: 46, min: 28, max: 80, label: \"Robot size\" }\n  },\n  setup(api, knobs) {\n    const size = Number(knobs.size) || 46;\n    const robot = api.spawn({\n      type: \"robot\",\n      x: 160,\n      y: 400 - size,\n      w: Math.round(size * 0.82),\n      h: size,\n      vx: Number(knobs.speed) || 90,\n      vy: 0,\n      color: 9413560,\n      solid: false,\n      gravityScale: 1,\n      data: { homeX: 160, dir: 1, patrol: true }\n    });\n    robot.facing = 1;\n    api.onTick(() => {\n      const speed = Math.abs(Number(knobs.speed) || 90);\n      const range = Math.max(10, Number(knobs.range) || 130);\n      const r = api.byType(\"robot\")[0];\n      if (!r) return;\n      if (typeof r.data.homeX !== \"number\") r.data.homeX = r.x;\n      if (typeof r.data.dir !== \"number\") r.data.dir = 1;\n      if (r.x > r.data.homeX + range) r.data.dir = -1;\n      else if (r.x < r.data.homeX - range) r.data.dir = 1;\n      if (r.onGround && Math.abs(r.vx) < 1 && api.tick() % 30 === 0) r.data.dir *= -1;\n      r.vx = r.data.dir * speed;\n      r.facing = r.data.dir >= 0 ? 1 : -1;\n      if (api.tick() % 45 === 0) api.burst(r.x + r.w / 2, r.y - 2, 6740479, 1);\n    });\n  },\n  dispose(api) {\n    for (const e of api.byType(\"robot\")) api.despawn(e.id);\n  },\n  test(t) {\n    t.api.spawn({ type: \"ground\", x: -200, y: 400, w: 1200, h: 48, solid: true, gravityScale: 0 });\n    const robots = t.api.byType(\"robot\");\n    t.expect(robots.length === 1, \"exactly one robot spawned\");\n    const r = robots[0];\n    const startX = r.x;\n    t.step(30);\n    t.expect(r.x > startX + 10, \"robot patrols to the right\");\n    t.expect(Math.abs(r.vx) > 0, \"robot keeps moving\");\n    t.step(240);\n    t.expect(r.x < r.data.homeX + 145, \"robot stays within patrol range\");\n    t.expect(r.data.dir === 1 || r.data.dir === -1, \"robot has a patrol direction\");\n    t.expect(r.y + r.h <= 402, \"robot lands on the ground\");\n  }\n};\nexport {\n  stdin_default as default\n};\n",
+   "knobs": {
+    "speed": {
+     "value": 90,
+     "min": 20,
+     "max": 240,
+     "label": "Patrol speed"
+    },
+    "range": {
+     "value": 130,
+     "min": 40,
+     "max": 320,
+     "label": "Patrol range"
+    },
+    "size": {
+     "value": 46,
+     "min": 28,
+     "max": 80,
+     "label": "Robot size"
+    }
+   },
+   "values": {
+    "speed": 90,
+    "range": 130,
+    "size": 46
+   },
+   "art": {
+    "key": "robot",
+    "url": "/art/gen/robot.webp"
+   }
+  },
+  {
+   "id": "firefly-swarm",
+   "title": "Firefly Swarm",
+   "source": "export default { id: \"firefly-swarm\", title: \"Firefly Swarm\", knobs: { count: { value: 24, min: 3, max: 60, label: \"Count\" }, speed: { value: 38, min: 10, max: 120, label: \"Wander Speed\" }, size: { value: 8, min: 4, max: 16, label: \"Size\" } }, setup(api, knobs) { const count = Math.max(3, Math.min(60, Math.round(Number(knobs.count) || 24))); const speed = Number(knobs.speed) || 38; const size = Number(knobs.size) || 8; const flies = []; for (let i = 0; i < count; i++) { const x = 40 + api.rand() * 560; const y = 120 + api.rand() * 200; const e = api.spawn({ type: \"firefly\", x, y, w: size, h: size, vx: 0, vy: 0, color: 0xffe866, solid: false, gravityScale: 0, data: { homeX: x, homeY: y, phase: api.rand() * 6.283, freq: 0.6 + api.rand() * 0.9, radius: 24 + api.rand() * 58, glow: 0 } }); flies.push(e); } api.onTick((dt) => { const t = api.tick() / 60; for (const e of flies) { if (!api.entities().includes(e)) continue; const p = Number(e.data.phase) || 0; const f = Number(e.data.freq) || 1; const r = Number(e.data.radius) || 40; const hx = Number(e.data.homeX) || e.x; const hy = Number(e.data.homeY) || e.y; const tx = hx + Math.cos(t * f + p) * r; const ty = hy + Math.sin(t * f * 1.37 + p * 2) * r * 0.55; e.vx = Math.max(-speed * 2, Math.min(speed * 2, (tx - e.x) * 2)); e.vy = Math.max(-speed * 2, Math.min(speed * 2, (ty - e.y) * 2)); e.x += e.vx * dt; e.y += e.vy * dt; const pulse = 0.5 + 0.5 * Math.sin(t * (2 + f) + p * 3); e.data.glow = pulse; e.color = pulse > 0.72 ? 0xfff6a0 : pulse > 0.35 ? 0xffe866 : 0xccaa22; if (pulse > 0.96 && api.tick() % 6 === 0) api.burst(e.x + e.w / 2, e.y + e.h / 2, 0xffe866, 1); } }); }, dispose(api) { for (const e of api.byType(\"firefly\")) api.despawn(e.id); }, test(t) { t.step(30); const flies = t.api.byType(\"firefly\"); t.expect(flies.length >= 3, \"firefly swarm spawned\"); const before = flies[0].x + flies[0].y; t.step(30); t.expect(Math.abs(flies[0].x + flies[0].y - before) > 0.01, \"fireflies wander and glow\"); t.expect(flies.every((f) => f.gravityScale === 0 && !f.solid), \"fireflies float freely\"); } };",
+   "compiled": "var stdin_default = { id: \"firefly-swarm\", title: \"Firefly Swarm\", knobs: { count: { value: 24, min: 3, max: 60, label: \"Count\" }, speed: { value: 38, min: 10, max: 120, label: \"Wander Speed\" }, size: { value: 8, min: 4, max: 16, label: \"Size\" } }, setup(api, knobs) {\n  const count = Math.max(3, Math.min(60, Math.round(Number(knobs.count) || 24)));\n  const speed = Number(knobs.speed) || 38;\n  const size = Number(knobs.size) || 8;\n  const flies = [];\n  for (let i = 0; i < count; i++) {\n    const x = 40 + api.rand() * 560;\n    const y = 120 + api.rand() * 200;\n    const e = api.spawn({ type: \"firefly\", x, y, w: size, h: size, vx: 0, vy: 0, color: 16771174, solid: false, gravityScale: 0, data: { homeX: x, homeY: y, phase: api.rand() * 6.283, freq: 0.6 + api.rand() * 0.9, radius: 24 + api.rand() * 58, glow: 0 } });\n    flies.push(e);\n  }\n  api.onTick((dt) => {\n    const t = api.tick() / 60;\n    for (const e of flies) {\n      if (!api.entities().includes(e)) continue;\n      const p = Number(e.data.phase) || 0;\n      const f = Number(e.data.freq) || 1;\n      const r = Number(e.data.radius) || 40;\n      const hx = Number(e.data.homeX) || e.x;\n      const hy = Number(e.data.homeY) || e.y;\n      const tx = hx + Math.cos(t * f + p) * r;\n      const ty = hy + Math.sin(t * f * 1.37 + p * 2) * r * 0.55;\n      e.vx = Math.max(-speed * 2, Math.min(speed * 2, (tx - e.x) * 2));\n      e.vy = Math.max(-speed * 2, Math.min(speed * 2, (ty - e.y) * 2));\n      e.x += e.vx * dt;\n      e.y += e.vy * dt;\n      const pulse = 0.5 + 0.5 * Math.sin(t * (2 + f) + p * 3);\n      e.data.glow = pulse;\n      e.color = pulse > 0.72 ? 16774816 : pulse > 0.35 ? 16771174 : 13412898;\n      if (pulse > 0.96 && api.tick() % 6 === 0) api.burst(e.x + e.w / 2, e.y + e.h / 2, 16771174, 1);\n    }\n  });\n}, dispose(api) {\n  for (const e of api.byType(\"firefly\")) api.despawn(e.id);\n}, test(t) {\n  t.step(30);\n  const flies = t.api.byType(\"firefly\");\n  t.expect(flies.length >= 3, \"firefly swarm spawned\");\n  const before = flies[0].x + flies[0].y;\n  t.step(30);\n  t.expect(Math.abs(flies[0].x + flies[0].y - before) > 0.01, \"fireflies wander and glow\");\n  t.expect(flies.every((f) => f.gravityScale === 0 && !f.solid), \"fireflies float freely\");\n} };\nexport {\n  stdin_default as default\n};\n",
+   "knobs": {
+    "count": {
+     "value": 24,
+     "min": 3,
+     "max": 60,
+     "label": "Count"
+    },
+    "speed": {
+     "value": 38,
+     "min": 10,
+     "max": 120,
+     "label": "Wander Speed"
+    },
+    "size": {
+     "value": 8,
+     "min": 4,
+     "max": 16,
+     "label": "Size"
+    }
+   },
+   "values": {
+    "count": 24,
+    "speed": 38,
+    "size": 8
+   },
+   "art": {
+    "key": "firefly",
+    "url": "/art/gen/firefly.webp"
+   }
+  }
+ ],
+ "title": "Bouncy zoo",
+ "blurb": "A bouncing ball, a patrolling robot and glowing fireflies on a starter map."
+}

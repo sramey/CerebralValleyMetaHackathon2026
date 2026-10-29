@@ -10,3 +10,6 @@ output/
 .DS_Store
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+
+# runtime state (share-link worlds, spend counters)
+data/

@@ -1,0 +1,1 @@
+{ "v": 1, "id": "demo-arrows", "title": "Arrow range", "blurb": "Shoot fire arrows at enemies.", "createdAt": "2026-10-29T00:00:00.000Z", "mods": [{"builtin":true,"id":"player","values":{}},{"builtin":true,"id":"ground","values":{}},{"builtin":true,"id":"fire-arrow","values":{}},{"builtin":true,"id":"enemies","values":{}}] }

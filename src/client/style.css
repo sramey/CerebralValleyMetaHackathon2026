@@ -13,7 +13,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e13; col
 @keyframes orb-pulse { 50% { transform: scale(1.18); opacity: .75; } }
 @media (prefers-reduced-motion: reduce) { #orb-dot.building { animation: none; } }
 /* Share + visitor demo worlds (ADR 0014) */
-#share-btn { width: 100%; margin-top: 6px; }
+
 #demo-worlds { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 #demo-worlds[hidden] { display: none; }
 #demo-worlds h2 { width: 100%; margin: 4px 0 0; }
@@ -55,7 +55,7 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #
 .knob { display: grid; grid-template-columns: 90px 1fr 38px; gap: 8px; align-items: center; font-size: 11px; margin-top: 8px; color: #b9b2a0; }
 .knob output { font-family: Consolas, monospace; text-align: right; }
 #log { font: 11px Consolas, monospace; color: #9aa3ad; padding-left: 18px; display: grid; gap: 5px; }
-#camera-btn { width: 100%; margin-top: 8px; background: #232c3b; color: #e8e4d8; border: 1px solid #3a4454; padding: 10px 12px; font-weight: 700; cursor: pointer; }
+#camera-btn, #share-btn { width: 100%; margin-top: 8px; background: #232c3b; color: #e8e4d8; border: 1px solid #3a4454; padding: 10px 12px; font-weight: 700; cursor: pointer; }
 #camera-modal { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; background: rgba(3,5,8,.78); padding: 16px; }
 #camera-modal[hidden] { display: none; }
 .camera-card { width: min(560px, 100%); max-height: 92vh; overflow-y: auto; background: #10141b; border: 1px solid #2a3342; padding: 16px; display: grid; gap: 10px; }
