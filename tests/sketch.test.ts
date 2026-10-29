@@ -1,4 +1,4 @@
-// Draw-to-build (ADR 0023): sketch geometry, level-spec parsing, and the compiled level mod.
+// Draw-to-build (ADR 0026): sketch geometry, level-spec parsing, and the compiled level mod.
 // Everything here runs offline: the multimodal Wonder call is injected, never made.
 import { describe, expect, it } from "vitest";
 import {

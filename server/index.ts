@@ -365,7 +365,7 @@ async function handlePhotoBringLocal(ws: WebSocket, msg: Extract<ClientMsg, { ki
 }
 
 /**
- * Draw-to-build (ADR 0023): Wonder reads the sketch image + world stroke boxes, and the
+ * Draw-to-build (ADR 0026): Wonder reads the sketch image + world stroke boxes, and the
  * resulting JSON level is compiled here into a level mod, verified, and hot-loaded.
  * Ports and prompts live in server/sketch.ts; this only wires the session in.
  */

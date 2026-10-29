@@ -1,4 +1,4 @@
-// Draw-to-build (ADR 0023): the in-game Sketch Level overlay.
+// Draw-to-build (ADR 0026): the in-game Sketch Level overlay.
 //
 // The player presses ✏️, draws platforms / coins / enemies straight onto the game screen,
 // presses Done, and the exact world-space boxes of every stroke travel with the sketch

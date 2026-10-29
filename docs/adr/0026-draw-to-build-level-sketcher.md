@@ -1,4 +1,4 @@
-# 0023 — Draw-to-build: sketch a level, Wonder reads it, a compiler builds it
+# 0026 — Draw-to-build: sketch a level, Wonder reads it, a compiler builds it
 
 - **Status:** Draft
 - **Date:** 2026-10-29

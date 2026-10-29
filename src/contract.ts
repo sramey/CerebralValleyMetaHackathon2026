@@ -198,7 +198,7 @@ export type ClientMsg =
   | { kind: "restyle"; mood: string; keys: string[] }
   // Self-improving feedback (ADR 0020): thumbs-up/down on entities or mod cards distills persistent rules & skills.
   | { kind: "feedback"; modId: string; entityType?: string; vote: "up" | "down"; note: string; fixNow?: boolean }
-  /** Draw-to-build (ADR 0023): a hand-drawn level sketch. `image` is a PNG data URL of
+  /** Draw-to-build (ADR 0026): a hand-drawn level sketch. `image` is a PNG data URL of
    *  the sketch canvas; `strokes` carry exact world boxes; `view` is the world rect the
    *  sketch covers; `prompt` is the optional typed hint. */
   | {

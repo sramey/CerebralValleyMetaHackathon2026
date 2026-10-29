@@ -113,7 +113,7 @@ const pendingPhotos = new Map<string, HTMLCanvasElement>();
 const spritePool = new Map<number, Sprite>();
 let camYSmooth: number | null = null;
 let camXSmooth: number | null = null;
-// Draw-to-build (ADR 0023): ✏️ sketch overlay over the stage; sends image + world stroke boxes.
+// Draw-to-build (ADR 0026): ✏️ sketch overlay over the stage; sends image + world stroke boxes.
 const sketch = createSketch(stageWrapEl, {
   send: (msg) => send(msg),
   say,

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 export const SPARK = "muse-spark-1.2";
 export const WONDER = "muse-wonder-1.0";
 
-/** One part of a multimodal user message (OpenAI-compatible content array, ADR 0023). */
+/** One part of a multimodal user message (OpenAI-compatible content array, ADR 0026). */
 export type MessagePart =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string } };

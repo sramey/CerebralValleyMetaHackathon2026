@@ -1,4 +1,4 @@
-// Draw-to-build (ADR 0023): a hand-drawn level sketch -> a verified, hot-loaded level mod.
+// Draw-to-build (ADR 0026): a hand-drawn level sketch -> a verified, hot-loaded level mod.
 //
 // Two halves:
 //  1. Wonder reads the sketch image + the exact world-space stroke boxes and returns a
@@ -200,7 +200,7 @@ export function levelToModSource(level: SketchLevel): string {
   // Last column: 1 = jump-through ledge, 0 = solid wall.
   const platforms = statics.map((p) => `[${n2(p.x)}, ${n2(p.y)}, ${n2(p.w)}, ${n2(p.h)}, ${p.kind === "ledge" ? 1 : 0}]`).join(", ");
   const lines: string[] = [];
-  lines.push(`// "${level.name}" — built from a hand-drawn sketch (ADR 0023).`);
+  lines.push(`// "${level.name}" — built from a hand-drawn sketch (ADR 0026).`);
   lines.push(`// Every box below is the world-space box the player drew, unchanged.`);
   lines.push(`const PLATFORMS = [${platforms}];`);
   lines.push(`const MOVERS = [${rowsOf(movers)}];`);
