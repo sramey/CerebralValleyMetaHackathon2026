@@ -17,3 +17,4 @@ Every AI call the game makes at runtime goes to a Meta model or Meta agent featu
 
 ## Public repo: nothing personal or secret
 This repo is public and judged. Never commit keys, tokens, `.env`, emails, personal names/paths (use relative paths, not `C:\Users\...`), family/tester identities, raw logs or recordings with private info. If something must exist locally, put it under a gitignored path (`logs/`, `data/`, `.env*`, `output/`). Check `git diff --cached` for this before every commit; workers too.
+- OpenCode Go has a usage cap: two workers hit "Go usage limit exceeded" after ~1 h each (10-29). One worker also printed `.env` (with the key) into its transcript: the brief now forbids printing `.env`; check worker logs for secrets before keeping them.
