@@ -179,6 +179,20 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #
 #sketch-status[data-kind="error"] { border-color: rgba(226,72,61,.7); color: #ffb3ab; white-space: normal; }
 #sketch-status[data-kind="building"] { border-color: rgba(255,201,77,.7); color: #ffe9a8; }
 
+/* Sketch mode freezes the world (ADR 0028) and lets go after 3 minutes idle (ADR 0030):
+   the chip says the game is paused and counts the guard down, so nobody wonders why the
+   player stopped moving, or why the overlay vanished. */
+#sketch-chip { position: absolute; left: 12px; top: 12px; z-index: 2; display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: rgba(12,16,23,.92); border: 1px solid rgba(255,201,77,.6); color: #ffe9a8; font-size: 12px; font-weight: 700; box-shadow: 0 4px 16px rgba(0,0,0,.55); pointer-events: none; }
+#sketch-chip[hidden] { display: none; }
+#sketch-chip .chip-dot { width: 8px; height: 8px; border-radius: 50%; background: #ffc94d; box-shadow: 0 0 10px #ffc94d; animation: sketch-pause-pulse 2.4s ease-in-out infinite; }
+#sketch-chip em { font-style: normal; font-weight: 500; color: #b9b2a0; }
+#sketch-chip.urgent { border-color: rgba(226,72,61,.8); color: #ffb3ab; }
+#sketch-chip.urgent .chip-dot { background: #e2483d; box-shadow: 0 0 10px #e2483d; }
+#sketch-chip[data-mode="building"] { border-color: rgba(84,224,255,.6); color: #d7f6ff; }
+#sketch-chip[data-mode="building"] .chip-dot { background: #54e0ff; box-shadow: 0 0 10px #54e0ff; }
+@keyframes sketch-pause-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { #sketch-chip .chip-dot { animation: none; } }
+
 /* Narrow stage: the palette becomes a compact top strip instead, so the bottom of the
    stage still stays clear, and the status line moves to the free bottom edge. */
 @media (max-width: 760px) {
@@ -188,4 +202,5 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #
   .sketch-actions { grid-template-columns: repeat(4, 1fr); }
   .sketch-actions button.primary, .sketch-actions button[data-act="cancel"] { grid-column: auto; }
   #sketch-status { left: 10px; right: 10px; top: auto; bottom: 12px; transform: none; max-width: none; }
+  #sketch-chip { left: 10px; right: 10px; top: 10px; max-width: none; justify-content: center; flex-wrap: wrap; row-gap: 2px; }
 }

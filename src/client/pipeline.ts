@@ -5,6 +5,7 @@
 import "./pipeline.css";
 import type { ServerMsg } from "../contract";
 import { createStatsPanel } from "./stats-panel";
+import { isLiveBuildMsg } from "./stats-refresh";
 import { chain, stepLine } from "./agent-steps";
 import type { AgentStepMsg } from "./agent-steps";
 
@@ -261,6 +262,9 @@ export function createPipeline(host: HTMLElement): Pipeline {
         settle(l, "other"); // tweaks, undo and questions end here without landing a mod
       }
     }
+    // A build that just settled moved the impact numbers: re-read the log now (ADR 0027),
+    // not on the next 20 s poll. Coalesced and skipped while the panel is off screen.
+    if (isLiveBuildMsg(msg)) statsPanel.refreshSoon();
     paint();
   }
 
