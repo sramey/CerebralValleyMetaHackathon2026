@@ -29,5 +29,14 @@
     "note": "raindrops should slant slightly with the wind and splash with a small burst on ground impact",
     "clearArt": false,
     "createdAt": "2026-10-29T17:08:36.769Z"
+  },
+  {
+    "id": "autofix-1793312644946-rvz3",
+    "subsystem": "wonder",
+    "rule": "Jetpack must require separate input + fuel/cooldown and clamp vertical velocity/altitude; never apply continuous thrust while jump is held.",
+    "source": "autofix",
+    "command": "add a jetpack",
+    "note": "test: jetpack thrust lifts player high while jump held, minY=344",
+    "createdAt": "2026-10-29T22:24:04.946Z"
   }
 ]
