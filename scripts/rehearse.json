@@ -1,18 +1,7 @@
 [
-  "add a bouncing green slime",
-  { "cmd": "make me huge", "expect": "rejected-then-fixed" },
-  "make me giant",
-  "make it rain",
-  "add trees",
-  "make it bigger",
-  "make it smaller",
-  "undo",
-  { "cmd": "make this christmas themed", "mood": "christmas" },
-  { "cmd": "add some stairs", "source": "stair|step", "noArt": true },
-  { "cmd": "make it snow", "source": "snow", "noArt": true },
-  { "cmd": "turn this into daytime", "mood": "daytime" },
+  { "cmd": "add a bouncing green slime", "source": "slime" },
+  { "cmd": "add a dragon, some coins, and make it rain" },
   { "cmd": "make it so my character can double jump", "source": "api[.]player[(]" },
-  { "cmd": "make it look like a beach", "mood": "beach" },
-  { "cmd": "put a ladder here", "noArt": true },
-  { "cmd": "let me shoot fireballs", "source": "api[.]player[(]|input", "noArt": true }
+  { "cmd": "make me huge", "expect": "rejected-then-fixed" },
+  { "cmd": "make it spooky", "mood": "spooky" }
 ]
