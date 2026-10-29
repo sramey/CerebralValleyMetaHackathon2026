@@ -11,6 +11,7 @@ import { Fx } from "./fx";
 import { Portal } from "./portal";
 import { drawCliff, drawShape, isCliff, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
 import { celestialPos, computeDesiredCamY, depthFog, drawContactShadows, drawDistantMountains, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
+import { drawScenery } from "./scenery";
 import { drawFluffyCloud, drawParallaxEntities, isParallaxOrSkyEntity, isSkyOrBackgroundEntity } from "./parallax";
 import { ModLoader } from "../sim/loader";
 import { createGhost } from "./ghost";
@@ -668,6 +669,10 @@ function render(): void {
   const fog = depthFog(mood?.name);
   drawRidge(ridgeFar, camX, 0.3, horizon, 0, mixC(pal.ridgeFar, SKY[SKY_BANDS - 1], fog.far));
   drawRidge(ridgeNear, camX, 0.55, horizon + 34, 1, mixC(pal.ridgeNear, SKY[SKY_BANDS - 1], fog.near));
+  // Starter-world scenery, unless a mod brings its own parallax backdrop (bead 5fl)
+  if (world.entities.some((e) => e.type === "ground") && !world.entities.some(isParallaxOrSkyEntity)) {
+    drawScenery(gfx, camX, camYSmooth, W, pal, SKY[SKY_BANDS - 1], fog.far, isDaytime);
+  }
   drawParallaxEntities(gfx, world.entities, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1], grade);
   drawHorizonMist(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
   // solids-first, then contact shadows on solid surfaces, then dynamic entities
