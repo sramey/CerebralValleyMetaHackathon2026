@@ -11,6 +11,7 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "stats": "tsx scripts/stats.ts",
     "benchmark": "tsx scripts/benchmark.ts",
     "rehearse": "tsx scripts/rehearse.ts"
   },

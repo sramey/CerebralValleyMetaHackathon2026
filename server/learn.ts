@@ -6,7 +6,7 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Look } from "../src/contract";
-import { LOG_FILE } from "./createlog";
+import { activeLogFile } from "./createlog";
 import { chat, SPARK } from "./meta";
 
 export type RuleSubsystem = "router" | "wonder" | "art";
@@ -79,8 +79,9 @@ function skillsDirPath(dir?: string): string {
 
 function logLearn(rec: Record<string, unknown>): void {
   try {
-    mkdirSync(dirname(LOG_FILE), { recursive: true });
-    appendFileSync(LOG_FILE, JSON.stringify({ kind: "learn", ts: new Date().toISOString(), ...rec }) + "\n");
+    const file = activeLogFile();
+    mkdirSync(dirname(file), { recursive: true });
+    appendFileSync(file, JSON.stringify({ kind: "learn", ts: new Date().toISOString(), ...rec }) + "\n");
   } catch {
     /* logging must never break learning or builds */
   }
