@@ -13,6 +13,7 @@ import { importMod, verifyMod } from "./verify";
 import { playtestMod } from "./playtest";
 import type { PlaytestWorldMod } from "./playtest";
 import { fixWithAgent } from "./agent";
+import { forceModId } from "./modid";
 import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, formatManifest, ROUTER_SYSTEM, WONDER_SYSTEM } from "./prompt";
 import { logBuild, saveModSources } from "./createlog";
 import { artCachedUrl, artKeyForType, deriveSubject, generateSubjectArt, isScenerySubject, pickArtType } from "./art";
@@ -568,6 +569,8 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
       route = { action: "new" };
     }
   }
+  // An edit keeps its mod id (ADR 0016).
+  const keepId = (src: string) => (editRec ? forceModId(src, editRec.id) : src);
   stage(ws, { kind: "stage", stage: "writing", detail: "writing the mod", command });
   let source = "";
   const sources: string[] = [];
@@ -580,7 +583,7 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
       { role: "user", content: editRec ? buildEditPrompt(command, editRec.source, manifestText(ws)) : buildWonderPrompt(command, manifestText(ws)) },
     ], 4096);
     writeMs = Math.round(performance.now() - w0);
-    source = stripFences(res.text);
+    source = keepId(stripFences(res.text));
     sources.push(source);
   } catch (err) {
     send(ws, { kind: "say", text: `The writer failed: ${err instanceof Error ? err.message : String(err)}` });
@@ -633,15 +636,15 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
       const fix = await fixWithAgent(
         `${WONDER_SYSTEM}
 
-You have a run_playtest tool. Call it with your complete fixed source to check that the player can still play; if it fails, revise and call it again. When it passes, reply with ONLY the final module source.`,
+You have a run_playtest tool. Call it with your complete fixed source to check that the player can still play; if it fails, revise and call it again. When it passes, reply with ONLY the final module source. Be terse: change only what the failure requires, keep the mod's id and every other line as is, and write no comments.`,
         buildFixPrompt(command, source, first.errors),
         async (src) => {
-          const r = await attempt(stripFences(src));
+          const r = await attempt(keepId(stripFences(src)));
           return { ok: r.ok, message: r.ok ? "passed: the player can still play" : r.errors.join("; ").slice(0, 600) };
         },
       );
       writeMs += Math.round(performance.now() - w0);
-      source = stripFences(fix.text);
+      source = keepId(stripFences(fix.text));
       sources.push(source);
       stage(ws, { kind: "stage", stage: "compiling", detail: "recompiling the fix", command });
       first = await attempt(source);
