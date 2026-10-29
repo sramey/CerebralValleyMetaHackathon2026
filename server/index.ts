@@ -18,7 +18,7 @@ import { importMod, verifyMod } from "./verify";
 import { inspectWorld, playtestMod } from "./playtest";
 import type { PlaytestWorldMod } from "./playtest";
 import { inspectTool, playtestTool, runAgent } from "./agent";
-import type { AgentTrace } from "./agent";
+import type { AgentStep, AgentTrace } from "./agent";
 import { forceModId, modIdOf } from "./modid";
 import { runPool } from "./pool";
 import { forget, newRecent, noteCommand, noteTouched, recentText, resolvePronoun } from "./context";
@@ -706,7 +706,11 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
   const context = [recentText(session.recent), others.length > 0 ? `Other builds running right now for this player (do not duplicate them; choose a different mod id): ${others.map((c) => `"${c}"`).join("; ")}.` : ""].filter(Boolean).join("\n");
   const agentTrace: AgentTrace[] = [];
   let agentTurns = 0;
-  const agentInfo = () => (agentTurns > 0 ? { agent: { turns: agentTurns, calls: agentTrace.length, tools: agentTrace } } : {});
+  const agentInfo = () => {
+    if (agentTurns === 0) return {};
+    const pts = agentTrace.filter((t) => t.name === "run_playtest");
+    return { agent: { turns: agentTurns, calls: agentTrace.length, tools: agentTrace, playtests: pts.length, rejected: pts.filter((t) => t.ok === false).length } };
+  };
   const batchInfo = batch ? { batch } : {};
   stage(ws, { kind: "stage", stage: "writing", detail: "writing the mod", command });
   let source = "";
@@ -755,8 +759,10 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     }),
   ];
   const onText = (text: string) => send(ws, { kind: "codeStream", command, text });
+  let stepPhase: "write" | "fix" = "write";
+  const onStep = (s: AgentStep) => send(ws, { kind: "agentStep", command, phase: stepPhase, n: s.n, tool: s.tool, args: s.args, result: s.result, ok: s.ok, ms: s.ms });
   const onTool = (name: string) => stage(ws, { kind: "stage", stage: "writing", detail: name === "inspect_world" ? "looking at the world" : "playtesting a draft", command });
-  const TOOL_RULES = "You have two tools. inspect_world shows the live world (mods, knob values, entity types and sizes): call it only when the request depends on what already exists. run_playtest compiles, verifies and playtests your complete source in the player's world: call it with your finished source; if it passes you are done, if it fails read the reason and call it again with a corrected source. If you skip the tools, reply with ONLY the module source.";
+  const TOOL_RULES = "You have two tools. inspect_world shows the live world (mods, knob values, entity types and sizes): call it FIRST whenever the request changes or builds on something that already exists (the player, a mod, an enemy: 'make me huge', 'make them faster'), and skip it for a brand-new standalone thing. run_playtest compiles, verifies and playtests your complete source in the player's world: call it with your finished source; if it passes you are done, if it fails read the reason and call it again with a corrected source. If you skip the tools, reply with ONLY the module source.";
 
   try {
     const w0 = performance.now();
@@ -764,7 +770,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     const user = editRec ? buildEditPrompt(command, editRec.source, manifestText(ws), context) : buildWonderPrompt(command, manifestText(ws), context);
     let text: string;
     try {
-      const ag = await runAgent({ system: `${WONDER_SYSTEM}\n\n${TOOL_RULES}`, user, tools: tools(), maxCalls: 3, onTool, onText });
+      const ag = await runAgent({ system: `${WONDER_SYSTEM}\n\n${TOOL_RULES}`, user, tools: tools(), maxCalls: 3, onTool, onStep, onText });
       agentTrace.push(...ag.trace);
       agentTurns += ag.turns;
       text = ag.text;
@@ -791,6 +797,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     // ONE auto-fix round.
     stage(ws, { kind: "stage", stage: "fixing", detail: "fixing the mod", command });
     fixAttempted = true;
+    stepPhase = "fix";
     try {
       const w0 = performance.now();
       const spent0 = compileMs + verifyMs;
@@ -800,6 +807,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
         tools: tools(),
         maxCalls: 3,
         onTool,
+        onStep,
         onText,
       });
       agentTrace.push(...fix.trace);

@@ -21,6 +21,36 @@ export interface AgentTool {
 
 export interface AgentTrace { name: string; ms: number; ok?: boolean }
 
+/** One finished tool call, as the viewer sees it in the pipeline lane (ADR 0033). */
+export interface AgentStep { n: number; tool: string; args: string; result: string; ok: boolean; ms: number }
+
+/** One line about a tool call's arguments: the source size for a playtest, nothing for a look. */
+export function summarizeArgs(name: string, args: Record<string, unknown>): string {
+  if (name === "run_playtest") {
+    const lines = String(args.source ?? "").split(String.fromCharCode(10)).filter((l) => l.trim()).length;
+    return lines > 0 ? `${lines} lines of mod source` : "no source";
+  }
+  return Object.keys(args).length === 0 ? "no arguments" : Object.keys(args).join(", ");
+}
+
+/** One line about a tool result, short enough for a lane: what Wonder saw, or why the playtest said no. */
+export function summarizeResult(name: string, result: AgentToolResult): string {
+  if (name === "inspect_world") {
+    try {
+      const w: any = JSON.parse(result.message);
+      const mods = Array.isArray(w?.mods) ? w.mods.length : Object.keys(w?.mods ?? {}).length;
+      const ents = Array.isArray(w?.entities) ? w.entities.length : Object.keys(w?.entities ?? {}).length;
+      return `${mods} mod${mods === 1 ? "" : "s"}, ${ents} entity type${ents === 1 ? "" : "s"}`;
+    } catch { return "saw the world"; }
+  }
+  if (result.ok) return "passed";
+  // run_playtest hands back JSON ({ ok, message }); show just the reason.
+  let raw = result.message;
+  try { const j: any = JSON.parse(raw); if (typeof j?.message === "string") raw = j.message; } catch { /* plain text */ }
+  const why = raw.replace(/^playtest:\s*/i, "").replace(/\s*\([^)]*\)\s*$/, "").replace(/\s+/g, " ").trim();
+  return `rejected: ${why.slice(0, 90)}`;
+}
+
 export interface AgentOptions {
   system: string;
   user: string;
@@ -31,6 +61,8 @@ export interface AgentOptions {
   model?: string;
   /** Called before each tool runs (for stage updates). */
   onTool?: (name: string) => void;
+  /** Called after each tool finishes, with a one-line summary (ADR 0033). */
+  onStep?: (step: AgentStep) => void;
   /** If set, the model is streamed (stream: true) and every piece of text or tool-call source is passed here as it arrives (ADR 0022). */
   onText?: (chunk: string) => void;
 }
@@ -86,16 +118,20 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
       calls++;
       const t0 = performance.now();
       let result: AgentToolResult;
+      let lastArgsLine = "";
       try {
         if (!tool) throw new Error(`unknown tool ${tc.function?.name}`);
         const args = JSON.parse(tc.function?.arguments || "{}") as Record<string, unknown>;
         if (typeof args.source === "string") lastSource = args.source;
+        lastArgsLine = summarizeArgs(tool.name, args);
         opts.onTool?.(tool.name);
         result = await tool.run(args);
       } catch (err) {
         result = { ok: false, message: `tool error: ${err instanceof Error ? err.message : String(err)}` };
       }
-      trace.push({ name: String(tc.function?.name), ms: Math.round(performance.now() - t0), ok: result.ok });
+      const ms = Math.round(performance.now() - t0);
+      trace.push({ name: String(tc.function?.name), ms, ok: result.ok });
+      if (tool) opts.onStep?.({ n: calls, tool: tool.name, args: lastArgsLine, result: summarizeResult(tool.name, result), ok: result.ok !== false, ms });
       if (result.final !== undefined) return { text: result.final, calls, trace, turns };
       messages.push({ role: "tool", tool_call_id: tc.id, content: result.message });
     }
