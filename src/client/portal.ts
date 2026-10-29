@@ -59,6 +59,8 @@ export class Portal {
   private base = 0x04070d;
   private reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   lastMs = 0;
+  /** Called when a screen-rip opens (sound hook). */
+  onRip: () => void = () => {};
 
   constructor(stage: Container) {
     this.layer.zIndex = 11;
@@ -134,6 +136,7 @@ export class Portal {
     if (this.seenOwnerTypes.size > 2000) this.seenOwnerTypes.clear();
     for (const e of found) {
       if (this.rips.length >= MAX_LIVE) break;
+      this.onRip();
       this.rips.push({ x: e.x + e.w / 2, y: e.y + e.h / 2, w: e.w, h: e.h, age: 0, seed: (e.id * 2654435761) >>> 0 });
     }
   }

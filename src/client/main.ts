@@ -9,6 +9,7 @@ import type { ClientMsg, Entity, KnobValue, ModDefinition, MoodSpec, ServerMsg }
 import { initVoice } from "./voice";
 import { Fx } from "./fx";
 import { Feel } from "./feel";
+import { Sound, buildSfx } from "./sound";
 import { Portal } from "./portal";
 import { drawCliff, drawShape, isCliff, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
 import { celestialPos, computeDesiredCamY, depthFog, drawContactShadows, drawDistantMountains, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
@@ -99,8 +100,15 @@ app.stage.addChild(gfx);
 app.stage.sortableChildren = true;
 gfx.zIndex = -100;
 const fx = new Fx(app.stage);
-const feel = new Feel(app.stage, (amp) => fx.kick(amp), !new URLSearchParams(location.search).has("noshake"));
+const urlFlags = new URLSearchParams(location.search);
+// Synthesized WebAudio sound (bead 6d3): silent until the first gesture; ?mute starts muted, ?vol=0..1 sets master volume, M toggles mute.
+const sound = new Sound({ muted: urlFlags.has("mute"), volume: urlFlags.has("vol") ? Number(urlFlags.get("vol")) : undefined });
+const unlockSound = (): void => sound.unlock();
+addEventListener("pointerdown", unlockSound);
+addEventListener("keydown", unlockSound);
+const feel = new Feel(app.stage, (amp) => fx.kick(amp), !urlFlags.has("noshake"), (ev) => sound.playEvent(ev));
 const portal = new Portal(app.stage); // screen-rip entrance for new entities (bead yzd)
+portal.onRip = () => sound.play("portal");
 let lastRenderAt = performance.now();
 const isEffectType = (type: string): boolean => kindOf(type)?.kind === "effect";
 
@@ -419,6 +427,7 @@ function applyMood(m: MoodSpec | null): void {
   setSnowy(!!m && (m.ambient === "snow" || m.name === "christmas" || m.name === "snowy"));
   fx.setMood(m);
   portal.setMood(m);
+  sound.setMood(m);
 }
 function revertMood(): void {
   restoreSheets();
@@ -431,6 +440,7 @@ function onMood(m: MoodSpec | null): void {
   if (mood && mood.name === m.name) return; // duplicate of the mood already on
   restoreSheets();
   applyMood(m);
+  sound.play("swell");
   moodModCount = loader.list().length;
   renderMods();
   // Only sheets something in the world actually uses (no image spend on art nobody can see).
@@ -811,6 +821,8 @@ requestAnimationFrame(frame);
 const keys = new Set<string>();
 addEventListener("keydown", (e) => {
   if (e.target === inputEl || e.target === orbInputEl || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+  if (e.code === "KeyM" && !e.repeat) { log(sound.toggleMute() ? "sound muted (M)" : "sound on (M)"); return; }
+  if (e.code === "BracketLeft" || e.code === "BracketRight") sound.setVolume(sound.volume + (e.code === "BracketRight" ? 0.1 : -0.1));
   keys.add(e.code);
   syncInput();
   if (["ArrowUp", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
@@ -1687,6 +1699,8 @@ function connect(): void {
     if (msg.kind === "say") say(msg.text);
     else if (msg.kind === "stage") {
       log(`${msg.stage}: ${msg.detail}`);
+      const sx = buildSfx(msg.stage);
+      if (sx) sound.play(sx);
       if (msg.command) builds.stage(msg.command, msg.stage, msg.detail);
       if (builds.active() > 1) sayWhileBuilding();
       else if (msg.stage === "rejected") { rejectedAt = performance.now(); say(msg.detail, "failed"); }
