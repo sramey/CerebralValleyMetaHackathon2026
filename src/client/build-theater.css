@@ -1,20 +1,87 @@
-/* Build theater (ADR 0022): translucent code stream behind the gameplay + stage stepper. */
+/* Build theater (ADR 0022): translucent code stream + live agent steps + stage stepper. */
 .bt-stream {
-  position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 3; pointer-events: none; opacity: 0; transition: opacity .5s ease;
-  display: flex; flex-direction: column; justify-content: flex-end; padding: 0 clamp(18px, 4vw, 70px) 78px;
-  /* Fade top and bottom so it never forms a hard edge over the game or collides with bottom hint. */
-  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 24%, #000 64%, transparent 92%);
-  mask-image: linear-gradient(180deg, transparent 0%, #000 24%, #000 64%, transparent 92%);
+  position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 23; pointer-events: none; opacity: 0; transition: opacity .35s ease;
+  display: flex; flex-direction: column; justify-content: flex-end; padding: 0 clamp(16px, 3.5vw, 54px) 52px;
 }
 .bt-stream.on { opacity: 1; }
-.bt-label { font: 600 clamp(10px, 1.2vh, 11px)/1 ui-monospace, Consolas, monospace; letter-spacing: .2em; text-transform: uppercase; color: rgba(255, 201, 77, .75); margin-bottom: 6px; min-height: 11px; }
-.bt-code { font: 500 clamp(11px, 1.5vh, 15px)/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; color: rgba(190, 225, 255, .5); white-space: pre; overflow: hidden; text-shadow: 0 0 14px rgba(90, 170, 255, .35); }
+
+.bt-card {
+  max-width: min(720px, calc(100% - 60px));
+  background: linear-gradient(180deg, rgba(11, 16, 25, 0.9) 0%, rgba(7, 10, 16, 0.84) 100%);
+  border: 1px solid rgba(84, 224, 255, 0.35);
+  border-radius: 12px;
+  padding: 12px 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.65), 0 0 16px rgba(84, 224, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bt-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 6px;
+}
+.bt-label {
+  font: 700 clamp(11px, 1.3vh, 12px)/1 ui-monospace, Consolas, monospace;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  color: #ffc94d;
+}
+.bt-status {
+  font: 500 11px/1.2 "Segoe UI", system-ui, sans-serif;
+  color: rgba(215, 246, 255, 0.85);
+  margin-left: auto;
+}
+.bt-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.bt-chip {
+  padding: 2px 7px;
+  border-radius: 999px;
+  font: 700 10px/1 ui-monospace, Consolas, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(255, 255, 255, 0.1);
+  color: #e8e4d8;
+}
+.bt-chip + .bt-chip::before {
+  content: "→";
+  margin-right: 4px;
+  opacity: 0.45;
+}
+.bt-chip.inspect { background: rgba(84, 224, 255, 0.22); color: #b8f2ff; border: 1px solid rgba(84, 224, 255, 0.4); }
+.bt-chip.write { background: rgba(255, 201, 77, 0.22); color: #ffe9a8; border: 1px solid rgba(255, 201, 77, 0.4); }
+.bt-chip.write.active { animation: bt-pulse .8s ease-in-out infinite; }
+.bt-chip.playtest { background: rgba(255, 175, 75, 0.22); color: #ffd8a8; border: 1px solid rgba(255, 175, 75, 0.4); }
+.bt-chip.reject { background: rgba(255, 106, 106, 0.28); color: #ffd0d0; border: 1px solid rgba(255, 106, 106, 0.45); }
+.bt-chip.fix { background: rgba(201, 182, 255, 0.28); color: #ebdfff; border: 1px solid rgba(201, 182, 255, 0.45); }
+.bt-chip.pass { background: rgba(126, 224, 129, 0.28); color: #d6ffe0; border: 1px solid rgba(126, 224, 129, 0.45); }
+
+.bt-code {
+  font: 500 clamp(11.5px, 1.45vh, 13.5px)/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color: rgba(225, 242, 255, 0.92);
+  white-space: pre;
+  overflow: hidden;
+  max-height: clamp(160px, 24vh, 260px);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 12%, #000 100%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 12%, #000 100%);
+}
 .bt-line { min-height: 1.45em; }
-.bt-tail::after { content: "▍"; color: rgba(255, 201, 77, .9); margin-left: 1px; animation: bt-blink .8s steps(2) infinite; }
-.bt-c { color: rgba(120, 150, 150, .6); }
-.bt-s { color: rgba(110, 224, 200, .75); }
-.bt-k { color: rgba(255, 201, 77, .85); }
-.bt-n { color: rgba(255, 150, 120, .8); }
+.bt-tail::after { content: "▍"; color: #ffd35c; margin-left: 1px; animation: bt-blink .8s steps(2) infinite; text-shadow: 0 0 6px #ffd35c; }
+.bt-c { color: rgba(140, 180, 185, 0.85); font-style: italic; }
+.bt-s { color: #7ee0b8; text-shadow: 0 0 6px rgba(126, 224, 184, 0.3); }
+.bt-k { color: #ffd35c; font-weight: 600; text-shadow: 0 0 6px rgba(255, 211, 92, 0.35); }
+.bt-n { color: #ff9d76; }
 @keyframes bt-blink { 50% { opacity: 0; } }
 
 .bt-stepper {
