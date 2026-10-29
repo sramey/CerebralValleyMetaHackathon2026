@@ -11,6 +11,8 @@ export interface GhostPlay {
   /** The player's current mods, in load order. */
   base: { def: ModDefinition; values: KnobValues }[];
   candidate: { id: string; compiled: string };
+  /** Id of the mod the candidate replaces (an edit that renamed it), else its own id. */
+  replaces?: string;
   seed: number;
   inputs: number[];
   ok: boolean;
@@ -86,7 +88,7 @@ export function createGhost(host: HTMLElement) {
     try {
       const candidate = await importDef(play.candidate.compiled);
       const defs = play.base.map((m) => ({ def: m.def, values: m.values }));
-      const idx = defs.findIndex((m) => m.def.id === candidate.id);
+      const idx = defs.findIndex((m) => m.def.id === (play.replaces ?? candidate.id));
       if (idx >= 0) defs[idx] = { def: candidate, values: defs[idx].values }; else defs.push({ def: candidate, values: {} });
       for (const m of defs) loader.load(m.def, m.values);
     } catch {

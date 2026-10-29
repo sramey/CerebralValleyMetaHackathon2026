@@ -49,13 +49,13 @@ function buildWorld(seed: number, entries: Entry[]): World {
 }
 
 /** The mods that make up the world the player sees now, plus (or replacing) the candidate. */
-export async function playtestMod(worldMods: WorldMod[], candidate: { def: ModDefinition; values?: KnobValues }): Promise<PlaytestOutcome> {
+export async function playtestMod(worldMods: WorldMod[], candidate: { def: ModDefinition; values?: KnobValues; replaces?: string }): Promise<PlaytestOutcome> {
   const t0 = performance.now();
   const base: Entry[] = [];
   for (const m of worldMods) {
     try { base.push({ def: await defOf(m.compiled), values: m.values ?? {} }); } catch { /* a broken installed mod is not the candidate's fault */ }
   }
-  const idx = base.findIndex((e) => e.def.id === candidate.def.id);
+  const idx = base.findIndex((e) => e.def.id === (candidate.replaces ?? candidate.def.id));
   const withCand: Entry[] = base.slice();
   const cand: Entry = { def: candidate.def, values: candidate.values ?? (idx >= 0 ? base[idx].values : {}) };
   if (idx >= 0) withCand[idx] = cand; else withCand.push(cand);

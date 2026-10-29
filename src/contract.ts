@@ -110,7 +110,7 @@ export type ServerMsg =
   | { kind: "say"; text: string }
   | { kind: "segment"; key: string; box: { x: number; y: number; w: number; h: number } | null }
   /** One bot playtest. The client replays `inputs` (RLE of input masks) in a copy of its own world plus `mod`. */
-  | { kind: "playtest"; command: string; attempt: number; ok: boolean; plain: string; seed: number; frames: number; inputs: number[]; mod: { id: string; compiled: string }; ms: number }
+  | { kind: "playtest"; command: string; attempt: number; ok: boolean; plain: string; seed: number; frames: number; inputs: number[]; mod: { id: string; compiled: string }; replaces?: string; ms: number }
   | { kind: "timing"; command: string; ms: { route: number; write: number; compile: number; verify: number; total: number } };
 
 export interface VerifyResult {

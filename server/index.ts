@@ -8,7 +8,7 @@ import { SIM } from "../src/contract";
 import type { ClientMsg, KnobDefs, KnobValue, ServerMsg } from "../src/contract";
 import { chat, hasApiKey, loadEnv, SPARK, WONDER } from "./meta";
 import { compileMod } from "./compile";
-import { verifyMod } from "./verify";
+import { importMod, verifyMod } from "./verify";
 import { playtestMod } from "./playtest";
 import type { WorldMod } from "./playtest";
 import { fixWithAgent } from "./agent";
@@ -57,6 +57,22 @@ const STARTER_WORLD: BuiltinDef[] = [
 // The player's world as the client last reported it (ADR 0013): playtests run in a copy of it.
 const worldOf = new WeakMap<WebSocket, { id: string; values: Record<string, KnobValue> }[]>();
 const builtinJs = new Map<string, string>();
+
+// The starter mods load on the client without the server. Adopt them into the manifest so the router and edits ("make me huge") can see them.
+let adopting: Promise<void> = Promise.resolve();
+async function adoptBuiltins(ids: string[]): Promise<void> {
+  for (const id of ids) {
+    const b = BUILTINS.find((x) => x.id === id);
+    if (!b || manifest.has(id)) continue;
+    try {
+      const source = readFileSync(join(process.cwd(), "src/mods", b.file), "utf8");
+      const c = compileMod(source);
+      if (!c.ok) continue;
+      const def = await importMod(c.js);
+      manifest.set(id, { id, title: def.title, source, compiled: c.js, knobs: def.knobs ?? {} });
+    } catch { /* leave it unknown */ }
+  }
+}
 
 function worldMods(ws: WebSocket): WorldMod[] {
   const listing = worldOf.get(ws) ?? [...manifest.keys()].map((id) => ({ id, values: {} }));
@@ -378,6 +394,7 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
 }
 
 async function handleSingle(ws: WebSocket, text: string): Promise<void> {
+  await adopting;
   const t0 = performance.now();
   let routeMs = 0;
   let writeMs = 0;
@@ -555,6 +572,7 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
   const attemptCache = new Map<string, Awaited<ReturnType<typeof attemptOnce>>>();
   let playtests = 0;
   const attempt = async (src: string) => {
+    src = src.trim();
     const hit = attemptCache.get(src);
     if (hit) return hit;
     const r = await attemptOnce(src);
@@ -572,9 +590,9 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
     verifyMs += Math.round(performance.now() - v0);
     if (!res.ok) return { ok: false as const, errors: res.errors, js: compiled.js, msPerFrame: res.msPerFrame };
     // "Can you still play?": a scripted bot plays a copy of the player's world with this mod in it.
-    const pt = await playtestMod(worldMods(ws), { def: res.def! });
+    const pt = await playtestMod(worldMods(ws), { def: res.def!, replaces: editRec?.id });
     verifyMs += pt.ms;
-    if (!pt.skipped) send(ws, { kind: "playtest", command, attempt: ++playtests, ok: pt.ok, plain: pt.plain, seed: pt.seed, frames: pt.frames, inputs: pt.inputs, mod: { id: res.def!.id, compiled: compiled.js }, ms: pt.ms });
+    if (!pt.skipped) send(ws, { kind: "playtest", command, attempt: ++playtests, ok: pt.ok, plain: pt.plain, seed: pt.seed, frames: pt.frames, inputs: pt.inputs, mod: { id: res.def!.id, compiled: compiled.js }, ...(editRec ? { replaces: editRec.id } : {}), ms: pt.ms });
     if (!pt.ok) {
       stage(ws, { kind: "stage", stage: "rejected", detail: pt.plain, command });
       return { ok: false as const, errors: [`playtest: ${pt.plain} (${pt.detail})`], js: compiled.js, msPerFrame: res.msPerFrame };
@@ -640,7 +658,7 @@ You have a run_playtest tool. Call it with your complete fixed source to check t
     const rec: ManifestRec = { id: def.id, title: def.title, source, compiled: first.js, knobs: def.knobs ?? {}, ...(art ? { art } : {}) };
     // Edit keeps the same id so the client loader replaces it; if Wonder
     // renamed it anyway, drop the stale entry instead of duplicating.
-    if (editRec && def.id !== editRec.id) manifest.delete(editRec.id);
+    if (editRec && def.id !== editRec.id) { manifest.delete(editRec.id); send(ws, { kind: "removed", modId: editRec.id }); }
     manifest.set(def.id, rec);
     stage(ws, { kind: "stage", stage: "done", detail: `loaded ${def.id} (${SIM.healthFrames} frames OK)`, command });
     send(ws, { kind: "mod", mod: { id: def.id, title: def.title, source, compiled: first.js, knobs: rec.knobs, ...(art ? { art } : {}), ...(artPending ? { artPending } : {}) } });
@@ -674,6 +692,7 @@ function handleMessage(ws: WebSocket, raw: string): void {
   }
   if (msg.kind === "world") {
     if (Array.isArray(msg.mods)) worldOf.set(ws, msg.mods.filter((m) => m && typeof m.id === "string").map((m) => ({ id: m.id, values: m.values ?? {} })));
+    adopting = adoptBuiltins((worldOf.get(ws) ?? []).map((m) => m.id));
     return;
   }
   if (msg.kind === "command") {

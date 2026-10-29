@@ -1285,7 +1285,7 @@ function connect(): void {
       if (msg.stage === "done" || msg.stage === "failed") ghost.hideSoon();
     }
     else if (msg.kind === "playtest") {
-      void ghost.play({ base: loader.list().map((m) => ({ def: m.def, values: m.values })), candidate: msg.mod, seed: msg.seed, inputs: msg.inputs, ok: msg.ok, plain: msg.plain });
+      void ghost.play({ base: loader.list().map((m) => ({ def: m.def, values: m.values })), candidate: msg.mod, replaces: msg.replaces, seed: msg.seed, inputs: msg.inputs, ok: msg.ok, plain: msg.plain });
     }
     else if (msg.kind === "timing") log(`timing route ${msg.ms.route}ms write ${msg.ms.write}ms compile ${msg.ms.compile}ms verify ${msg.ms.verify}ms total ${msg.ms.total}ms`);
     else if (msg.kind === "tweak") tweak(msg.modId, msg.knob, msg.value, "Tweaked.");
