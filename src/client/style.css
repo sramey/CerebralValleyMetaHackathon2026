@@ -12,6 +12,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e13; col
 #orb-dot.failed { background: radial-gradient(circle at 35% 35%, #ffb3ab, #e2483d 55%, #a02722); box-shadow: inset 0 0 8px rgba(255,255,255,.45), 0 0 12px rgba(226,72,61,.5); }
 @keyframes orb-pulse { 50% { transform: scale(1.18); opacity: .75; } }
 @media (prefers-reduced-motion: reduce) { #orb-dot.building { animation: none; } }
+/* Share + visitor demo worlds (ADR 0014) */
+#share-btn { width: 100%; margin-top: 6px; }
+#demo-worlds { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+#demo-worlds[hidden] { display: none; }
+#demo-worlds h2 { width: 100%; margin: 4px 0 0; }
 /* Hold-to-talk (ADR 0012): the orb lights up and pulses with mic volume (--level 0..1). */
 #orb-bar.voice-live { border-color: #ffe9a8; box-shadow: 0 4px 18px rgba(0,0,0,.45), 0 0 22px rgba(255,201,77,.55); }
 #orb-bar.voice-live #orb-dot { animation: none; transform: scale(calc(1 + var(--level, 0) * .55)); transition: transform .06s linear; background: radial-gradient(circle at 35% 35%, #fff6d6, #ffd35c 55%, #f0a91c); box-shadow: inset 0 0 8px rgba(255,255,255,.7), 0 0 calc(14px + var(--level, 0) * 26px) rgba(255,201,77,.85); }

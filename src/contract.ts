@@ -99,7 +99,17 @@ export type ClientMsg =
   // Voice (ADR 0012). Mic audio itself travels as binary frames: PCM16 mono 16 kHz.
   | { kind: "voiceWarm" }
   | { kind: "voiceStart" }
-  | { kind: "voiceEnd"; cancel?: boolean };
+  | { kind: "voiceEnd"; cancel?: boolean }
+  // Share links (ADR 0014). The server only ever saves mods it verified itself; the client just says which are loaded.
+  | { kind: "worldSave"; mods: { id: string; values: KnobValues }[] }
+  | { kind: "worldLoad"; id: string };
+
+/** One mod in a saved world: a built-in the client bundles, or a verified AI mod with its source. */
+export type WorldMod =
+  | { builtin: true; id: string; values: KnobValues }
+  | { builtin?: false; id: string; title: string; source: string; compiled: string; knobs: KnobDefs; values: KnobValues; art?: { key: string; url: string; scenery?: boolean } };
+
+export interface DemoWorld { id: string; title: string; blurb: string }
 
 export type BuildStage = "routing" | "writing" | "compiling" | "verifying" | "fixing" | "done" | "failed";
 
@@ -113,7 +123,11 @@ export type ServerMsg =
   | { kind: "segment"; key: string; box: { x: number; y: number; w: number; h: number } | null }
   | { kind: "timing"; command: string; ms: { route: number; write: number; compile: number; verify: number; total: number } }
   | { kind: "voiceState"; state: "ready" | "listening" | "error"; detail?: string }
-  | { kind: "transcript"; text: string; final: boolean; ms?: { firstPartial: number; final: number } };
+  | { kind: "transcript"; text: string; final: boolean; ms?: { firstPartial: number; final: number } }
+  | { kind: "worldSaved"; id: string }
+  | { kind: "world"; id: string; mods: WorldMod[] }
+  // Visitor mode (no key, kill-switch, or budget spent): the game still plays; offer these instead.
+  | { kind: "visitor"; reason: "nokey" | "killswitch" | "budget"; demos: DemoWorld[] };
 
 export interface VerifyResult {
   ok: boolean;

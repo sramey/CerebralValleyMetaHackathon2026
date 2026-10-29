@@ -99,6 +99,9 @@ export class Upstream {
   private ended = false;
   private live = false;
   private pendingEnd = false;
+  private reported = false;
+  /** Called once with the session's lifetime in seconds when it closes (spend accounting). */
+  onEnd?: (seconds: number) => void;
   private queue: Buffer[] = [];
   private queuedBytes = 0;
   private pacer: SilencePacer | null = null;
@@ -138,6 +141,7 @@ export class Upstream {
     });
     this.sock.on("close", () => {
       this.closed = true;
+      this.report();
       this.stopSilence();
       settle.rej(new Error("closed before ready"));
       this.handlers.onClose();
@@ -194,9 +198,16 @@ export class Upstream {
     else this.pendingEnd = true; // cold start: the ack handler flushes audio, then ends
   }
 
+  private report(): void {
+    if (this.reported) return;
+    this.reported = true;
+    this.onEnd?.((Date.now() - this.createdAt) / 1000);
+  }
+
   close(): void {
     this.stopSilence();
     this.closed = true;
+    this.report();
     try { this.sock.terminate(); } catch { /* ignore */ }
   }
 }
@@ -214,13 +225,17 @@ interface ClientVoice {
 
 export interface VoiceHubOptions {
   /** Titles/ids of loaded mods, added to the recognizer's vocabulary. */
-  modNames: () => string[];
+  modNames: (ws: WebSocket) => string[];
   send: (ws: WebSocket, msg: ServerMsg) => void;
+  /** Spend guard: `check` returns a friendly refusal (or null), `record` books Meta session seconds. */
+  guard?: { check(ws: WebSocket): string | null; record(ws: WebSocket, seconds: number): void };
+  /** Cap on warm Meta sessions held at once across all clients. */
+  maxStandbys?: number;
   url?: string;
   getKey?: () => string;
   /** How long to wait for Meta's final after endStream before using the last partial. */
   finalTimeoutMs?: number;
-  /** Close an unused warm session after this long (the client re-warms on focus). */
+  /** Close an unused warm session after this long (the client re-warms on key/pointer activity). */
   standbyIdleMs?: number;
 }
 
@@ -230,7 +245,8 @@ export function createVoiceHub(opts: VoiceHubOptions) {
   const url = opts.url ?? ASR_URL;
   const getKey = opts.getKey ?? apiKey;
   const finalTimeoutMs = opts.finalTimeoutMs ?? 4000;
-  const standbyIdleMs = opts.standbyIdleMs ?? 10 * 60 * 1000;
+  const standbyIdleMs = opts.standbyIdleMs ?? 2 * 60 * 1000;
+  const maxStandbys = opts.maxStandbys ?? 30;
   const clients = new Map<WebSocket, ClientVoice>();
   const log = (s: string) => console.log(`[voice] ${s}`);
 
@@ -243,19 +259,25 @@ export function createVoiceHub(opts: VoiceHubOptions) {
     return c;
   }
 
-  function open(): Upstream | null {
+  function open(ws: WebSocket): Upstream | null {
     const key = getKey();
     if (!key) return null;
-    return new Upstream(url, key, buildKeywords(opts.modNames()));
+    const up = new Upstream(url, key, buildKeywords(opts.modNames(ws)));
+    up.onEnd = (seconds) => opts.guard?.record(ws, seconds);
+    return up;
   }
+
+  const standbyCount = (): number => { let n = 0; for (const c of clients.values()) if (c.standby) n++; return n; };
 
   function warm(ws: WebSocket): void {
     const c = state(ws);
     if (c.active) return;
+    if (opts.guard?.check(ws)) return;
+    if (!c.standby && standbyCount() >= maxStandbys) return;
     if (c.standby && !c.standby.isClosed && Date.now() - c.standby.createdAt < STANDBY_MAX_AGE_MS) return;
     c.standby?.close();
     if (c.idleTimer) clearTimeout(c.idleTimer);
-    const up = open();
+    const up = open(ws);
     if (!up) { c.standby = null; return; }
     c.standby = up;
     up.handlers = {
@@ -293,9 +315,14 @@ export function createVoiceHub(opts: VoiceHubOptions) {
       opts.send(ws, { kind: "voiceState", state: "error", detail: "Voice needs MODEL_API_KEY on the server — type instead." });
       return;
     }
+    const refused = opts.guard?.check(ws);
+    if (refused) {
+      opts.send(ws, { kind: "voiceState", state: "error", detail: refused });
+      return;
+    }
     let up = c.standby;
     const warmStart = !!up && up.isReady;
-    if (!up || up.isClosed) up = open();
+    if (!up || up.isClosed) up = open(ws);
     c.standby = null;
     if (c.idleTimer) clearTimeout(c.idleTimer);
     if (!up) {
