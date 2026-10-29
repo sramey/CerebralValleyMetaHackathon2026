@@ -4,6 +4,7 @@
 // the server proxies to Muse Voice Transcribe, so the API key never reaches the browser.
 import type { ClientMsg, ServerMsg } from "../contract";
 import { Downsampler, orbLevel, rms } from "./pcm";
+import { HOLD_MAX_MS, shiftStillHeld, voiceTextOk } from "./voicegate";
 
 export interface VoiceDeps {
   /** Orb bar element; gets class `voice-live` / `voice-wait` and the --level CSS variable. */
@@ -43,6 +44,7 @@ export function initVoice(deps: VoiceDeps) {
   let firstPartialAt = -1;
   let capturing = false;
   let failsafe: ReturnType<typeof setTimeout> | null = null;
+  let holdCap: ReturnType<typeof setTimeout> | null = null;
   let mic: Promise<boolean> | null = null;
   let micReady = false;
   let micError = "";
@@ -65,6 +67,8 @@ export function initVoice(deps: VoiceDeps) {
     capturing = false;
     if (failsafe) clearTimeout(failsafe);
     failsafe = null;
+    if (holdCap) clearTimeout(holdCap);
+    holdCap = null;
     paint("off");
   }
 
@@ -137,12 +141,26 @@ export function initVoice(deps: VoiceDeps) {
     micDenied = false; // an explicit press may re-ask
     deps.feedback.textContent = "Listening…";
     deps.sendJson({ kind: "voiceStart" });
+    // A hold longer than any utterance is a stuck key: cancel it and send nothing.
+    holdCap = setTimeout(() => {
+      if (phase !== "holding") return;
+      deps.sendJson({ kind: "voiceEnd", cancel: true });
+      reset();
+      deps.feedback.textContent = "Hold Shift only while you speak.";
+    }, HOLD_MAX_MS);
     void ensureMic().then((ok) => {
       if (phase !== "holding") return;
       if (!ok) { fail("Mic blocked — allow it in the browser, or type instead."); return; }
       ds?.reset();
       capturing = true;
     });
+  }
+
+  /** Abandon a hold without sending anything (focus lost, stuck key). */
+  function cancelHold(): void {
+    if (phase !== "holding") return;
+    deps.sendJson({ kind: "voiceEnd", cancel: true });
+    reset();
   }
 
   function release(source: "key" | "pad" | "api"): void {
@@ -156,6 +174,8 @@ export function initVoice(deps: VoiceDeps) {
       return;
     }
     capturing = false;
+    if (holdCap) clearTimeout(holdCap);
+    holdCap = null;
     phase = "transcribing";
     paint("wait");
     deps.sendJson({ kind: "voiceEnd" });
@@ -186,7 +206,7 @@ export function initVoice(deps: VoiceDeps) {
     stats.push(stat);
     deps.log(`voice: "${text}" press→first partial ${stat.pressToFirstPartialMs}ms, release→final ${stat.releaseToFinalMs}ms`);
     reset();
-    if (text) deps.submit(text);
+    if (voiceTextOk(text)) deps.submit(text);
     else deps.say("Didn't catch that — hold Shift and try again.");
     return true;
   }
@@ -204,7 +224,12 @@ export function initVoice(deps: VoiceDeps) {
   addEventListener("keyup", (e) => {
     if (e.code === "ShiftLeft" || e.code === "ShiftRight") release("key");
   });
-  addEventListener("blur", () => { if (phase === "holding" && heldBy === "key") release("key"); });
+  addEventListener("blur", () => { if (phase === "holding" && heldBy === "key") cancelHold(); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden && phase === "holding") cancelHold(); });
+  // A lost keyup (focus moved while Shift was down) leaves "holding" stuck: any later key or pointer event without Shift ends it.
+  const lostShift = (e: KeyboardEvent | PointerEvent): void => { if (phase === "holding" && heldBy === "key" && !shiftStillHeld(e)) cancelHold(); };
+  addEventListener("keydown", lostShift, { capture: true });
+  addEventListener("pointermove", lostShift, { capture: true });
 
   // Gamepad shoulder buttons (cheap to poll; only runs while a pad is connected).
   let padDown = false;
@@ -221,13 +246,11 @@ export function initVoice(deps: VoiceDeps) {
 
   // Keep a Meta session warm server-side; the server drops an unused one after a few minutes.
   const warm = () => { if (deps.isOpen()) deps.sendJson({ kind: "voiceWarm" }); };
-  addEventListener("focus", warm);
   // The server frees an idle warm session after ~2 min; activity from an engaged player brings it back.
   let lastWarm = 0;
-  const warmOnActivity = () => { const t = performance.now(); if (t - lastWarm > 20_000) { lastWarm = t; warm(); } };
+  const warmOnActivity = () => { const t = performance.now(); if (t - lastWarm > 10_000) { lastWarm = t; warm(); } };
   addEventListener("keydown", warmOnActivity);
   addEventListener("pointerdown", warmOnActivity);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) warm(); });
 
   // Test hooks: drive a turn without a physical key, read measured latencies.
   (window as unknown as Record<string, unknown>).__voice = {
@@ -239,5 +262,6 @@ export function initVoice(deps: VoiceDeps) {
     get mic() { return micReady ? "ready" : micError || "pending"; },
   };
 
-  return { onServerMsg, onOpen: warm };
+  // Connecting does not warm a session: nothing is billed until the first key or pointer gesture (bug ahv).
+  return { onServerMsg, onOpen: () => {} };
 }
