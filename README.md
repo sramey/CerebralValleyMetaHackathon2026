@@ -22,22 +22,25 @@ You need **Node 22+** and a **Meta Model API key**. Get one from the [Meta Model
 git clone https://github.com/sramey/CerebralValleyMetaHackathon2026.git
 cd CerebralValleyMetaHackathon2026
 npm install
-cp .env.example .env        # then set MODEL_API_KEY=<your Meta key>
+cp .env.example .env        # Windows cmd: copy .env.example .env; then set MODEL_API_KEY=<your Meta key>
 npm run build && npm start  # game + AI server on one port
 ```
 
-Open **http://127.0.0.1:8787/** in Chrome, click the game once, and try:
+Open **http://127.0.0.1:8787/** (or your configured `PORT`) in Chrome, click the game once, and try:
 
 | Do this | What you'll see |
 |---|---|
 | Type `add a bouncing green slime` in the orb bar at the top (or **hold Shift and say it**) | Spark routes it, Wonder writes a mod, the verifier playtests it, and it hot-loads in ~10–20 s while you keep playing |
 | `make me huge` | The playtest bot finds you can't fit through the gap, the change is **rejected with a reason**, Wonder fixes it as a tool-using agent, and it lands. Watch the ghost window |
-| `make it rain`, `add trees`, `add a dragon` | Muse Image draws art on demand; a digitize placeholder shows until it arrives |
-| **Bring an object in (camera)** in the side panel: type what you're holding (e.g. `coffee mug`) and hold it up to the webcam | SAM 3.1 finds it (green box; or click the object yourself), then it's cut out, pixelated and dropped into the game as a physics prop |
-| Click any creature or object | A radial menu: bigger, smaller, front, back, remove |
+| `make it rain`, `add trees`, `add a dragon` | Muse Image draws art on demand; a digitize placeholder shows until it arrives. Dynamic HUD widgets appear on the top-left |
+| **Bring an object in (camera)** in the side panel: type what you're holding (e.g. `coffee mug`) and hold it to the webcam (or click **Upload a photo instead**) | SAM 3.1 finds it (green box; or click the object yourself), then it's cut out, pixelated and dropped into the game as a physics prop |
+| Click any creature or object | A radial menu: bigger, smaller, front, back, remove, plus 👍/👎 to teach the engine |
 | **Share this world (copy link)** in the side panel | Copies a link that reopens this exact world for anyone to remix |
+| Press **P** or click **PIPELINE** in the bottom-right | Live architecture pipeline view: see Spark, Wonder agent (with tools `inspect_world` / `run_playtest`), esbuild, the Verifier, and SAM 3.1 with real-time telemetry |
+| `make it spooky` (or `neon`, `snowy`) | Spark art-directs a whole-world mood restyle: purple mist, recolored sprites, and spooky lighting in seconds |
+| Click **👍** or **👎** on any mod card or radial menu | Feedback modal lets you teach the engine rules, distill skills, or auto-fix the mod live |
 
-Move with A/D or the arrows, jump with W or Space, shoot with X. Fresh-clone test (2026-10-29): `npm install` ~9 s, build ~3 s, first AI build landed in ~20 s.
+Move with A/D or the arrows, jump with W or Space, shoot with X. Watch the top-left HUD (health, mod counters). Fresh-clone test (2026-10-29): `npm install` ~6 s, build ~4 s, first AI build landed in ~10 s.
 
 **No key?** The game still runs: built-in mods and curated demo worlds (for example `http://127.0.0.1:8787/?w=demo-bouncy`) play without any AI calls. Developing instead? `npm run dev` (Vite on :5173) plus `npm run server` (:8787) in a second terminal, then `npm test`.
 
