@@ -181,6 +181,18 @@ const SKIP_TYPES = new Set([
   "gel",
   "background",
   "platform-moving",
+  // weather and effects are engine fx, never sprite sheets (ADR 0015)
+  "fog",
+  "mist",
+  "haze",
+  "smoke",
+  "snow",
+  "explosion",
+  "blast",
+  "shockwave",
+  "spark",
+  "sparks",
+  "ember",
 ]);
 
 function isSkippedType(type: string): boolean {

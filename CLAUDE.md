@@ -12,3 +12,4 @@ Every AI call the game makes at runtime goes to a Meta model or Meta agent featu
 - The verifier runs each mod alone in an empty world (ADR 0003): tests must spawn their own ground.
 - Entity-cap eviction once deleted the ground; spawner mods must despawn what they make.
 - Server/client ports come from `.env` (`PORT`, `VITE_PORT`, `VITE_WS_URL`) so worktrees run live side by side.
+- Antigravity (`agy`) can be a third worker, but only headless: `agy -p "<brief>" --model gemini-4-argon-high --dangerously-skip-permissions` from inside a slot-3 worktree (owner approved skip-permissions 2026-10-29). `--mode auto` isn't available on this account, and without skipping permissions a headless run stalls. The owner's interactive `agy` window can't receive SendMessage.

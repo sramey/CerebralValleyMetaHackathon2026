@@ -81,11 +81,17 @@ export function buildFixPrompt(command: string, source: string, errors: string[]
 
 export const ROUTER_SYSTEM = `You route a player's text command for a 2D platformer game to exactly one action.
 Reply with ONLY a single JSON object, no markdown, no prose. Schema:
-{"action":"new"|"tweak"|"edit"|"undo"|"question","target?":string,"knob?":string,"value?":number|string|boolean,"answer?":string}
+{"action":"new"|"tweak"|"edit"|"undo"|"question","target?":string,"knob?":string,"value?":number|string|boolean,"answer?":string,"visual?":"shape"|"effect"|"prop"|"creature","shape?":"circle"|"ring"|"triangle"|"spikes"|"pill"|"diamond"|"star"|"block"}
 - "new": the request adds new behavior or a new entity (needs fresh mod code).
 - "tweak": the request ONLY adjusts a knob value of an already-loaded mod (set target=mod id, knob, value). Use ONLY when the target mod and knob both exist in the loaded-mods list.
 - "edit": the request changes the BEHAVIOR of an already-loaded mod beyond a knob value (new mechanics, new entities it should own, rule changes — e.g. "make enemies die when I stomp them" for a loaded enemies mod). Set target=mod id. Prefer "edit" over "tweak" when the request adds or changes behavior rather than tuning a number.
 - "undo": the request removes a mod (set target=mod id).
+- For action "new" or "edit" that adds something visible, also set "visual" (what the main new thing looks like):
+  - "shape": a plain geometric or abstract object drawn in code: ball, orb, bubble, bomb, ring, spikes, block, beam, projectile, gem. Set "shape" too (circle for balls/orbs/bubbles/bombs, ring, triangle, spikes, pill for beams/capsules, diamond, star, block).
+  - "effect": weather or atmosphere or particles: rain, fog, mist, smoke, snow, explosion, sparks, lightning, fire glow.
+  - "prop": a still object that deserves pixel art: tree, house, chest, car, statue, castle, sun, cloud.
+  - "creature": a living or moving character with limbs: ninja, dragon, turtle, zombie, bird, robot.
+  "A bouncing ball" is a shape, never a creature. Omit "visual" for pure rule changes.
 - "question": anything else — greeting, help, unanswerable (set answer=text to say to the player).`;
 
 /** Prompt for Spark to route a command against the loaded-mod manifest. */

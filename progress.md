@@ -101,3 +101,9 @@ Original prompt: lets setup our project, get oriented, organized, and setup, see
 - Starter level gained a knob-controlled overhang (`ground.overhang`) so "make me huge" fails honestly.
 - Verified on main: tsc clean, 70/70 tests, build green; live "make me huge" 2/2 rejected ("too big to fit through the gap") then fixed and landed in 17–18 s (write ~6–7 s, fix ~8–10 s). Lease runs: 5/5 landed, 4/5 caught first (one write was a ~2× size that honestly fits).
 - Rough: Wonder sometimes renames the mod on edit (client shows a brief rename); fix round is slow; overhang is a plain slab (visuals lease to style it); the bot doesn't prove goal reachability. Demo: rehearse a fallback phrasing ("make me giant") for the 1-in-5 honest pass.
+
+## Status update — 2026-10-29 (visuals merged)
+
+- Visuals merged (beads wj9 + 90o, ADR 0015): the Spark router call now also returns `visual` (shape | effect | prop | creature) and `shape`, at no extra cost. Shapes and effects never go to Muse Image; `look` travels with the mod, manifest and saved worlds. New `src/client/shapes.ts` (ball with squash-stretch, ring, triangle, spikes, pill, diamond, star, block, rock cliff) and `src/client/fx.ts` (explosions, slanted rain + splashes + mist, soft fog; render-only, ~0.1 ms/frame). The starter overhang renders as a hanging rock column with stalactites (collision unchanged).
+- Verified on main: tsc clean, 75/75 tests, build green; live "add a bouncing ball" landed as a shape (one auto-fix round), "make me huge" still rejected at the rock and fixed (14.5 s). Screenshots reviewed (ball, ring+spikes+blast, rain, fog, rock).
+- Watch: simple builds often need an auto-fix round on the empty-world health check, adding ~7 s. Not yet live-verified: the bomb-hits-enemy blast on camera.
