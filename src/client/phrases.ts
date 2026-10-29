@@ -1,4 +1,4 @@
-// Sketch-mode phrases (ADR 0027): "let me draw a level" opens the sketch overlay locally,
+// Sketch-mode phrases (ADR 0028): "let me draw a level" opens the sketch overlay locally,
 // with no AI call and no build slot spent.
 //
 // The matcher is deliberately narrow. A draw verb only means sketch mode when what it

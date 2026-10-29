@@ -159,7 +159,7 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #
 #sketch-overlay[data-state="building"] #sketch-hint { opacity: .35; pointer-events: none; }
 @keyframes sketch-shimmer { 50% { filter: brightness(1.5) drop-shadow(0 0 18px rgba(84,224,255,.55)); } }
 @media (prefers-reduced-motion: reduce) { #sketch-overlay[data-state="building"] #sketch-canvas { animation: none; } }
-/* The palette is a side strip (ADR 0027): the bottom ~150 px of the stage — the strip the
+/* The palette is a side strip (ADR 0028): the bottom ~150 px of the stage — the strip the
    player actually walks and draws along — stays uncovered. */
 #sketch-palette { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); width: min(232px, 34%); max-height: calc(100% - 96px); overflow-y: auto; padding: 10px; display: grid; gap: 8px; background: rgba(12,16,23,.92); border: 1px solid rgba(84,224,255,.45); border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 .sketch-brushes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }

@@ -764,7 +764,7 @@ let last = performance.now();
 let acc = 0;
 let noPlayerTicks = 0;
 function frame(now: number): void {
-  // Sketch mode freezes the world (ADR 0027): you draw on a still frame, and the
+  // Sketch mode freezes the world (ADR 0028): you draw on a still frame, and the
   // accumulator is dropped so resuming does not fast-forward the sim.
   const sketching = sketch.active();
   acc = sketching ? 0 : acc + Math.min(100, now - last);
@@ -1726,7 +1726,7 @@ connect();
 
 function submitCommand(text: string): void {
   if (!text) return;
-  // "let me draw a level" / "sketch" open the overlay locally (ADR 0027): no AI call,
+  // "let me draw a level" / "sketch" open the overlay locally (ADR 0028): no AI call,
   // no build slot. Anything else, including "draw a dragon", goes down the normal path.
   const sketchIntent = matchSketchIntent(text);
   if (sketchIntent === "open") { sketch.open(); return; }

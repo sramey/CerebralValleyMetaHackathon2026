@@ -1,4 +1,4 @@
-// Sketch-mode phrase routing (ADR 0027): saying or typing "let me draw a level" opens the
+// Sketch-mode phrase routing (ADR 0028): saying or typing "let me draw a level" opens the
 // sketch overlay with no AI call, while "draw a dragon" still goes to the builder.
 import { describe, expect, it } from "vitest";
 import { matchSketchIntent, normalizePhrase } from "../src/client/phrases";

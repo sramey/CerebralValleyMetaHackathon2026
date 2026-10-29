@@ -1,4 +1,4 @@
-# 0027 — Sketch mode: a local phrase opens it, the world freezes, the palette moves to the side
+# 0028 — Sketch mode: a local phrase opens it, the world freezes, the palette moves to the side
 
 - **Status:** Draft
 - **Date:** 2026-10-29
