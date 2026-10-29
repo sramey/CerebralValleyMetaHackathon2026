@@ -217,6 +217,8 @@ export type ClientMsg =
   // Share links (ADR 0014). The server only ever saves mods it verified itself; the client just says which are loaded.
   | { kind: "worldSave"; mods: { id: string; values: KnobValues }[] }
   | { kind: "worldLoad"; id: string }
+  // Export single-file HTML game (ADR 0042)
+  | { kind: "worldExport"; mods: { id: string; values: KnobValues }[] }
   // Mood restyle (ADR 0017): the client lists the sprite sheets it has; the server edits each toward the mood anchor.
   | { kind: "restyle"; mood: string; keys: string[] }
   // Self-improving feedback (ADR 0020): thumbs-up/down on entities or mod cards distills persistent rules & skills.
@@ -317,6 +319,7 @@ export type ServerMsg =
   | { kind: "voiceState"; state: "ready" | "listening" | "error"; detail?: string }
   | { kind: "transcript"; text: string; final: boolean; ms?: { firstPartial: number; final: number } }
   | { kind: "worldSaved"; id: string }
+  | { kind: "worldExported"; html: string; filename: string }
   /** The session's steps, newest last; `current` is the step the world is at right now (ADR 0041). */
   | { kind: "timeline"; steps: TimelineStep[]; current: number }
   | { kind: "world"; id: string; mods: WorldMod[]; mood?: MoodSpec | null; restyled?: Record<string, string> }

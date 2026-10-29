@@ -983,6 +983,7 @@ function handleLocal(text: string): boolean {
   const itemMod = resolveItemMod(t);
   if (itemMod) { loadLocal(itemMod); return true; }
   if (n === "starter world" || n === "starter") { loadLocal(playerMod); loadLocal(groundMod); return true; }
+  if (n === "download game" || n === "download" || n === "export game" || n === "export") { $("#export-btn")?.click(); return true; }
   if (n === "player" || n === "ninja") { loadLocal(playerMod); return true; }
   if (n === "ground" || n === "some ground") { loadLocal(groundMod); return true; }
   if (n === "enemy" || n === "enemies" || n === "walker" || n === "walkers" || n === "turtle") { loadLocal(enemyMod); return true; }
@@ -1707,6 +1708,12 @@ $("#share-btn").addEventListener("click", () => {
   send({ kind: "worldSave", mods: loader.list().map((m) => ({ id: m.id, values: m.values })) });
 });
 
+$("#export-btn")?.addEventListener("click", () => {
+  if (ws?.readyState !== WebSocket.OPEN) { say("Exporting needs the server — start it with: npm run server", "failed"); return; }
+  say("Preparing single-file game export…", "building");
+  send({ kind: "worldExport", mods: loader.list().map((m) => ({ id: m.id, values: m.values })) });
+});
+
 function shareUrl(id: string): string {
   return `${location.origin}${location.pathname}?w=${id}`;
 }
@@ -1758,6 +1765,21 @@ function connect(): void {
       navigator.clipboard?.writeText(url).catch(() => {});
       say(`Share link copied: ${url}`, "done");
       log(`shared world: ${url}`);
+      return;
+    }
+    if (msg.kind === "worldExported") {
+      const blob = new Blob([msg.html], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = msg.filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      const kb = Math.round(msg.html.length / 1024);
+      say(`Downloaded single-file game (${kb} KB). Playable offline anywhere!`, "done");
+      log(`exported game (${kb} KB)`);
       return;
     }
     if (msg.kind === "say") {

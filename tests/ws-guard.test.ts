@@ -24,7 +24,7 @@ const PNG = `data:image/png;base64,${"A".repeat(320)}`;
 const BBOX = { x: 10, y: 20, w: 120, h: 16 };
 const KNOWN_KINDS = new Set([
   "command", "undo", "knob", "photo", "photoFind", "photoBring", "photoBringLocal",
-  "worldState", "voiceWarm", "voiceStart", "voiceEnd", "worldSave", "worldLoad",
+  "worldState", "voiceWarm", "voiceStart", "voiceEnd", "worldSave", "worldLoad", "worldExport",
   "restyle", "feedback", "sketch", "tester", "timelineRestore",
 ]);
 
@@ -45,6 +45,7 @@ const VALID: { [K in ClientMsg["kind"]]: Extract<ClientMsg, { kind: K }> } = {
   voiceEnd: { kind: "voiceEnd", cancel: true },
   worldSave: { kind: "worldSave", mods: [{ id: "player", values: { size: 32 } }, { id: "coins", values: {} }] },
   worldLoad: { kind: "worldLoad", id: "demo-1" },
+  worldExport: { kind: "worldExport", mods: [{ id: "player", values: { size: 32 } }, { id: "coins", values: {} }] },
   restyle: { kind: "restyle", mood: "spooky", keys: ["ninja", "mug-photo"] },
   feedback: { kind: "feedback", modId: "player", entityType: "player", vote: "down", note: "too slow", fixNow: true },
   tester: { kind: "tester", n: 2, ev: "landed", cid: 3 },
@@ -157,6 +158,7 @@ const BAD: [label: string, value: unknown][] = [
     ["worldState without an array", { kind: "worldState", mods: { player: {} } }],
     ["worldState with too many mods", { kind: "worldState", mods: Array.from({ length: MAX_MODS + 1 }, (_, i) => ({ id: `m${i}`, values: {} })) }],
     ["worldSave with too many mods", { kind: "worldSave", mods: Array.from({ length: MAX_MODS + 1 }, (_, i) => ({ id: `m${i}`, values: {} })) }],
+    ["worldExport with too many mods", { kind: "worldExport", mods: Array.from({ length: MAX_MODS + 1 }, (_, i) => ({ id: `m${i}`, values: {} })) }],
     ["worldLoad with no id", { kind: "worldLoad" }],
     ["worldLoad with a traversal id", { kind: "worldLoad", id: "../worlds/x" }],
     ["voiceEnd with a non-boolean cancel", { kind: "voiceEnd", cancel: "yes" }],

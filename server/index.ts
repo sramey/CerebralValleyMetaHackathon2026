@@ -33,6 +33,7 @@ import { Budget, readLimits } from "./budget";
 import type { Kind } from "./budget";
 import { Timeline, type Snapshot } from "./timeline";
 import { isWorldId, restyledForWorld, snapshotWorld, WorldStore } from "./worlds";
+import { generateExportHtml } from "./export";
 import { createStaticHandler } from "./static";
 import { createVoiceHub } from "./voice";
 import { appendTester, sanitizeTester } from "./testers";
@@ -1054,6 +1055,20 @@ function handleWorldSave(ws: WebSocket, msg: Extract<ClientMsg, { kind: "worldSa
   else send(ws, { kind: "worldSaved", id: saved.id });
 }
 
+function handleWorldExport(ws: WebSocket, msg: Extract<ClientMsg, { kind: "worldExport" }>): void {
+  const requested = Array.isArray(msg.mods) ? msg.mods.filter((m) => m && typeof m.id === "string") : [];
+  const s = sess(ws);
+  const mods = snapshotWorld(requested, s.manifest, BUILTIN_IDS);
+  const restyled = restyledForWorld(s.mood, mods, s.restyled);
+  try {
+    const html = generateExportHtml({ mods, mood: s.mood, restyled }, process.cwd());
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    send(ws, { kind: "worldExported", html, filename: `talk-to-build-${stamp}.html` });
+  } catch (err) {
+    send(ws, { kind: "say", text: err instanceof Error ? err.message : "Failed to export game." });
+  }
+}
+
 function handleWorldLoad(ws: WebSocket, msg: Extract<ClientMsg, { kind: "worldLoad" }>): void {
   const w = isWorldId(msg.id) ? worlds.get(msg.id) : null;
   if (!w) { send(ws, { kind: "say", text: "That world link doesn't exist (any more). Start fresh or open a demo world." }); return; }
@@ -1144,6 +1159,7 @@ function dispatchClientMsg(ws: WebSocket, msg: ClientMsg): void {
     adoptingOf.set(ws, adoptBuiltins(manifest, (worldOf.get(ws) ?? []).map((m) => m.id)));
   } else if (msg.kind === "worldSave") handleWorldSave(ws, msg);
   else if (msg.kind === "worldLoad") handleWorldLoad(ws, msg);
+  else if (msg.kind === "worldExport") handleWorldExport(ws, msg);
   else if (msg.kind === "feedback") {
     handleFeedback(ws, msg).catch((err) => {
       send(ws, { kind: "say", text: `Feedback failed: ${err instanceof Error ? err.message : String(err)}` });
