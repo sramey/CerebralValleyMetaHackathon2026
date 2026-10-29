@@ -37,7 +37,7 @@ Open **http://127.0.0.1:8787/** (or your configured `PORT`) in Chrome, click the
 | Click any creature or object | A radial menu: bigger, smaller, front, back, remove, plus 👍/👎 to teach the engine |
 | **Share this world (copy link)** in the side panel | Copies a link that reopens this exact world for anyone to remix |
 | Press **P** or click **PIPELINE** in the bottom-right | Live architecture pipeline view: see Spark, Wonder agent (with tools `inspect_world` / `run_playtest`), esbuild, the Verifier, and SAM 3.1 with real-time telemetry |
-| `make it spooky` (or `neon`, `snowy`) | Spark art-directs a whole-world mood restyle: purple mist, recolored sprites, and spooky lighting in seconds |
+| `make it spooky` (or `neon`, `snowy`) | Spark art-directs a whole-world mood: the palette, fog and lighting change in ~3 s, then Muse Image redraws every AI sprite in the new style (~20–30 s). `undo` restores it |
 | Click **👍** or **👎** on any mod card or radial menu | Feedback modal lets you teach the engine rules, distill skills, or auto-fix the mod live |
 
 Move with A/D or the arrows, jump with W or Space, shoot with X. Watch the top-left HUD (health, mod counters). Fresh-clone test (2026-10-29): `npm install` ~6 s, build ~4 s, first AI build landed in ~10 s.
