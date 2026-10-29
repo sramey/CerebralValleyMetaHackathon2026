@@ -23,7 +23,8 @@ import { runPool } from "./pool";
 import { forget, newRecent, noteCommand, noteTouched, recentText, resolvePronoun } from "./context";
 import type { Recent } from "./context";
 import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, formatManifest, ROUTER_SYSTEM, WONDER_SYSTEM } from "./prompt";
-import { logBuild, logMood, saveModSources } from "./createlog";
+import { activeLogFile, logBuild, logMood, saveModSources } from "./createlog";
+import { createStatsHandler } from "./stats-feed";
 import { artCachedUrl, artKeyForType, clearCachedArt, deriveSubject, generateSubjectArt, isScenerySubject, pickArtType } from "./art";
 import { learnFromFix, learnRuleFromFeedback, learnSkillFromFeedback } from "./learn";
 import { segmentPhoto } from "./photo";
@@ -1038,8 +1039,13 @@ function handleMessage(ws: WebSocket, raw: string): void {
 }
 
 // One port: static client + WebSocket (ADR 0014). Works behind an HTTPS proxy as wss.
+// GET /api/stats is answered first: the in-app stats panel reads the build log's
+// aggregate numbers from it (ADR 0026).
 const staticHandler = createStaticHandler({ distDir: join(process.cwd(), "dist"), genArtDir: join(process.cwd(), "public", "art", "gen") });
-const httpServer = createServer(staticHandler);
+const statsHandler = createStatsHandler({ logFile: activeLogFile });
+const httpServer = createServer((req, res) => {
+  if (!statsHandler(req, res)) staticHandler(req, res);
+});
 const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "").split(",").map((o) => o.trim()).filter(Boolean);
 const maxConnPerIp = Number(process.env.MAX_CONN_PER_IP ?? 10);
 const connsByIp = new Map<string, number>();
