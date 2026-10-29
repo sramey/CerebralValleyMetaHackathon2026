@@ -42,7 +42,8 @@ function posOf(w: HudWidget): Position {
 function frac(w: HudWidget): number {
   const max = w.max ?? 100;
   if (max <= 0) return 0;
-  return Math.min(1, Math.max(0, (w.value ?? 0) / max));
+  const val = typeof w.value === "number" ? w.value : Number(w.value) || 0;
+  return Math.min(1, Math.max(0, val / max));
 }
 
 /** Bar color: an explicit color wins; the default shifts green → amber → red. */
@@ -142,7 +143,7 @@ export function createHud(host: HTMLElement) {
   function syncPips(node: HudNode, w: HudWidget): void {
     const pips = node.el.querySelector(".hud-pips") as HTMLElement | null;
     if (!pips) return;
-    const count = Math.max(1, Math.min(20, Math.ceil(w.max ?? w.value ?? 3)));
+    const count = Math.max(1, Math.min(20, Math.ceil(w.max ?? (typeof w.value === "number" ? w.value : Number(w.value) || 3))));
     while (pips.children.length < count) {
       const pip = span("hud-pip");
       const bg = span("hud-pip-bg");
@@ -175,14 +176,14 @@ export function createHud(host: HTMLElement) {
         node.sig = sig;
         if (node.icon) node.icon.textContent = w.icon ?? "";
         if (node.label) node.label.textContent = w.label ?? "";
-        if (node.num) node.num.textContent = `${fmt(w.value ?? 0)}/${fmt(w.max ?? 100)}`;
+        if (node.num) node.num.textContent = `${fmt(typeof w.value === "number" ? w.value : Number(w.value) || 0)}/${fmt(w.max ?? 100)}`;
         if (node.fill) {
           node.fill.style.width = `${Math.round(frac(w) * 100)}%`;
           node.fill.style.background = barColor(w);
         }
       }
     } else if (w.kind === "hearts") {
-      const count = Math.max(1, Math.min(20, Math.ceil(w.max ?? w.value ?? 3)));
+      const count = Math.max(1, Math.min(20, Math.ceil(w.max ?? (typeof w.value === "number" ? w.value : Number(w.value) || 3))));
       const sig = `${w.label ?? ""}|${w.icon ?? ""}|${w.value ?? ""}|${count}|${w.color ?? ""}`;
       if (sig !== node.sig) {
         node.sig = sig;
@@ -191,7 +192,8 @@ export function createHud(host: HTMLElement) {
         if (node.label) node.label.textContent = w.label ?? "";
         const color = hex(w.color, DEFAULT_COLOR.hearts);
         for (let i = 0; i < node.pipFills.length; i++) {
-          const f = Math.min(1, Math.max(0, (w.value ?? 0) - i));
+          const v = typeof w.value === "number" ? w.value : Number(w.value) || 0;
+          const f = Math.min(1, Math.max(0, v - i));
           node.pipFills[i].style.width = `${Math.round(f * 100)}%`;
           node.pipFills[i].style.color = color;
         }
@@ -203,7 +205,7 @@ export function createHud(host: HTMLElement) {
         if (node.icon) node.icon.textContent = w.icon ?? "";
         if (node.label) node.label.textContent = w.label ?? "";
         if (node.num) {
-          node.num.textContent = w.max !== undefined ? `${fmt(w.value ?? 0)}/${fmt(w.max)}` : fmt(w.value ?? 0);
+          node.num.textContent = typeof w.value === "string" ? w.value : (w.max !== undefined ? `${fmt(w.value ?? 0)}/${fmt(w.max)}` : fmt(w.value ?? 0));
           node.num.style.color = hex(w.color, DEFAULT_COLOR.stat);
         }
         if (node.unit) node.unit.textContent = w.unit ?? "";

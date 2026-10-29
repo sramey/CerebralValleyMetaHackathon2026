@@ -40,7 +40,7 @@ export function kindOf(type: string): Kind | undefined {
   return undefined;
 }
 
-function scale(color: number, f: number): number {
+export function scale(color: number, f: number): number {
   const r = Math.min(255, Math.round(((color >> 16) & 255) * f));
   const g = Math.min(255, Math.round(((color >> 8) & 255) * f));
   const b = Math.min(255, Math.round((color & 255) * f));
@@ -138,7 +138,8 @@ export function drawCliff(g: Graphics, e: Entity, x: number, y: number): void {
   const teeth = 18;
 
   // 1. Recessed background archway pillars & shadowed tunnel interior below the overhang (y + h down to ground y = 400)
-  const tunnelH = 104;
+  // The pillars end on the ground (world y 400), whatever clearance the level gives the tunnel.
+  const tunnelH = Math.max(40, 400 - (e.y + e.h));
   const pillarW = Math.min(28, Math.max(18, Math.round(w * 0.13)));
   // Deep shadowed tunnel backdrop (drawn before dynamic entities so the player walks through the archway in front of it)
   g.rect(x + 4, bottom - teeth, w - 8, tunnelH + teeth).fill({ color: 0x05070a, alpha: 0.52 });

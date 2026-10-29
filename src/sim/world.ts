@@ -1,4 +1,5 @@
 import { SIM, emptyInput } from "../contract";
+import { entityKind } from "../ontology";
 import type { Entity, HudDef, HudWidget, InputState, Particle, SpawnDef } from "../contract";
 import { createRng } from "./rng";
 
@@ -30,6 +31,8 @@ export class World {
 
   /** Create or update a HUD widget owned by `owner` (same id = in-place update). */
   setHud(owner: string, id: string, def: HudDef): void {
+    const val = (v: unknown): number | string | undefined =>
+      typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" ? v : undefined;
     const num = (v: unknown): number | undefined =>
       typeof v === "number" && Number.isFinite(v) ? v : undefined;
     const w: HudWidget = {
@@ -37,7 +40,7 @@ export class World {
       owner,
       kind: HUD_KINDS.has(def.kind) ? def.kind : "stat",
       label: typeof def.label === "string" ? def.label : undefined,
-      value: num(def.value),
+      value: val(def.value),
       max: num(def.max),
       unit: typeof def.unit === "string" ? def.unit : undefined,
       icon: typeof def.icon === "string" ? def.icon : undefined,
@@ -95,7 +98,7 @@ export class World {
       let idx = this.entities.findIndex((e) => e.owner === owner && e.type !== "player");
       if (idx === -1) {
         idx = this.entities.findIndex(
-          (e) => e.type !== "player" && e.type !== "ground" && e.type !== "platform",
+          (e) => e.type !== "player" && e.type !== "ground" && e.type !== "platform" && e.kind !== "terrain",
         );
       }
       if (idx === -1) idx = this.entities.findIndex((e) => e.type !== "player");
@@ -105,6 +108,7 @@ export class World {
     const e: Entity = {
       id: this.nextId++,
       type: def.type,
+      kind: def.kind ?? entityKind({ type: def.type, solid: def.solid ?? false, gravityScale: def.gravityScale ?? 1, vx: def.vx ?? 0, vy: def.vy ?? 0, data: def.data }),
       x: def.x, y: def.y, w: def.w, h: def.h,
       vx: def.vx ?? 0, vy: def.vy ?? 0,
       color: def.color ?? 0xffffff,
@@ -196,7 +200,18 @@ export class World {
       e.x += e.vx * dt;
       let blockedX = false;
       for (const s of solids) if (s !== e && !s.data.oneWay && overlap(e, s)) {
-        if (!e.solid && s.y === 400) continue; if (e.vx > 0) e.x = s.x - e.w;
+        const stepHeight = (e.y + e.h) - s.y;
+        if (e.onGround && e.vx !== 0 && stepHeight > 0 && stepHeight <= 28) {
+          const steppedBox = { x: e.x, y: s.y - e.h, w: e.w, h: e.h };
+          const headBlocked = solids.some((s2) => s2 !== e && s2 !== s && !s2.data.oneWay && overlap(steppedBox, s2));
+          if (!headBlocked) {
+            e.y = s.y - e.h;
+            e.onGround = true;
+            continue;
+          }
+        }
+        if (!e.solid && s.y === 400) continue;
+        if (e.vx > 0) e.x = s.x - e.w;
         else if (e.vx < 0) e.x = s.x + s.w;
         else e.x = (e.x + e.w / 2 < s.x + s.w / 2) ? s.x - e.w : s.x + s.w;
         e.vx = 0;
@@ -227,6 +242,6 @@ export class World {
   }
 }
 
-function overlap(a: Entity, b: Entity): boolean {
+function overlap(a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }): boolean {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }

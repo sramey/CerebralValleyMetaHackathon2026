@@ -6,7 +6,7 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Look } from "../src/contract";
-import { LOG_FILE } from "./createlog";
+import { activeLogFile } from "./createlog";
 import { chat, SPARK } from "./meta";
 
 export type RuleSubsystem = "router" | "wonder" | "art";
@@ -79,8 +79,9 @@ function skillsDirPath(dir?: string): string {
 
 function logLearn(rec: Record<string, unknown>): void {
   try {
-    mkdirSync(dirname(LOG_FILE), { recursive: true });
-    appendFileSync(LOG_FILE, JSON.stringify({ kind: "learn", ts: new Date().toISOString(), ...rec }) + "\n");
+    const file = activeLogFile();
+    mkdirSync(dirname(file), { recursive: true });
+    appendFileSync(file, JSON.stringify({ kind: "learn", ts: new Date().toISOString(), ...rec }) + "\n");
   } catch {
     /* logging must never break learning or builds */
   }
@@ -491,6 +492,9 @@ export async function learnFromFix(
 ): Promise<LearnedRule | null> {
   try {
     if (!errors || errors.length === 0) return null;
+    // A "too big to fit" playtest rejection means the level did its job on what the player asked for (ADR 0023). Learning "keep it small"
+    // from it would make Wonder pre-empt the verifier, shrink what the player asked for, and hide the rejection.
+    if (errors.every((e) => e.startsWith("playtest:") && /too big|fit through|headroom/i.test(e))) return null;
     const errText = errors.join("; ").slice(0, 400);
     let ruleText = "";
     try {

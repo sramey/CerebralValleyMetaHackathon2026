@@ -1,4 +1,5 @@
 // Wonder system prompt + mod-API reference. Must match src/contract.ts exactly.
+import type { EntityKind } from "../src/contract";
 import { formatLearnedBlock } from "./learn";
 // Mods: export default mod object, no imports, no markdown fences in output.
 
@@ -64,7 +65,32 @@ Rules:
 - LOCOMOTION: the engine already frees a walker that keeps pushing into a wall (it hops, then turns around), and floating platforms spawned with data: { oneWay: true } let creatures pass up through them and only land from above. Do not hand-code unstick logic. For friendly/neutral ground creatures set data.casual = true so they hop over the player instead of walking through them; never set it on hostile hunters.
 - Platformer world: x grows right, y grows DOWN. Ground is solid entities. Player type is "player".
 - ENVIRONMENTAL COORDINATES: Ground surface is y = 400 (ground slab is y = 400..480; anything with y > 400 is underground). Visible screen height is ~700-900px above the ground (y ≈ -450 at top of screen down to y = 400 at ground). High Sky (Sun, Moon, High Clouds, Weather Spawn): y = -380 to -180 (NOT y = 30, which is near the ground!). Mid Sky (Floating Platforms, Birds, Low Clouds): y = -150 to 260. Ground Surface (Player, Walkers, Trees, Houses): bottom y + h = 400 (y = 400 - h). Falling Weather (snowflake, raindrop, meteor, leaf): spawn in high sky (y = -380 to -200), set vx and vy (World.step() integrates velocity automatically), and recycle when e.onGround || e.y + e.h >= 398 (burst at y <= 400, never underground).
-- solid: true + gravityScale: 0 means static terrain (ground/platforms) that never moves. Creatures, players and projectiles that must move/fall: use solid: false (or solid: true WITH gravityScale: 1). color is a NUMBER (hex like 0x57d94d), never a CSS string.`;
+- solid: true + gravityScale: 0 means static terrain (ground/platforms/stairs/walls/blocks) that never moves. Creatures, players and projectiles that must move/fall: use solid: false (or solid: true WITH gravityScale: 1). color is a NUMBER (hex like 0x57d94d), never a CSS string.
+- STAIRCASES & LEVEL GEOMETRY: When building stairs or steps, spawn grounded static terrain steps (type: "stair" or "step", solid: true, gravityScale: 0) ahead of the player (x >= 200). Spawn contiguous ascending/descending steps with step width 24..48 and step height 16..24 (e.g. step 0 at y: 380, h: 20; step 1 at y: 360, h: 40; anchored to ground y=400). The engine automatically steps up onto steps <= 28 px high without blocking.
+- PLAYER ABILITY PATTERN (double jump, wall stick/climb, dash, glide): Standalone ability mods that enhance the player must NOT edit an NPC mod or spawn a new player. In setup(api):
+  let prevJump = false;
+  let jumpsLeft = 1;
+  let wasOnGround = true;
+  api.onTick((dt) => {
+    const p = api.player();
+    if (!p) return;
+    const input = api.input();
+    const jumpPressed = input.jump && !prevJump;
+    prevJump = input.jump;
+    if (p.onGround) {
+      jumpsLeft = 1;
+      wasOnGround = true;
+    } else {
+      if (jumpPressed && !wasOnGround && jumpsLeft > 0) {
+        jumpsLeft--;
+        p.vy = -600;
+        api.burst(p.x + p.w / 2, p.y + p.h, 0x00f0ff, 12);
+      }
+      wasOnGround = false;
+    }
+  });
+In test(t): spawn a ground and a player if not present, step 2 frames with { jump: true } to launch off the ground, step 10 frames with { jump: false } while airborne, step 1 frame with { jump: true } and assert p.vy < -200.
+- ENTITY ONTOLOGY: Every entity has a role: terrain (ground, platform, stair, step, wall, block, brick, ledge, ramp), effect (rain, snow, snowflake, fog, smoke, spark, light), projectile (bullet, shot, arrow, fireball, laser, beam), shape (coin, ball, orb, bubble, ring, spikes, star, gem), prop (tree, house, snowman, gift, chest, gun, sword, wand, shield), creature (living/moving characters, enemies, allies, pets, bosses), or player ("player"). Never spawn replacement ground entities when decorating or theming; when giving the player a held weapon/item (like a gun, sword, or wand), either spawn projectiles directly from api.player() on input.shoot or attach a small compact held item prop (w: 22, h: 12, solid: false, gravityScale: 0) at the player's hand, never a full-sized character.`;
 
 export const WONDER_SYSTEM = `You write tiny self-contained TypeScript game mods for a 2D platformer simulation.
 Output ONLY the module code: "export default { ... }" with setup/dispose (and test when useful).
@@ -75,12 +101,13 @@ export interface WorldManifestEntry {
   id: string;
   title: string;
   knobs: Record<string, unknown>;
+  entities?: { type: string; kind: EntityKind }[];
 }
 
 export function formatManifest(mods: WorldManifestEntry[]): string {
   if (mods.length === 0) return "(world is empty — no mods loaded)";
   return mods
-    .map((m) => `- ${m.id} ("${m.title}") knobs=${JSON.stringify(m.knobs)}`)
+    .map((m) => `- ${m.id} ("${m.title}")${m.entities && m.entities.length > 0 ? ` entities=[${m.entities.map((e) => `${e.type}:${e.kind}`).join(", ")}]` : ""} knobs=${JSON.stringify(m.knobs)}`)
     .join("\n");
 }
 
@@ -104,17 +131,17 @@ export function buildFixPrompt(command: string, source: string, errors: string[]
 export const ROUTER_SYSTEM = `You route a player's text command for a 2D platformer game to exactly one action.
 Reply with ONLY a single JSON object, no markdown, no prose. Schema:
 {"action":"new"|"tweak"|"edit"|"undo"|"mood"|"question","target?":string,"knob?":string,"value?":number|string|boolean,"answer?":string,"mood?":string,"visual?":"shape"|"effect"|"prop"|"creature","shape?":"circle"|"ring"|"triangle"|"spikes"|"pill"|"diamond"|"star"|"block"}
-- "new": the request adds new behavior or a new entity (needs fresh mod code).
+- "new": the request adds new behavior, a new entity, or a PLAYER ABILITY/POWER (double jump, extra jump, wall stick/climb/jump, dash, glide, ground pound) that hooks api.player(). Player abilities are ALWAYS action "new" (standalone ability mods acting on api.player()), NEVER an edit on an NPC or another creature.
 - "tweak": the request ONLY adjusts a knob value of an already-loaded mod (set target=mod id, knob, value). Use ONLY when the target mod and knob both exist in the loaded-mods list.
 - "edit": the request changes the BEHAVIOR of an already-loaded mod beyond a knob value (new mechanics, new entities it should own, rule changes — e.g. "make enemies die when I stomp them" for a loaded enemies mod). Set target=mod id. Prefer "edit" over "tweak" when the request adds or changes behavior rather than tuning a number.
 - "undo": the request removes a mod (set target=mod id).
 - For action "new" or "edit" that adds something visible, also set "visual" (what the main new thing looks like):
-  - "shape": a plain geometric or abstract object drawn in code: ball, orb, bubble, bomb, ring, spikes, block, beam, projectile, gem. Set "shape" too (circle for balls/orbs/bubbles/bombs, ring, triangle, spikes, pill for beams/capsules, diamond, star, block).
+  - "shape": a plain geometric or abstract object OR level geometry drawn in code: ball, orb, bubble, bomb, ring, spikes, block, stairs, steps, wall, platform, ledge, ramp, beam, projectile, gem, star. Set "shape" too (circle for balls/orbs/bubbles/bombs, ring, triangle, spikes, pill for beams/capsules, diamond, star, block for stairs/steps/walls/platforms/ledges/ramps/blocks).
   - "effect": weather or atmosphere or particles: rain, fog, mist, smoke, snow, explosion, sparks, lightning, fire glow.
-  - "prop": a still object that deserves pixel art: tree, house, chest, car, statue, castle, sun, cloud.
+  - "prop": a still scenery object, decoration, or held item/weapon that deserves static pixel art (never character poses): tree, house, chest, car, statue, castle, sun, cloud, snowman, gift, present, gun, sword, shield, bow, wand, key, potion.
   - "creature": a living or moving character with limbs: ninja, dragon, turtle, zombie, bird, robot.
   "A bouncing ball" is a shape, never a creature. Omit "visual" for pure rule changes and HUD/UI-only requests (counter, timer, meter, speedometer, banner) — those never need sprites.
-- "mood": the request restyles the WHOLE world's look and atmosphere with a theme or mood ("make it spooky", "make it snowy", "neon", "make everything look like a desert at sunset"). Set mood=the short mood words. One weather effect alone ("make it rain", "add fog") is NOT a mood, and neither is a change to one object: those are "new".
+- "mood": the request restyles the WHOLE world's look and atmosphere with a theme, holiday, time-of-day, or mood ("Make this Christmas themed", "make it christmas themed", "christmas theme", "make it spooky", "make it snowy", "make it daytime", "neon", "make everything look like a desert at sunset"). Set mood=the short mood words (e.g. "christmas", "spooky", "snowy", "daytime", "neon"). One weather effect alone ("make it rain", "add fog") is NOT a mood, and neither is a change to one object: those are "new".
 - "question": anything else — greeting, help, unanswerable (set answer=text to say to the player).`;
 
 /** Prompt for Spark to route a command against the loaded-mod manifest. */

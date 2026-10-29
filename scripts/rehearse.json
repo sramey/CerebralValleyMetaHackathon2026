@@ -1,10 +1,7 @@
 [
-  "add a bouncing green slime",
+  { "cmd": "add a bouncing green slime", "source": "slime" },
+  { "cmd": "add a dragon, some coins, and make it rain" },
+  { "cmd": "make it so my character can double jump", "source": "api[.]player[(]" },
   { "cmd": "make me huge", "expect": "rejected-then-fixed" },
-  "make me giant",
-  "make it rain",
-  "add trees",
-  "make it bigger",
-  "make it smaller",
-  "undo"
+  { "cmd": "make it spooky", "mood": "spooky" }
 ]
