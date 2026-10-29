@@ -27,7 +27,8 @@ export const basketballMod: ModDefinition = {
 
     const player = api.player();
     const fromX = player ? player.x : 120;
-    const restX = (player ? player.x + player.w + 40 : 220);
+    // Start the ball at the player's front foot, inside pickup reach: the first press works.
+    const restX = (player ? player.x + player.w + 6 : 220);
     const box = hoopBox(fromX + distance, GROUND_Y);
 
     const hoop = api.spawn({
@@ -52,6 +53,7 @@ export const basketballMod: ModDefinition = {
     let prevCy: number | null = null;
     let score = 0;
     let lastScoreTick = -999;
+    let returnAt = -1;
     let shownBall = "";
 
     const setScoreHud = (): void => {
@@ -61,7 +63,9 @@ export const basketballMod: ModDefinition = {
       });
     };
     const setBallHud = (): void => {
-      const v = held ? "B to shoot" : "B to pick up";
+      const p = api.player();
+      const near = p ? api.touches(p, ball) : false;
+      const v = held ? "B to shoot" : near ? "B to pick up" : "walk to the ball";
       if (v === shownBall) return;
       shownBall = v;
       api.setHud("hoop-ball", { kind: "stat", icon: "🏀", label: "Ball", value: v, position: "bottom-right" });
@@ -102,15 +106,23 @@ export const basketballMod: ModDefinition = {
       setBallHud();
     };
 
-    /** Back to the ground where it started (also the safety net when there is no ground entity). */
+    /** Back in the player's reach (or where it started): a made basket should not need a chase. */
     const resetBall = (): void => {
       held = false;
       prevCy = null;
       ball.gravityScale = 1;
-      ball.x = Number(ball.data.restX);
-      ball.y = Number(ball.data.restY);
       ball.vx = 0;
       ball.vy = 0;
+      const p = api.player();
+      if (p) {
+        ball.x = p.facing > 0 ? p.x + p.w + 6 : p.x - ball.w - 6;
+        ball.y = GROUND_Y - ball.h;
+        ball.data.restX = ball.x;
+        ball.data.restY = ball.y;
+      } else {
+        ball.x = Number(ball.data.restX);
+        ball.y = Number(ball.data.restY);
+      }
       setBallHud();
     };
 
@@ -120,6 +132,11 @@ export const basketballMod: ModDefinition = {
       const fresh = pressed && !prevPressed;
       prevPressed = pressed;
       const p = api.player();
+
+      if (returnAt >= 0 && api.tick() >= returnAt) {
+        returnAt = -1;
+        resetBall();
+      }
 
       if (held) {
         // Carried in the hands: no gravity, anchored to the player, flips with facing.
@@ -159,6 +176,7 @@ export const basketballMod: ModDefinition = {
         cx > rim.x && cx < rim.x + rim.w && api.tick() - lastScoreTick > 40) {
         lastScoreTick = api.tick();
         score += 2;
+        returnAt = api.tick() + 45;
         setScoreHud();
         api.burst(rim.x + rim.w / 2, rim.y, 0xffc94d, 16);
         api.burst(rim.x + rim.w / 2, rim.y + 8, 0xffffff, 10);
@@ -210,11 +228,14 @@ export const basketballMod: ModDefinition = {
     t.step(30);
     t.expect(t.api.hud("hoop-score")?.value === 2, "one swish scores once");
 
+    // A made basket hands the ball back to the player instead of making them chase it.
+    t.expect(t.api.hud("hoop-ball")?.value === "B to pick up", "the ball comes back after a swish");
+
     // Out of reach: pressing the key far away does not pick the ball back up.
     t.api.entities().find((e) => e.type === "player")!.x = ball.x - 400;
     t.step(1, { shoot: false });
     t.step(1, { shoot: true });
-    t.expect(t.api.hud("hoop-ball")?.value === "B to pick up", "pickup needs the ball within reach");
+    t.expect(t.api.hud("hoop-ball")?.value === "walk to the ball", "pickup needs the ball within reach");
   },
 };
 
