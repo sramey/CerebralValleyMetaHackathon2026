@@ -60,6 +60,10 @@ All code, docs and assets in this repo were created during the hackathon. Kickof
 
 Every build is logged as it happens. [docs/evidence/build-stats.md](docs/evidence/build-stats.md) aggregates that log (numbers only, no prompts): about 96% of AI builds land verified and hot-loaded, most on the first try, with a median of about 10 s from request to playable. Regenerate it with `npm run stats`.
 
+## Open weights (optional)
+
+Router: Muse Spark Open (open weights) on Baseten when `BASETEN_API_KEY` is set, otherwise hosted Muse Spark; it falls back automatically, and the orb shows which model routed each command. `npm run bench:router` compares latency (ADR 0032).
+
 ## How it works
 
 - **Engine (built-in, never generated):** 60 fps fixed-step deterministic simulation, rendering, tile collision, physics, input, camera, particles, lighting, mod loader, verifier, and the orb UI. Runs identically in the browser and headless (Node / worker) so mods can be playtested at 100x speed before they ship.
