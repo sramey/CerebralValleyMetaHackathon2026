@@ -4,7 +4,7 @@ import type { Server } from "node:http";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Budget, readLimits } from "../server/budget";
+import { Budget, DEFAULT_SESSION, readLimits } from "../server/budget";
 import { WorldStore, isWorldId, parseWorld, sanitizeValues, snapshotWorld } from "../server/worlds";
 import type { SessionMod } from "../server/worlds";
 import { createStaticHandler, resolveInside } from "../server/static";
@@ -79,7 +79,7 @@ describe("budget", () => {
     const l = readLimits({ BUDGET_SESSION_BUILDS: "3", BUDGET_GLOBAL_VOICE_MIN: "2", BUDGET_SESSION_IMAGES: "lots" });
     expect(l.session.build).toBe(3);
     expect(l.global.voice).toBe(120);
-    expect(l.session.image).toBe(8);
+    expect(l.session.image).toBe(DEFAULT_SESSION.image);
   });
 });
 

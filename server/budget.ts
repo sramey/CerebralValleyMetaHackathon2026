@@ -8,8 +8,8 @@ export type Kind = "build" | "image" | "sam" | "voice";
 export type Limits = Record<Kind, number>;
 
 /** Voice is counted in seconds of Meta session time (standby + live); the env vars are minutes. */
-export const DEFAULT_SESSION: Limits = { build: 20, image: 8, sam: 6, voice: 8 * 60 };
-export const DEFAULT_GLOBAL: Limits = { build: 400, image: 120, sam: 100, voice: 120 * 60 };
+export const DEFAULT_SESSION: Limits = { build: 20, image: 24, sam: 6, voice: 8 * 60 };
+export const DEFAULT_GLOBAL: Limits = { build: 400, image: 300, sam: 100, voice: 120 * 60 };
 
 export type Verdict =
   | { ok: true }

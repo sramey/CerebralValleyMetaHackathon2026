@@ -13,3 +13,6 @@ output/
 
 # runtime state (share-link worlds, spend counters)
 data/
+
+# mood restyles are a runtime cache (re-generated on demand)
+public/art/gen/*--*.webp
