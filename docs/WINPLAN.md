@@ -20,6 +20,8 @@ Rubric: Impact 30 · Meta tooling 25 · Depth 20 · Demo 25. Category risk: "AI 
 | 5 | "Make it spooky" world restyle | Demo | Sun if time |
 | 6 | Rehearse the 8 demo commands 20× each; fix flakiness only | Demo | Mon–Tue |
 
+**Meta everywhere (owner, 2026-10-29):** every in-game AI call is a Meta model or agent. Look for real jobs for more of the stack: Wonder as a true agent (tool calls into the verifier/playtest, sub-agents for parallel builds) targets Best Agentic; Muse Image edit-from-anchor for restyle targets Best Creative.
+
 **Cut:** endless generator, art verifier, wake word, parallel-build visuals beyond what exists.
 
 ## Viral (bonus clock runs to Nov 8)
