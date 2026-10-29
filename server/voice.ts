@@ -235,7 +235,7 @@ export interface VoiceHubOptions {
   getKey?: () => string;
   /** How long to wait for Meta's final after endStream before using the last partial. */
   finalTimeoutMs?: number;
-  /** Close an unused warm session after this long (the client re-warms on key/pointer activity). */
+  /** Close an unused warm session after this long (the client re-warms on key/pointer activity). Standby time is billed session time, so keep it short (bug ahv). */
   standbyIdleMs?: number;
 }
 
@@ -245,7 +245,7 @@ export function createVoiceHub(opts: VoiceHubOptions) {
   const url = opts.url ?? ASR_URL;
   const getKey = opts.getKey ?? apiKey;
   const finalTimeoutMs = opts.finalTimeoutMs ?? 4000;
-  const standbyIdleMs = opts.standbyIdleMs ?? 2 * 60 * 1000;
+  const standbyIdleMs = opts.standbyIdleMs ?? 20 * 1000;
   const maxStandbys = opts.maxStandbys ?? 30;
   const clients = new Map<WebSocket, ClientVoice>();
   const log = (s: string) => console.log(`[voice] ${s}`);
