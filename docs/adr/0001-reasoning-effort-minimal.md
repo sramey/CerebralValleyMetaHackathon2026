@@ -1,6 +1,6 @@
 # ADR 0001: All Meta calls use `reasoning_effort: minimal`
 
-- **Status:** Draft
+- **Status:** Accepted (owner, 2026-10-29)
 - **Date:** 2026-10-27
 
 ## Context

@@ -9,13 +9,14 @@ Replaces `docs/WORKERS.md` (kept as the spike-era record).
 
 ## Channels
 - **Talk:** the orchestrator messages `top` and `bottom` directly (SendMessage); workers message `main` back. No note files.
-- **Track:** every piece of work is a **bead**. Workspace: `C:\Users\srame\source\metabuild-ideation\.beads`; from a worktree, set `BEADS_DIR` to that path. The bead holds the goal, acceptance, worktree and ports. The owner can add beads any time; the orchestrator triages them against `docs/WINPLAN.md`.
+- **Track:** every piece of work is a **bead**. Workspace: `<workspace>\metabuild-ideation\.beads`; from a worktree, set `BEADS_DIR` to that path. The bead holds the goal, acceptance, worktree and ports. The owner can add beads any time; the orchestrator triages them against `docs/WINPLAN.md`.
 
 ## Layout
 ```
-C:\Users\srame\source\metabuild              main (orchestrator only)          server :8787  vite :5173
-C:\Users\srame\source\metabuild-wt\<task>    branch wt/<task> (one worker)     server :8790+slot  vite :5180+slot
+<workspace>\metabuild              main (orchestrator only)          server :8787  vite :5173
+<workspace>\metabuild-wt\<task>    branch wt/<task> (one worker)     server :8790+slot  vite :5180+slot
 ```
+`<workspace>` is the folder holding this repo, `metabuild-wt` (leases) and `metabuild-ideation` (beads).
 Slot 1 = `top`, slot 2 = `bottom`, slot 3 = Antigravity (headless), further slots = OpenCode (headless) or overflow; each lease gets the next free slot so ports never clash. Headless workers can't receive messages: the orchestrator writes a brief file (rules + bead), runs them in the background, and reviews their final report and branch.
 
 ## Lease lifecycle

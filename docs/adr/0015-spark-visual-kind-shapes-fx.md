@@ -1,6 +1,6 @@
 # ADR 0015: Spark visual kind, procedural shapes, engine effects
 
-- **Status:** Draft
+- **Status:** Accepted (owner, 2026-10-29)
 - **Date:** 2026-10-29
 - **Amends:** ADR 0009 (scenery vs creature keyword lists)
 

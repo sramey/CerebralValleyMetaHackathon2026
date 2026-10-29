@@ -1,4 +1,4 @@
-You are worker2 (server peer window). The orchestrator (main chat) is talking to you through this session. Work in C:\Users\srame\source\metabuild.
+You are worker2 (server peer window). The orchestrator (main chat) is talking to you through this session. Work in <workspace>\metabuild.
 
 READ FIRST: docs/WORKERS.md (your slice), docs/META-API.md, docs/DESIGN.md sections 7,8,13,14, docs/SPIKE.md, src/contract.ts (fixed — do not change it; flag the orchestrator via docs/handoffs/worker2-status.md if it must change), progress.md.
 

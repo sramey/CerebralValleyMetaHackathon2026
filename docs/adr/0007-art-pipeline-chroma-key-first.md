@@ -1,6 +1,6 @@
 # ADR 0007: Art pipeline — Image sheet, chroma-key slicing first, SAM as validator
 
-- **Status:** Draft
+- **Status:** Accepted (owner, 2026-10-29)
 - **Date:** 2026-10-27
 
 ## Context

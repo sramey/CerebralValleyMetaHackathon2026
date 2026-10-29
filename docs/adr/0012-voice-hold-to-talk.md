@@ -1,6 +1,6 @@
 # ADR 0012: Hold-to-talk voice through a server proxy with a warm Meta session
 
-- **Status:** Draft
+- **Status:** Accepted (owner, 2026-10-29)
 - **Date:** 2026-10-29
 
 ## Context

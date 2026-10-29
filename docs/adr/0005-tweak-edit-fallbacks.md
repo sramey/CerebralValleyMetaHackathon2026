@@ -1,6 +1,6 @@
 # ADR 0005: Invalid tweaks fall back to edit/new instead of failing
 
-- **Status:** Draft
+- **Status:** Accepted (owner, 2026-10-29)
 - **Date:** 2026-10-27
 
 ## Context
