@@ -27,7 +27,28 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e13; col
 #orb-form { flex: 1; display: flex; min-width: 0; margin: 0; }
 #orb-input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: #e8e4d8; font-size: 14px; padding: 6px 2px; }
 #orb-input::placeholder { color: #9aa3ad; }
-#orb-feedback { position: absolute; top: calc(100% + 6px); left: 0; right: 0; text-align: center; font-size: 12px; color: #e8e4d8; text-shadow: 0 1px 4px rgba(0,0,0,.85), 0 0 8px rgba(0,0,0,.6); transition: opacity .3s ease; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#orb-feedback {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(640px, calc(100vw - 80px));
+  max-width: 90vw;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #e8e4d8;
+  text-shadow: 0 1px 4px rgba(0,0,0,.85), 0 0 8px rgba(0,0,0,.6);
+  transition: opacity .3s ease;
+  pointer-events: auto;
+  cursor: default;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 #hint { position: absolute; left: 14px; bottom: 12px; font: 12px Consolas, monospace; color: #9aa3ad; background: rgba(5,7,10,.75); padding: 6px 9px; transition: opacity .2s ease; }
 #stage-wrap:has(#radial-menu:not([hidden])) #hint { opacity: 0.25; }
 #rail { border-left: 3px solid #ffc94d; padding: 18px; overflow-y: auto; min-height: 0; background: #10141b; }
@@ -35,7 +56,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e13; col
 h1 { margin: 0; font-size: 28px; letter-spacing: .04em; color: #ffc94d; }
 .sub { margin: 4px 0 18px; color: #b9b2a0; font-size: 13px; }
 h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #8f97a3; margin: 20px 0 8px; }
-#orb-row { display: flex; gap: 12px; align-items: center; background: #171d28; padding: 12px; border: 1px solid #2a3342; }
+#orb-row { display: flex; gap: 12px; align-items: center; background: #171d28; padding: 12px; border: 1px solid #2a3342; min-height: 98px; }
 #orb { width: 42px; height: 42px; flex: none; border-radius: 50%; background: #ffc94d; box-shadow: 0 0 0 6px rgba(255,201,77,.15); animation: pulse 1.6s ease-in-out infinite; }
 #orb[data-state="building"] { background: #39d0b0; animation-duration: .5s; }
 #orb[data-state="failed"] { background: #e2483d; animation: none; }
@@ -43,7 +64,37 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #
 @keyframes pulse { 50% { transform: scale(1.14); } }
 @media (prefers-reduced-motion: reduce) { #orb { animation: none; } }
 #orb-state { font-weight: 700; font-size: 13px; }
-#orb-say { font-size: 12px; color: #c9c2ae; margin-top: 2px; }
+#orb-say { font-size: 12px; color: #c9c2ae; margin-top: 2px; min-height: 32px; }
+
+/* Visible undo toast (item 3) */
+#toast {
+  position: absolute;
+  top: 96px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-6px);
+  z-index: 35;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: rgba(14, 20, 28, 0.94);
+  border: 1px solid rgba(126, 224, 129, 0.7);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), 0 0 16px rgba(126, 224, 129, 0.25);
+  color: #d2ffd2;
+  font: 600 14px/1.3 "Segoe UI", system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+#toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  #toast { transition: none; }
+}
 #command-form { display: flex; gap: 8px; margin-top: 14px; }
 #command { flex: 1; min-width: 0; background: #05070a; border: 1px solid #3a4454; color: #fff; padding: 10px; font-size: 14px; }
 #command-form button, #chips button { background: #ffc94d; color: #171106; border: 0; padding: 10px 12px; font-weight: 700; cursor: pointer; }
