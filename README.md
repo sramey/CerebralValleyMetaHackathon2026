@@ -38,9 +38,14 @@ Open **http://127.0.0.1:8787/** (or your configured `PORT`) in Chrome, click the
 | **Share this world (copy link)** in the side panel | Copies a link that reopens this exact world for anyone to remix |
 | Press **P** or click **PIPELINE** in the bottom-right | Live architecture pipeline view: see Spark, Wonder agent (with tools `inspect_world` / `run_playtest`), esbuild, the Verifier, and SAM 3.1 with real-time telemetry |
 | `make it spooky` (or `neon`, `snowy`) | Spark art-directs a whole-world mood: the palette, fog and lighting change in ~3 s, then Muse Image redraws every AI sprite in the new style (~20–30 s). `undo` restores it |
+| `make this christmas themed` | Theme words restyle the world (no new code): snow-frosted surfaces, icy hills, falling snow |
+| `add some stairs` | Wonder builds code-drawn stone steps; the player walks up them |
+| `give me a gun`, then press **F** | Equips a hand cannon; F (or X) fires shots that damage enemies |
+| **✏️ Draw a level** (or say "let me draw a level") | Sketch ledges, coins and enemies over the game; Wonder reads the drawing and builds it |
+| Press **P** | Pipeline view with live build numbers (landed %, first-try %, median time) |
 | Click **👍** or **👎** on any mod card or radial menu | Feedback modal lets you teach the engine rules, distill skills, or auto-fix the mod live |
 
-Move with A/D or the arrows, jump with W or Space, shoot with X. Watch the top-left HUD (health, mod counters). Fresh-clone test (2026-10-29): `npm install` ~6 s, build ~4 s, first AI build landed in ~10 s.
+Move with A/D or the arrows, jump with W or Space, shoot with X, use items with F. Watch the top-left HUD (health, mod counters). Fresh-clone test (2026-10-29): `npm install` ~6 s, build ~4 s, first AI build landed in ~10 s.
 
 **No key?** The game still runs: built-in mods and curated demo worlds (for example `http://127.0.0.1:8787/?w=demo-bouncy`) play without any AI calls. Developing instead? `npm run dev` (Vite on :5173) plus `npm run server` (:8787) in a second terminal, then `npm test`.
 

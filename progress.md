@@ -135,3 +135,4 @@ Original prompt: lets setup our project, get oriented, organized, and setup, see
 - 10-29 merged wt/lookpass2 (bottom): frosted overhang in snow moods, moon halo focal glow, readable daytime snowflakes; 60 fps.
 - 10-29 merged wt/depth3 (bottom): slab top faces, in-front foreground parallax, light-leaning shadows + rim light, per-mood ridge fog; 60 fps. Gates 210/210.
 - 10-29 merged wt/statpane (OpenCode DeepSeek): press P → pipeline overlay shows live impact numbers (landed %, first-try %, auto-fix saves, median time) from GET /api/stats (aggregates only, no prompt text). Gates 215/215.
+- 10-29 merged wt/sketch2 (OpenCode): 'let me draw a level' opens sketch, sim pauses, side palette. Judge dry run #2 (Flash, hyv.3): fresh clone, every try-this row + christmas/stairs/gun passed; README rows added. Gates 221/221.
