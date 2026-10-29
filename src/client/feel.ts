@@ -3,6 +3,16 @@
 import { Graphics } from "pixi.js";
 import type { Container } from "pixi.js";
 import type { Entity } from "../contract";
+import { isProjectileOrAttachment } from "./portal";
+
+/** Things that happened this frame, for sound (bead 6d3). Observed from the world, never fed back into it. */
+export type FeelEvent =
+  | { kind: "jump" }
+  | { kind: "land"; impact: number }
+  | { kind: "step" }
+  | { kind: "coin" }
+  | { kind: "hit"; damage: number; self: boolean }
+  | { kind: "shoot" };
 
 const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
 
@@ -46,6 +56,8 @@ interface Track {
   vy: number;
   onGround: boolean;
   health: number;
+  /** Distance walked since the last footstep (px). */
+  stride: number;
   /** Spring-driven scale (1 = rest) and its velocity. */
   sx: number;
   sy: number;
@@ -71,6 +83,7 @@ const MAX_PARTICLES = 160;
 const FLASH_TIME = 0.14;
 const REST = { sx: 1, sy: 1 };
 const TRACKED_MAX_W = 160;
+const STRIDE_PX = 46;
 
 export class Feel {
   readonly cam = new FollowCam();
@@ -81,9 +94,11 @@ export class Feel {
   private parts: Particle[] = [];
   private frame = 0;
   private g = new Graphics();
+  private shots = new Set<number>();
+  private shotsPrimed = false;
 
   /** `kick` nudges the screen shake (Fx owns the shake); impacts below the "big" threshold never call it. */
-  constructor(stage: Container, private kick: (amp: number) => void, private shakeOn = true) {
+  constructor(stage: Container, private kick: (amp: number) => void, private shakeOn = true, private emit: (e: FeelEvent) => void = () => {}) {
     this.g.zIndex = 10.5;
     stage.addChild(this.g);
   }
@@ -97,7 +112,7 @@ export class Feel {
     return t && t.flash > 0 ? 0xff8f8f : 0xffffff;
   }
 
-  private emit(p: Particle): void {
+  private spawn(p: Particle): void {
     if (this.parts.length < MAX_PARTICLES) this.parts.push(p);
   }
 
@@ -105,7 +120,7 @@ export class Feel {
     for (let i = 0; i < n; i++) {
       const dir = i % 2 ? 1 : -1;
       const k = (i + 1) / n;
-      this.emit({
+      this.spawn({
         kind: 0, x: x + dir * k * 4, y,
         vx: dir * (24 + 70 * k) * spread, vy: -(10 + 26 * (1 - k)),
         life: 0, max: 0.32 + 0.16 * k, size: 3 + 3 * (1 - k * 0.4), color: this.dustColor,
@@ -114,11 +129,11 @@ export class Feel {
   }
 
   private coinPop(x: number, y: number): void {
-    this.emit({ kind: 2, x, y, vx: 0, vy: 0, life: 0, max: 0.28, size: 22, color: 0xffe27a });
+    this.spawn({ kind: 2, x, y, vx: 0, vy: 0, life: 0, max: 0.28, size: 22, color: 0xffe27a });
     for (let i = 0; i < 9; i++) {
       const a = (i / 9) * Math.PI * 2 + 0.3;
       const sp = 70 + (i % 3) * 38;
-      this.emit({ kind: 1, x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40, life: 0, max: 0.42 + (i % 3) * 0.07, size: 3.2, color: i % 2 ? 0xfff3b0 : 0xffd54a });
+      this.spawn({ kind: 1, x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40, life: 0, max: 0.42 + (i % 3) * 0.07, size: 3.2, color: i % 2 ? 0xfff3b0 : 0xffd54a });
     }
   }
 
@@ -138,7 +153,7 @@ export class Feel {
       if (e.solid || e.gravityScale <= 0 || e.w > TRACKED_MAX_W) continue;
       let t = this.tracks.get(e.id);
       if (!t) {
-        t = { seen: f, x: e.x, y: e.y, w: e.w, h: e.h, vy: e.vy, onGround: e.onGround, health: e.health, sx: 1, sy: 1, svx: 0, svy: 0, flash: 0 };
+        t = { seen: f, x: e.x, y: e.y, w: e.w, h: e.h, vy: e.vy, onGround: e.onGround, health: e.health, stride: 0, sx: 1, sy: 1, svx: 0, svy: 0, flash: 0 };
         this.tracks.set(e.id, t);
         continue;
       }
@@ -147,18 +162,25 @@ export class Feel {
       if (t.onGround && !e.onGround && e.vy < -150) {
         // Take-off: stretch tall and thin.
         t.sx = 0.84; t.sy = 1.2;
+        if (type === "player") this.emit({ kind: "jump" });
       } else if (!t.onGround && e.onGround && t.vy > 160) {
         // Landing: squash flat, harder the faster we came down; kick up dust.
         const impact = clamp(t.vy / 900, 0, 1);
         t.sx = 1.08 + 0.26 * impact; t.sy = 0.94 - 0.28 * impact;
         this.dust(feetX, feetY, 4 + Math.round(6 * impact), 0.6 + 0.6 * impact);
+        if (type === "player") this.emit({ kind: "land", impact });
         if (impact > 0.85 && this.shakeOn) this.kick(1.8);
       } else if (t.onGround && e.onGround && e.y < t.y - 3 && e.y > t.y - 22) {
         // Stepped up onto a ledge or stair.
         this.dust(feetX, feetY, 3, 0.5);
         t.sx = 1.05; t.sy = 0.95;
       }
+      if (type === "player" && e.onGround && t.onGround && Math.abs(e.vx) > 40) {
+        t.stride += Math.abs(e.vx) * dt;
+        if (t.stride >= STRIDE_PX) { t.stride -= STRIDE_PX; this.emit({ kind: "step" }); }
+      } else t.stride = 0;
       if (e.health < t.health - 0.5) {
+        this.emit({ kind: "hit", damage: t.health - e.health, self: type === "player" });
         t.flash = FLASH_TIME;
         if (t.health - e.health >= 20 && this.shakeOn) this.kick(1.6);
       }
@@ -171,11 +193,13 @@ export class Feel {
     }
     // Coins that vanished near the player were collected: pop them.
     const player = entities.find((e) => e.type === "player");
+    this.watchShots(entities, player);
     for (const [id, c] of this.coins) {
       if (c.seen === f) continue;
       this.coins.delete(id);
       if (player && Math.abs(player.x + player.w / 2 - (c.x + c.w / 2)) < 90 && Math.abs(player.y + player.h / 2 - (c.y + c.h / 2)) < 90) {
         this.coinPop(c.x + c.w / 2, c.y + c.h / 2);
+        this.emit({ kind: "coin" });
       }
     }
     for (const [id, t] of this.tracks) if (t.seen !== f) this.tracks.delete(id);
@@ -187,6 +211,21 @@ export class Feel {
       if (p.kind === 0) { p.vx *= Math.exp(-dt * 5); p.vy *= Math.exp(-dt * 3); }
       else if (p.kind === 1) p.vy += 260 * dt;
     }
+  }
+
+  /** A projectile that first appears next to the player was fired by them. A world load (many at once) is not a volley. */
+  private watchShots(entities: readonly Entity[], player: Entity | undefined): void {
+    let fresh = 0, fired = false;
+    for (let i = 0; i < entities.length; i++) {
+      const e = entities[i];
+      if (this.shots.has(e.id)) continue;
+      this.shots.add(e.id);
+      fresh++;
+      if (player && isProjectileOrAttachment(e) && Math.abs(e.x - player.x) < 140 && Math.abs(e.y - player.y) < 140) fired = true;
+    }
+    if (this.shots.size > 4000) this.shots = new Set(entities.map((e) => e.id));
+    if (this.shotsPrimed && fresh <= 4 && fired) this.emit({ kind: "shoot" });
+    this.shotsPrimed = true;
   }
 
   /** Draw the particles and hit flashes in screen space. */
