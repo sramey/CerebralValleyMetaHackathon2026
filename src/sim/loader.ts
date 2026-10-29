@@ -1,5 +1,6 @@
 import type { KnobDefs, KnobValues, ModApi, ModDefinition, TestApi } from "../contract";
 import { emptyInput } from "../contract";
+import { checkProjectileHitAndDamage } from "./combat";
 import { World } from "./world";
 
 export interface LoadedMod { id: string; title: string; knobDefs: KnobDefs; values: KnobValues; def: ModDefinition }
@@ -29,6 +30,7 @@ export class ModLoader {
       removeHud: (id) => w.removeHud(owner, id),
       hud: (id) => w.hud.get(id),
       hudList: () => w.hudList(),
+      damageHit: (proj, opts) => checkProjectileHitAndDamage(this.apiFor(owner), proj, opts),
     };
   }
 
@@ -92,6 +94,7 @@ export function runModTest(def: ModDefinition): { ok: boolean; errors: string[] 
           removeHud: (hid) => world.removeHud(def.id, hid),
           hud: (hid) => world.hud.get(hid),
           hudList: () => world.hudList(),
+          damageHit: (proj, opts) => checkProjectileHitAndDamage(t.api, proj, opts),
         },
         step: (n, input) => {
           const prev = world.input;
