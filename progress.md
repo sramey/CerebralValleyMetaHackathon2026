@@ -150,3 +150,4 @@ Original prompt: lets setup our project, get oriented, organized, and setup, see
 - 10-29 merged wt/testkit (bottom): anonymous ?tester=N metrics, npm run testers (aggregates only), docs/USER-TEST.md facilitator script; fixed commands sent before the socket opened (coach stuck on step 2). Gates 300/300.
 - 10-29 merged wt/archdoc (top): docs/ARCHITECTURE.md (mermaid pipeline, sim/sandbox/ontology/learner/spend guard, every path verified), linked from README.
 - 10-29 merged wt/bugs3 (top): per-look silhouette outlines (no black box behind creatures, hda), ModApi.touches padded pickup reach (cxl), sketched level replaces ground + earlier sketch with undo restore (j2t). Gates 308/308.
+- 10-29 draft take (bottom, iqx.1): 8 of 9 beats filmed locally (gitignored), builds 8.8-28.9 s, make-me-huge rejected→fixed looks great on camera; punch list: voice builds from room audio (P0), camera dialog overflow, small UI shifts.
