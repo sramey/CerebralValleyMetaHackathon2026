@@ -26,7 +26,7 @@ import { createPipeline } from "./pipeline";
 import { createTheater } from "./build-theater";
 import { createHud } from "./hud";
 import { createSketch } from "./sketch";
-import { CAMERA_LABEL, CAPTURE_LABEL, UPLOAD_LABEL, dialogCssVars, dialogLayout, fitInside, photoFindMessage, photoWorkSize, stageHint, wantsCameraStream } from "./camera-dialog";
+import { CAMERA_LABEL, CAPTURE_LABEL, UPLOAD_LABEL, defaultAction, dialogCssVars, dialogLayout, fitInside, photoFindMessage, photoWorkSize, stageHint, wantsCameraStream } from "./camera-dialog";
 import type { DialogPhase } from "./camera-dialog";
 import { matchSketchIntent } from "./phrases";
 import { World } from "../sim/world";
@@ -1104,13 +1104,16 @@ function setCameraPhase(phase: DialogPhase, note?: string): void {
   cameraPreviewWrap.hidden = phase !== "preview";
   cameraPlaceholder.hidden = phase !== "idle";
   cameraPlaceholder.textContent = note ?? stageHint(phase, cameraStream !== null);
-  cameraUploadBtn.hidden = phase !== "idle";
-  cameraUploadBtn.classList.toggle("primary", phase === "idle");
+  // Upload stays reachable in every phase: a wrong photo must not cost a cancel and a re-pick.
   cameraStart.hidden = phase !== "idle" || !navigator.mediaDevices?.getUserMedia;
   cameraCapture.hidden = cameraStream === null;
-  cameraCapture.classList.toggle("primary", phase === "stream");
   cameraFind.hidden = phase !== "preview";
   cameraBg.hidden = phase !== "preview";
+  // One obvious next step per phase, highlighted (the same answer the model gives the tests).
+  const next = defaultAction(phase);
+  cameraUploadBtn.classList.toggle("primary", next === "upload");
+  cameraCapture.classList.toggle("primary", next === "capture");
+  cameraConfirm.classList.toggle("primary", next === "confirm");
   syncCameraLayout();
   syncCameraPreviewSize();
 }
@@ -1462,7 +1465,11 @@ function setPendingCapture(source: CanvasImageSource, sw: number, sh: number): v
   setCameraPhase("preview");
   redrawPreview();
   if (bgCanvas) computeDiff();
-  if (diffComponents.length === 0) setCameraStatus("Looking for it...");
+  if (diffComponents.length === 0) {
+    // With no builder connected the SAM box never arrives: say so and point at the cut that works offline.
+    const offline = ws?.readyState !== WebSocket.OPEN;
+    setCameraStatus(offline ? "The AI is offline — click your object in the photo to cut it out yourself." : "Looking for it...");
+  }
   send(photoFindMessage(currentKey, dataUrl, currentPrompt()));
 }
 function cutoutTexture(key: string, src: HTMLCanvasElement, box: SegmentBox): HTMLCanvasElement | null {

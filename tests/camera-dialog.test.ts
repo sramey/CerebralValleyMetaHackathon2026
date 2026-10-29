@@ -111,6 +111,9 @@ describe("the dialog's CSS contract", () => {
     // a message can never push the button down.
     expect(html).toMatch(/<p id="camera-status"><\/p>/);
     expect(html).toMatch(/<button id="camera-confirm" type="button" disabled>/);
+    // ...and the bring button is only highlighted when it is the next step (preview).
+    expect(css).toContain("#camera-confirm.primary");
+    expect(html).not.toMatch(/id="camera-confirm"[^>]*class="primary"/);
   });
 });
 
