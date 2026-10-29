@@ -29,6 +29,8 @@ EOF
   done)
     [[ -n "$task" ]] || { echo "usage: wt.sh done <task>"; exit 1; }
     dir="$WT/$task"
+    # Keep gitignored worker output (clips, briefs, notes): worktree removal would delete it.
+    [[ -d "$dir/output" ]] && mkdir -p "$ROOT/output/wt" && cp -r "$dir/output" "$ROOT/output/wt/$task"
     # Remove the junction first so worktree removal never touches the shared node_modules.
     [[ -e "$dir/node_modules" ]] && powershell -NoProfile -Command "(Get-Item '$(cygpath -w "$dir/node_modules")').Delete()"
     git -C "$ROOT" worktree remove --force "$dir"
