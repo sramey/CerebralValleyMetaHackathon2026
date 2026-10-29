@@ -4,11 +4,12 @@ import { Application, Graphics, Sprite, Texture } from "pixi.js";
 import { computePrimaries, framesFor, isProjectileType, loadSpriteSheet, loadSubjects } from "./sprites";
 import chickenMod from "../mods/chicken";
 import { SIM } from "../contract";
+import { canUseSpriteSheet, entityKind } from "../ontology";
 import type { ClientMsg, Entity, KnobValue, ModDefinition, MoodSpec, ServerMsg } from "../contract";
 import { initVoice } from "./voice";
 import { Fx } from "./fx";
 import { Portal } from "./portal";
-import { drawCliff, drawShape, isCliff, kindOf, registerLook, setGrade } from "./shapes";
+import { drawCliff, drawShape, isCliff, kindOf, registerLook, scale, setGrade } from "./shapes";
 import { computeDesiredCamY, drawContactShadows, drawDistantMountains, drawForegroundDepth, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
 import { drawFluffyCloud, drawParallaxEntities, isParallaxOrSkyEntity, isSkyOrBackgroundEntity } from "./parallax";
 import { ModLoader } from "../sim/loader";
@@ -244,6 +245,23 @@ function drawCoin(e: Entity, x: number, y: number): void {
   gfx.ellipse(cx - rx * 0.2, cy - r * 0.25, Math.max(1, rx * 0.35), Math.max(1, r * 0.3)).fill(SHINE);
 }
 
+function drawStair(e: Entity, x: number, y: number): void {
+  const c = e.color || 0x7a8a99;
+  gfx.rect(x, y, e.w, e.h).fill(c);
+  const lip = Math.min(6, Math.max(2, Math.floor(e.h * 0.2)));
+  gfx.rect(x, y, e.w, lip).fill(scale(c, 1.35));
+  const shadow = Math.max(2, Math.floor(lip * 0.7));
+  gfx.rect(x, y + e.h - shadow, e.w, shadow).fill(scale(c, 0.6));
+  const seamW = 24;
+  const count = Math.floor(e.w / seamW);
+  for (let k = 1; k < count; k++) {
+    const sx = x + k * seamW;
+    gfx.rect(sx, y + lip, 1.5, e.h - lip - shadow).fill({ color: scale(c, 0.5), alpha: 0.7 });
+  }
+  const snowy = mood?.ambient === "snow" || mood?.name === "christmas" || mood?.name === "snowy" || e.type.toLowerCase().includes("snow") || e.type.toLowerCase().includes("ice");
+  if (snowy) gfx.rect(x, y, e.w, Math.max(2, lip * 0.6)).fill(0xffffff);
+}
+
 function drawGround(e: Entity, x: number, y: number): void {
   drawGround25D(gfx, e, x, y, pal, app.screen.width, app.screen.height, grade);
 }
@@ -306,7 +324,7 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   const look = kindOf(t); // code-drawn shapes and engine effects never use sprites or the outline (ADR 0015)
   if (look) { if (look.kind === "shape") drawShape(gfx, e, x, y, look.shape); return; }
   if (getActivePrimaries().has(e.id)) return; // sprite pass below
-  if (t !== "player") {
+  if (t !== "player" && canUseSpriteSheet(e)) {
     for (const k of pendingArt) {
       if (t.includes(k)) { drawDigitize(e, x, y); return; }
     }
@@ -317,7 +335,7 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
     return;
   }
   if (isCliff(e)) { drawCliff(gfx, e, x, y); return; }
-  if (t.indexOf("ground") >= 0 || t.indexOf("platform") >= 0 || (e.solid && /wall|block|brick|pillar|column|ledge|step|terrain|floor|bridge/i.test(t))) { drawGround(e, x, y); return; }
+  if (t.indexOf("ground") >= 0 || t.indexOf("platform") >= 0 || /floor|bridge/i.test(t)) { drawGround(e, x, y); return; }
   // dark outline behind every code-drawn entity
   gfx.rect(x - 1.5, y - 1.5, e.w + 3, e.h + 3).fill(OUTLINE);
   if (t === "player") {
@@ -325,7 +343,8 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
     return;
   }
   if (t.indexOf("coin") >= 0) { drawCoin(e, x, y); return; }
-  if (isProjectileType(t) || t.indexOf("arrow") >= 0 || t.indexOf("fire") >= 0) { drawShot(e, x, y); return; }
+  if (t.indexOf("stair") >= 0 || t.indexOf("step") >= 0 || t.indexOf("wall") >= 0 || t.indexOf("block") >= 0 || t.indexOf("brick") >= 0 || t.indexOf("pillar") >= 0 || t.indexOf("ledge") >= 0 || t.indexOf("ramp") >= 0 || entityKind(e) === "terrain") { drawStair(e, x, y); return; }
+  if (isProjectileType(t) || entityKind(e) === "projectile" || t.indexOf("arrow") >= 0 || t.indexOf("fire") >= 0) { drawShot(e, x, y); return; }
   if (t.indexOf("slime") >= 0 || t.indexOf("gel") >= 0 || t.indexOf("enemy") >= 0 ||
     t.indexOf("walker") >= 0 || t.indexOf("turtle") >= 0) { drawBlob(e, x, y); return; }
   gfx.rect(x, y, e.w, e.h).fill(e.color);
@@ -689,8 +708,8 @@ function render(): void {
     const moving = Math.abs(e.vx) > 5;
     const subjectKey = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0];
     const frame = frames.length === 1 ? frames[0]
-      : subjectKey !== undefined && scenerySubjects.has(subjectKey) ? frames[e.id % frames.length]
-      : !e.onGround && e.gravityScale === 0 && frames.length >= 2 ? frames[Math.floor(world.tickCount / 5) % frames.length]
+      : (subjectKey !== undefined && scenerySubjects.has(subjectKey)) || entityKind(e) === "prop" ? frames[e.id % frames.length]
+      : !e.solid && !e.onGround && e.gravityScale === 0 && frames.length >= 2 ? frames[Math.floor(world.tickCount / 5) % frames.length]
       : frames.length >= 4 && !e.onGround ? frames[3]
       : moving ? frames[1 + Math.floor(world.tickCount / 8) % Math.min(2, frames.length - 1)]
       : frames[0];
@@ -710,7 +729,7 @@ function render(): void {
   for (const [id, s] of spritePool) if (!seen.has(id)) { s.visible = false; scaleOverride.delete(id); }
   const nowMs = performance.now();
   fx.render(world, camX, camYSmooth, W, H, (nowMs - lastRenderAt) / 1000, isEffectType);
-  portal.render(world, camX, camYSmooth, (nowMs - lastRenderAt) / 1000, isEffectType);
+  portal.render(world, camX, camYSmooth, (nowMs - lastRenderAt) / 1000, (t) => isEffectType(t) || !canUseSpriteSheet(t));
   lastRenderAt = nowMs;
   app.stage.position.set(fx.shakeX, fx.shakeY);
   // health bars: single pass after rect and sprite passes (player included)
@@ -837,11 +856,18 @@ function renderMods(): void {
 }
 
 // --- commands -------------------------------------------------------------------
+function sendWorldState(): void {
+  if (ws?.readyState === WebSocket.OPEN) {
+    send({ kind: "worldState", mods: loader.list().map((m) => ({ id: m.id, values: m.values })) });
+  }
+}
+
 function loadLocal(def: ModDefinition): void {
   loader.load(def);
   say(`${def.title} materialized.`, "done");
   log(`loaded ${def.id}`);
   renderMods();
+  sendWorldState();
 }
 let starterAutoLoaded = false;
 function autoLoadStarterOnce(): void {
@@ -851,6 +877,7 @@ function autoLoadStarterOnce(): void {
     loadLocal(playerMod);
     loadLocal(groundMod);
   }
+  sendWorldState();
 }
 function handleLocal(text: string): boolean {
   const t = text.toLowerCase();
@@ -1590,7 +1617,7 @@ const voice = initVoice({
 function connect(): void {
   try { ws = new WebSocket(WS_URL); }
   catch { serverStatus.textContent = "Server: offline (local mods still work)"; return; }
-  ws.addEventListener("open", () => { serverStatus.textContent = `Server: connected on ${WS_URL}`; voice.onOpen();
+  ws.addEventListener("open", () => { serverStatus.textContent = `Server: connected on ${WS_URL}`; voice.onOpen(); sendWorldState();
     if (worldParam && !worldRequested) {
       worldRequested = true;
       send({ kind: "worldLoad", id: worldParam });

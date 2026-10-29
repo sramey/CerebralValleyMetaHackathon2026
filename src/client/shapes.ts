@@ -40,7 +40,7 @@ export function kindOf(type: string): Kind | undefined {
   return undefined;
 }
 
-function scale(color: number, f: number): number {
+export function scale(color: number, f: number): number {
   const r = Math.min(255, Math.round(((color >> 16) & 255) * f));
   const g = Math.min(255, Math.round(((color >> 8) & 255) * f));
   const b = Math.min(255, Math.round((color & 255) * f));
