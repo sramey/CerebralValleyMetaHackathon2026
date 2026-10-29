@@ -178,7 +178,9 @@ export type ClientMsg =
   | { kind: "worldSave"; mods: { id: string; values: KnobValues }[] }
   | { kind: "worldLoad"; id: string }
   // Mood restyle (ADR 0017): the client lists the sprite sheets it has; the server edits each toward the mood anchor.
-  | { kind: "restyle"; mood: string; keys: string[] };
+  | { kind: "restyle"; mood: string; keys: string[] }
+  // Self-improving feedback (ADR 0020): thumbs-up/down on entities or mod cards distills persistent rules & skills.
+  | { kind: "feedback"; modId: string; entityType?: string; vote: "up" | "down"; note: string; fixNow?: boolean };
 
 /** One mod in a saved world: a built-in the client bundles, or a verified AI mod with its source. */
 export type WorldMod =

@@ -1,0 +1,33 @@
+[
+  {
+    "id": "seed-router-shapes",
+    "subsystem": "router",
+    "rule": "Simple geometric objects (ball, orb, bubble, ring, spike, block, gem) must route with visual:\"shape\", never \"creature\" or sprite art.",
+    "source": "seed",
+    "createdAt": "2026-10-29T00:00:00.000Z"
+  },
+  {
+    "id": "seed-wonder-ground-clearance",
+    "subsystem": "wonder",
+    "rule": "Dynamic ground entities must spawn at y = 400 - h with solid: false and gravityScale: 1 so they never trap or block the player.",
+    "source": "seed",
+    "createdAt": "2026-10-29T00:00:00.000Z"
+  },
+  {
+    "id": "seed-art-magenta-isolation",
+    "subsystem": "art",
+    "rule": "Sprite sheets must keep a flat solid #FF00FF magenta background with wide gaps between poses and no ground lines or text.",
+    "source": "seed",
+    "createdAt": "2026-10-29T00:00:00.000Z"
+  },
+  {
+    "id": "rule-1793293716769-i1cl",
+    "subsystem": "wonder",
+    "rule": "Weather rain drops must fall with wind-driven slant/angle and spawn a small splash burst effect on ground impact.",
+    "source": "feedback",
+    "modId": "rain",
+    "note": "raindrops should slant slightly with the wind and splash with a small burst on ground impact",
+    "clearArt": false,
+    "createdAt": "2026-10-29T17:08:36.769Z"
+  }
+]

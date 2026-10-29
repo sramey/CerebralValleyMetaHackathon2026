@@ -1,4 +1,5 @@
 import { createBuilds } from "./builds";
+import { initFeedback } from "./feedback";
 import { Application, Graphics, Sprite, Texture } from "pixi.js";
 import { framesFor, loadSpriteSheet, loadSubjects } from "./sprites";
 import chickenMod from "../mods/chicken";
@@ -60,6 +61,12 @@ function say(text: string, state = "idle"): void {
   orbFeedback.textContent = text;
 }
 const builds = createBuilds(orbSay.parentElement ?? document.body, () => {});
+const feedback = initFeedback({
+  send: (msg) => send(msg),
+  sendWorldState: () => send({ kind: "worldState", mods: loader.list().map((m) => ({ id: m.id, values: m.values })) }),
+  say,
+  log,
+});
 /** While other builds are in flight the orb keeps saying "building"; returns true if it did. */
 function sayWhileBuilding(): boolean {
   if (builds.active() === 0) return false;
@@ -540,6 +547,10 @@ document.querySelectorAll<HTMLButtonElement>("#radial-menu [data-action]").forEa
       world.despawn(e.id);
       layerOverride.delete(e.id);
       closeRadialMenu();
+    } else if (action === "thumbs-up" || action === "thumbs-down") {
+      const modTitle = loader.list().find((m) => m.id === e.owner)?.title ?? formatRadialLabel(e.type);
+      feedback.open({ modId: e.owner, title: modTitle, entityType: e.type, vote: action === "thumbs-up" ? "up" : "down" });
+      closeRadialMenu();
     }
   });
 });
@@ -679,7 +690,7 @@ requestAnimationFrame(frame);
 // --- input -------------------------------------------------------------------
 const keys = new Set<string>();
 addEventListener("keydown", (e) => {
-  if (e.target === inputEl || e.target === orbInputEl) return;
+  if (e.target === inputEl || e.target === orbInputEl || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
   keys.add(e.code);
   syncInput();
   if (["ArrowUp", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
@@ -731,7 +742,7 @@ function renderMods(): void {
       say(`${mod.title} removed.`, "done");
       renderMods();
     });
-    head.append(name, undo);
+    head.append(name, feedback.createModActions(mod, () => undo.click()));
     li.appendChild(head);
     for (const [knob, def] of Object.entries(mod.knobDefs)) {
       if (typeof def.value !== "number") continue;
