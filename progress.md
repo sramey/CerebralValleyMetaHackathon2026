@@ -138,3 +138,4 @@ Original prompt: lets setup our project, get oriented, organized, and setup, see
 - 10-29 merged wt/sketch2 (OpenCode): 'let me draw a level' opens sketch, sim pauses, side palette. Judge dry run #2 (Flash, hyv.3): fresh clone, every try-this row + christmas/stairs/gun passed; README rows added. Gates 221/221.
 - 10-29 merged wt/beats (top): demo set 3x each all pass (slime p50 10.9 s; dragon/coins/rain splits into 3 parallel lanes; double jump p50 14.7 s; make me huge rejected→fixed 3/3 p50 22.6 s; spooky palette <1.2 s). Compound commands now send an end marker.
 - 10-29 merged wt/starter (bottom): starter world recomposed: three fogged scenery bands (castle, trees, lamp posts, focal tree), stacked ledges; make me huge still 2/2; 61 fps.
+- 10-29 merged wt/look4 (bottom): scenery takes each mood (snow caps, bare spooky trees, neon rims), night castle rim-lit with windows; 61 fps.
