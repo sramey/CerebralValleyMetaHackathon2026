@@ -55,7 +55,7 @@ export function loadEnv(): string {
 export function apiKey(): string { return loadEnv(); }
 export function hasApiKey(): boolean { return loadEnv().length > 0; }
 
-export async function chat(model: string, messages: ChatMessage[], maxTokens = 1024, reasoningEffort = "minimal"): Promise<ChatResult> {
+export async function chat(model: string, messages: ChatMessage[], maxTokens = 1024, reasoningEffort = "minimal", signal?: AbortSignal): Promise<ChatResult> {
   const key = loadEnv();
   if (!key) throw new Error("MODEL_API_KEY is not set (add it to .env)");
   const t0 = performance.now();
@@ -65,6 +65,9 @@ export async function chat(model: string, messages: ChatMessage[], maxTokens = 1
     // Default reasoning effort burns the whole token budget on mod prompts
     // (empty content, finish=length). minimal answers in seconds.
     body: JSON.stringify({ model, messages, max_tokens: Math.max(512, maxTokens), reasoning_effort: reasoningEffort }),
+    // Optional abort signal: the kid-safe screen (ADR 0044) puts a hard ceiling on its
+    // classifier request so a hung connection cannot linger past the screen.
+    ...(signal ? { signal } : {}),
   });
   const ms = Math.round(performance.now() - t0);
   if (!res.ok) {
