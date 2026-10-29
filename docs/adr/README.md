@@ -62,3 +62,6 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0028](0028-sketch-mode-phrases-pause-side-palette.md) | Sketch mode: local phrases, frozen sim, side palette | Draft |
 | [0032](0032-open-weights-router-on-baseten.md) | Open-weights router: Muse Spark Open on Baseten with hosted fallback | Draft |
 | [0033](0033-visible-agent-loop-and-autonomy-stats.md) | Visible agent tool loop + autonomy stats | Draft |
+| [0029](0029-overlay-layout-z-order-pipeline-sketch-hud.md) | — Overlay layout, z-order, and responsive scaling across sketch, pipeline, and HUD | Draft |
+| [0030](0030-sketch-idle-guard-live-stats-refresh.md) | — Sketch mode lets go after 3 minutes idle, and the impact tiles move when a build lands | Draft |
+| [0031](0031-art-decisions-derive-from-ontology.md) | Art decisions derive from the entity ontology | Draft |
