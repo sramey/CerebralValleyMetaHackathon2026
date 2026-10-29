@@ -10,6 +10,7 @@ import { Fx } from "./fx";
 import { Portal } from "./portal";
 import { drawCliff, drawShape, isCliff, kindOf, registerLook, setGrade } from "./shapes";
 import { drawContactShadows, drawDistantMountains, drawForegroundDepth, drawGround25D, drawHorizonMist } from "./depth";
+import { drawParallaxEntities, isParallaxOrSkyEntity } from "./parallax";
 import { ModLoader } from "../sim/loader";
 import { createGhost } from "./ghost";
 import { createPipeline } from "./pipeline";
@@ -23,11 +24,12 @@ import rainMod from "../mods/rain";
 import coinsMod from "../mods/coins";
 import movingPlatformMod from "../mods/platform-moving";
 import fireArrowMod from "../mods/fire-arrow";
+import parallaxMod from "../mods/parallax";
 
 const BUILTINS: Record<string, ModDefinition> = {
   player: playerMod, ground: groundMod, enemies: enemyMod, rain: rainMod,
   coins: coinsMod, "moving-platform": movingPlatformMod, "fire-arrow": fireArrowMod,
-  chicken: chickenMod,
+  chicken: chickenMod, parallax: parallaxMod,
 };
 
 const world = new World(1337);
@@ -283,6 +285,7 @@ function drawHealthBar(e: Entity, x: number, y: number): void {
 }
 
 function drawEntityRaw(e: Entity, camX: number, camY: number): void {
+  if (isParallaxOrSkyEntity(e)) return;
   const x = e.x - camX;
   const y = e.y - camY;
   const W = app.screen.width;
@@ -579,11 +582,12 @@ function render(): void {
   gfx.circle(W - 70, 60, 24).fill({ color: pal.moon, alpha: 0.15 });
   gfx.circle(W - 70, 60, 17).fill(pal.moon);
   gfx.circle(W - 76, 54, 14).fill(SKY[1]);
-  // far hill silhouettes + atmospheric horizon mist (bead 1z7)
+  // far hill silhouettes + parallax layers + atmospheric horizon mist (bead 1z7 & rm1)
   const horizon = H * 0.62 - camYSmooth * 0.1;
   drawDistantMountains(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
   drawRidge(ridgeFar, camX, 0.3, horizon, 0, pal.ridgeFar);
   drawRidge(ridgeNear, camX, 0.55, horizon + 34, 1, pal.ridgeNear);
+  drawParallaxEntities(gfx, world.entities, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1], grade);
   drawHorizonMist(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
   // solids-first, then contact shadows on solid surfaces, then dynamic entities
   order.length = 0;
@@ -609,6 +613,7 @@ function render(): void {
   {
     const groups = new Map<string, { maxArea: number; items: { id: number; area: number }[] }>();
     for (const e of world.entities) {
+      if (isParallaxOrSkyEntity(e)) continue;
       const frames = framesFor(framesBySubject, e.type, e.type === "player");
       if (frames.length < 1 || kindOf(e.type)) continue;
       const subject = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0] ?? e.type;
@@ -627,6 +632,7 @@ function render(): void {
   }
   const spriteDraw: { e: Entity; frame: Texture; subjectKey: string | undefined }[] = [];
   for (const e of world.entities) {
+    if (isParallaxOrSkyEntity(e)) continue;
     const frames = framesFor(framesBySubject, e.type, e.type === "player");
     if (frames.length < 1 || !primaries.has(e.id) || kindOf(e.type) || (morph.size > 0 && isMorphing(e))) continue;
     seen.add(e.id);
@@ -808,6 +814,7 @@ function handleLocal(text: string): boolean {
   if (n === "coin" || n === "coins") { loadLocal(coinsMod); return true; }
   if (n === "moving platform") { loadLocal(movingPlatformMod); return true; }
   if (n === "fire arrow" || n === "fire arrows" || n === "arrow" || n === "arrows" || n === "shoot fire arrows") { loadLocal(fireArrowMod); return true; }
+  if (n === "parallax" || n === "parallax background" || n === "parallax forest" || n === "parallax vista") { loadLocal(parallaxMod); return true; }
   if (n === "chicken") { loadLocal(chickenMod); return true; }
   if (t.includes("jump higher")) { tweak("player", "jump", 880, "Jump raised."); return true; }
   if (t.includes("faster")) {

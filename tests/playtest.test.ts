@@ -108,7 +108,7 @@ describe("playtest", () => {
   });
 
   it("lets a normal player, the bot and every built-in mod get past the overhang", async () => {
-    for (const f of ["enemy.ts", "coins.ts", "rain.ts", "fire-arrow.ts", "platform-moving.ts", "chicken.ts"]) {
+    for (const f of ["enemy.ts", "coins.ts", "rain.ts", "fire-arrow.ts", "platform-moving.ts", "chicken.ts", "parallax.ts"]) {
       const r = await playtestMod(starter, await candidate(builtin(f)));
       expect(r.ok, `${f}: ${r.detail}`).toBe(true);
     }
