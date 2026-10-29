@@ -6,7 +6,16 @@ import { fileURLToPath } from "node:url";
 export const SPARK = "muse-spark-1.2";
 export const WONDER = "muse-wonder-1.0";
 
-export interface ChatMessage { role: "system" | "user" | "assistant"; content: string }
+/** One part of a multimodal user message (OpenAI-compatible content array, ADR 0026). */
+export type MessagePart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
+export interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  /** Plain text, or text + images. muse-wonder-1.0 / muse-spark-1.2 accept both. */
+  content: string | MessagePart[];
+}
 export interface ChatResult { text: string; ms: number }
 
 let loaded = false;
