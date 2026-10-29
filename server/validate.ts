@@ -283,6 +283,16 @@ export function validateClientMsg(value: unknown): Validation {
         ...(view === undefined ? {} : { view }),
       });
     }
+    case "paperLevel": {
+      const image = dataImage(value.image);
+      const prompt = value.prompt === undefined ? undefined : typeof value.prompt === "string" && value.prompt.length <= MAX_PROMPT ? value.prompt : null;
+      if (!image || prompt === null) return reject(REPLY.photo);
+      return accept({
+        kind: "paperLevel",
+        image,
+        ...(prompt === undefined ? {} : { prompt }),
+      });
+    }
     case "tester": {
       const evs = ["open", "typed", "voice", "landed", "rejected", "failed", "mood", "close"] as const;
       const n = value.n;

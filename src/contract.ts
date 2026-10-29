@@ -221,6 +221,8 @@ export type ClientMsg =
   | { kind: "worldExport"; mods: { id: string; values: KnobValues }[] }
   // Mood restyle (ADR 0017): the client lists the sprite sheets it has; the server edits each toward the mood anchor.
   | { kind: "restyle"; mood: string; keys: string[] }
+  // Paper-to-level (ADR 0040)
+  | { kind: "paperLevel"; image: string; prompt?: string }
   // Self-improving feedback (ADR 0020): thumbs-up/down on entities or mod cards distills persistent rules & skills.
   | { kind: "feedback"; modId: string; entityType?: string; vote: "up" | "down"; note: string; fixNow?: boolean }
   /** Draw-to-build (ADR 0026): a hand-drawn level sketch. `image` is a PNG data URL of

@@ -25,7 +25,7 @@ const BBOX = { x: 10, y: 20, w: 120, h: 16 };
 const KNOWN_KINDS = new Set([
   "command", "undo", "knob", "photo", "photoFind", "photoBring", "photoBringLocal",
   "worldState", "voiceWarm", "voiceStart", "voiceEnd", "worldSave", "worldLoad", "worldExport",
-  "restyle", "feedback", "sketch", "tester", "timelineRestore",
+  "restyle", "feedback", "sketch", "tester", "timelineRestore", "paperLevel",
 ]);
 
 const STROKE = { color: "#3fd06a", tag: "terrain" as const, points: [{ x: 1, y: 2 }, { x: 3, y: 4 }], bbox: BBOX };
@@ -51,6 +51,7 @@ const VALID: { [K in ClientMsg["kind"]]: Extract<ClientMsg, { kind: K }> } = {
   tester: { kind: "tester", n: 2, ev: "landed", cid: 3 },
   timelineRestore: { kind: "timelineRestore", n: 4 },
   sketch: { kind: "sketch", image: PNG, strokes: [STROKE], prompt: "a stair", view: { x: 0, y: 0, w: 800, h: 600 } },
+  paperLevel: { kind: "paperLevel", image: PNG, prompt: "a castle drawing" },
 };
 
 /** Every valid sample as a raw frame, for gateMessage. */
