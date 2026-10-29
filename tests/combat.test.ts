@@ -1,3 +1,4 @@
+import { touches } from "../src/sim/reach";
 import { describe, expect, it } from "vitest";
 import { World } from "../src/sim/world";
 import { ModLoader, runModTest } from "../src/sim/loader";
@@ -97,6 +98,7 @@ describe("reusable enemy-damage pattern & combat (ADR 0023)", () => {
         damage: (id, amt) => world.damage(id, amt),
         entities: () => world.entities,
         byType: (t) => world.entities.filter((e) => e.type === t),
+        touches: (a, b) => touches(a, b),
         player: () => world.entities.find((e) => e.type === "player"),
         input: () => world.input,
         onTick: (fn) => world.addHandler("weaponMod", fn),
@@ -140,6 +142,7 @@ describe("reusable enemy-damage pattern & combat (ADR 0023)", () => {
         damage: (id, amt) => world.damage(id, amt),
         entities: () => world.entities,
         byType: (t) => world.entities.filter((e) => e.type === t),
+        touches: (a, b) => touches(a, b),
         player: () => world.entities.find((e) => e.type === "player"),
         input: () => world.input,
         onTick: (fn) => world.addHandler("weapon", fn),

@@ -22,6 +22,7 @@ ModApi (everything a mod may call — nothing else exists):
   despawn(id: number): void
   entities(): readonly Entity[] — read-only view; mutate fields, never the array
   byType(type: string): Entity[]
+  touches(collector: Entity, item: Entity): boolean — pickup overlap that matches what the player sees (padded reach, up to the drawn head). Collect coins, gems and powerups with this, not a raw box test.
   player(): Entity | undefined — the entity with type "player"
   input(): Readonly<InputState> — { left, right, jump, shoot }
   onTick(fn: (dt: number) => void): void — called every 1/60s frame

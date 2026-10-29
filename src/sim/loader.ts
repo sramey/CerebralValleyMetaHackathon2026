@@ -1,6 +1,7 @@
 import type { KnobDefs, KnobValues, ModApi, ModDefinition, TestApi } from "../contract";
 import { emptyInput } from "../contract";
 import { checkProjectileHitAndDamage } from "./combat";
+import { touches } from "./reach";
 import { World } from "./world";
 
 export interface LoadedMod { id: string; title: string; knobDefs: KnobDefs; values: KnobValues; def: ModDefinition }
@@ -20,6 +21,7 @@ export class ModLoader {
       damage: (id, amt) => w.damage(id, amt),
       entities: () => w.entities,
       byType: (type) => w.entities.filter((e) => e.type === type),
+      touches: (a, b) => touches(a, b),
       player: () => w.entities.find((e) => e.type === "player"),
       input: () => w.input,
       onTick: (fn) => w.addHandler(owner, fn),
@@ -84,6 +86,7 @@ export function runModTest(def: ModDefinition): { ok: boolean; errors: string[] 
           damage: (id, amt) => world.damage(id, amt),
           entities: () => world.entities,
           byType: (type) => world.entities.filter((e) => e.type === type),
+          touches: (a, b) => touches(a, b),
           player: () => world.entities.find((e) => e.type === "player"),
           input: () => world.input,
           onTick: (fn) => world.addHandler(def.id, fn),
