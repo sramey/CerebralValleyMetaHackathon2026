@@ -24,7 +24,12 @@ export const fireArrowMod: ModDefinition = {
         if (Number(a.data.age) % 2 === 0) {
           api.burst(a.x + a.w / 2, a.y + a.h / 2, 0xffa030, 1);
         }
-        let hit = Number(a.data.age) > 0 && a.vx === 0;
+        let hit = false;
+        if (api.damageHit) {
+          hit = Boolean(api.damageHit(a, { damage: 60, burstColor: 0xff6a00, burstCount: 12 }));
+        }
+        if (hit) continue;
+        hit = Number(a.data.age) > 0 && a.vx === 0;
         if (!hit) {
           for (const s of api.entities()) {
             if (s.solid && overlap(a, s)) { hit = true; break; }
@@ -39,7 +44,7 @@ export const fireArrowMod: ModDefinition = {
       }
       const player = api.player();
       if (!player) return;
-      if (!api.input().shoot) return;
+      if (!api.input().shoot && !api.input().use) return;
       if (api.tick() - lastShot < cooldown) return;
       lastShot = api.tick();
       const dir = player.facing;
@@ -49,7 +54,7 @@ export const fireArrowMod: ModDefinition = {
         y: player.y + player.h / 2 - 3,
         w: 12, h: 6, vx: dir * speed, vy: 0,
         color: 0xff6a00, gravityScale: 0,
-        data: { age: 0 },
+        data: { age: 0, fromPlayer: true },
       });
     });
   },
