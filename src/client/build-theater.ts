@@ -89,7 +89,23 @@ export function createTheater(host: HTMLElement, sink: (v: TheaterView) => void,
   const tail = document.createElement("div");
   tail.className = "bt-line bt-tail";
 
-  head.append(label, status, stepsEl);
+  const minBtn = document.createElement("button");
+  minBtn.type = "button";
+  minBtn.className = "bt-min-btn";
+  minBtn.title = "Minimize / Expand code stream (or press Esc)";
+  minBtn.textContent = "−";
+  minBtn.setAttribute("aria-label", "Minimize code stream");
+  minBtn.addEventListener("click", () => {
+    const isMin = card.classList.toggle("minimized");
+    minBtn.textContent = isMin ? "+" : "−";
+  });
+  window.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && stream.classList.contains("on") && !card.classList.contains("minimized")) {
+      card.classList.add("minimized");
+      minBtn.textContent = "+";
+    }
+  });
+  head.append(label, status, stepsEl, minBtn);
   card.append(head, code);
   stream.append(card);
   host.appendChild(stream);

@@ -1,12 +1,15 @@
 /* Build theater (ADR 0022): translucent code stream + live agent steps + stage stepper. */
+/* Positioned in top-right sky quadrant so it never covers player/ground at y=400 (bead 0g9) */
 .bt-stream {
-  position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 23; pointer-events: none; opacity: 0; transition: opacity .35s ease;
-  display: flex; flex-direction: column; justify-content: flex-end; padding: 0 clamp(16px, 3.5vw, 54px) 52px;
+  position: absolute; right: 16px; top: 68px; z-index: 23; pointer-events: none; opacity: 0; transition: opacity .35s ease;
+  display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-end;
 }
 .bt-stream.on { opacity: 1; }
 
 .bt-card {
-  max-width: min(720px, calc(100% - 60px));
+  width: min(420px, calc(100vw - 32px));
+  max-width: 420px;
+  pointer-events: auto;
   background: linear-gradient(180deg, rgba(11, 16, 25, 0.9) 0%, rgba(7, 10, 16, 0.84) 100%);
   border: 1px solid rgba(84, 224, 255, 0.35);
   border-radius: 12px;
@@ -71,7 +74,7 @@
   color: rgba(225, 242, 255, 0.92);
   white-space: pre;
   overflow: hidden;
-  max-height: clamp(160px, 24vh, 260px);
+  max-height: clamp(100px, 16vh, 160px);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
   -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 12%, #000 100%);
   mask-image: linear-gradient(180deg, transparent 0%, #000 12%, #000 100%);
@@ -104,3 +107,13 @@
 .bt-spark { position: absolute; z-index: 26; width: 5px; height: 5px; border-radius: 50%; background: #ffd35c; box-shadow: 0 0 8px #ffd35c; pointer-events: none; animation: bt-fly .65s ease-out forwards; }
 @keyframes bt-fly { to { transform: translate(var(--dx), var(--dy)) scale(.2); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .bt-pip.now i, .bt-pip.pop i, .bt-tail::after, .bt-spark { animation: none; } }
+
+/* Minimize toggle for building stream (bead 0g9) */
+.bt-card.minimized .bt-code { display: none; }
+.bt-card.minimized { width: auto; max-width: 320px; padding: 6px 10px; }
+.bt-min-btn {
+  background: transparent; border: 1px solid rgba(255, 255, 255, 0.15); color: rgba(215, 246, 255, 0.8);
+  font: 700 12px/1 monospace; padding: 2px 6px; cursor: pointer; border-radius: 4px; margin-left: 6px;
+  transition: background .2s, color .2s, border-color .2s;
+}
+.bt-min-btn:hover { background: rgba(255, 255, 255, 0.2); color: #fff; border-color: rgba(255, 255, 255, 0.4); }
