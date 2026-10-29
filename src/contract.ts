@@ -136,6 +136,8 @@ export interface ModApi {
   /** All live entities (read-only view; mutate fields, never the array). */
   entities(): readonly Entity[];
   byType(type: string): Entity[];
+  /** Pickup overlap: true when `item` is within the collector's reach (its box padded, and for the player up to its drawn head). Use this for collecting coins, gems and powerups instead of a raw box test. */
+  touches(collector: Entity, item: Entity): boolean;
   player(): Entity | undefined;
   input(): Readonly<InputState>;
   onTick(fn: (dt: number) => void): void;

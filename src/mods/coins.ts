@@ -1,12 +1,5 @@
 import type { ModDefinition } from "../contract";
 
-function overlap(
-  a: { x: number; y: number; w: number; h: number },
-  b: { x: number; y: number; w: number; h: number },
-): boolean {
-  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
-}
-
 export const coinsMod: ModDefinition = {
   id: "coins",
   title: "Coins + score",
@@ -29,7 +22,7 @@ export const coinsMod: ModDefinition = {
       if (!player) return;
       if (typeof player.data.score !== "number") player.data.score = 0;
       for (const c of api.byType("coin")) {
-        if (overlap(player, c)) {
+        if (api.touches(player, c)) {
           api.burst(c.x + c.w / 2, c.y + c.h / 2, 0xffd94d, 12);
           api.despawn(c.id);
           player.data.score = Number(player.data.score) + 1;

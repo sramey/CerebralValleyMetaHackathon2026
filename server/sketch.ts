@@ -172,6 +172,11 @@ export function isEmptyLevel(level: SketchLevel): boolean {
   return level.platforms.length === 0 && level.coins.length === 0 && level.enemies.length === 0;
 }
 
+/** True when the drawn level has no wide platform at ground height, so the level mod must lay the floor itself (it replaces the starter ground, bug j2t). */
+export function needsFloor(level: SketchLevel): boolean {
+  return !level.platforms.some((p) => (p.kind === "ledge" || p.kind === "wall") && p.w >= 600 && p.y >= 380 && p.y <= 420);
+}
+
 /** Stable id per level geometry: drawing the same map twice replaces it instead of stacking. */
 export function modIdFor(level: SketchLevel): string {
   const slug = level.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 20) || "level";
@@ -219,6 +224,10 @@ export function levelToModSource(level: SketchLevel): string {
   lines.push(`    bounce: { value: 780, min: 300, max: 1500, label: "Bounce pad power" },`);
   lines.push(`  },`);
   lines.push(`  setup(api, knobs) {`);
+  if (needsFloor(level)) {
+    lines.push(`    // The sketch replaces the starter ground; with no ground drawn, lay the floor so the player has somewhere to stand.`);
+    lines.push(`    api.spawn({ type: "ground", x: -3200, y: 400, w: 6400, h: 48, color: 0x3f9e4d, solid: true, gravityScale: 0 });`);
+  }
   lines.push(`    for (const p of PLATFORMS) {`);
   lines.push(`      // p[4] === 1 means a jump-through ledge; a wall blocks the player.`);
   lines.push(`      api.spawn({ type: "sketch-platform", x: p[0], y: p[1], w: p[2], h: p[3], color: ${COLOR.platform}, solid: true, gravityScale: 0, data: p[4] === 1 ? { oneWay: true } : {} });`);
@@ -259,7 +268,7 @@ export function levelToModSource(level: SketchLevel): string {
   lines.push(`      const player = api.player();`);
   lines.push(`      if (!player) return;`);
   lines.push(`      for (const c of api.byType("sketch-coin")) {`);
-  lines.push(`        if (!overlap(player, c)) continue;`);
+  lines.push(`        if (!api.touches(player, c)) continue;`);
   lines.push(`        api.burst(c.x + c.w / 2, c.y + c.h / 2, ${COLOR.coin}, 10);`);
   lines.push(`        api.despawn(c.id);`);
   lines.push(`        collected++;`);
@@ -274,7 +283,7 @@ export function levelToModSource(level: SketchLevel): string {
   lines.push(`    });`);
   lines.push(`  },`);
   lines.push(`  dispose(api) {`);
-  lines.push(`    for (const type of ["sketch-platform", "sketch-mover-platform", "sketch-trampoline", "sketch-coin", "sketch-walker"]) {`);
+  lines.push(`    for (const type of ["sketch-platform", "sketch-mover-platform", "sketch-trampoline", "sketch-coin", "sketch-walker", "ground"]) {`);
   lines.push(`      for (const e of api.byType(type)) api.despawn(e.id);`);
   lines.push(`    }`);
   lines.push(`    api.removeHud("sketch-score");`);
