@@ -10,7 +10,7 @@ import { detectMoodCommand, entityKind, extractSpawnedEntities, isHeldItemType, 
 import { moodKey, moodSpecFor, pool, restyleSheet, sheetPath } from "./mood";
 import { fallbackVisual, lookFor, parseShape, parseVisual } from "./visual";
 import type { Visual } from "./visual";
-import type { ClientMsg, KnobDefs, Look, MoodSpec, ShapeName, KnobValue, ServerMsg, WorldMod } from "../src/contract";
+import type { ClientMsg, KnobDefs, Look, MoodSpec, ShapeName, KnobValue, ServerMsg, TimelineStep, WorldMod } from "../src/contract";
 import { routerChat } from "./router-model";
 import { chat, hasApiKey, loadEnv, SPARK, WONDER } from "./meta";
 import { compileMod } from "./compile";
@@ -31,6 +31,7 @@ import { learnFromFix, learnRuleFromFeedback, learnSkillFromFeedback } from "./l
 import { segmentPhoto } from "./photo";
 import { Budget, readLimits } from "./budget";
 import type { Kind } from "./budget";
+import { Timeline, type Snapshot } from "./timeline";
 import { isWorldId, restyledForWorld, snapshotWorld, WorldStore } from "./worlds";
 import { createStaticHandler } from "./static";
 import { createVoiceHub } from "./voice";
@@ -51,7 +52,7 @@ interface ManifestRec {
 }
 
 // Each connection has its own world (ADR 0014): a public server must never mix visitors' mods.
-interface Session { /** Family-test tester index and session id once the page said ?tester=N (ADR 0034). */ tester?: { n: number; sid: string }; manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string>; mood?: MoodSpec; moodMods?: Set<string>; /** Level mods a sketch replaced, by the sketch mod id, so undo can put them back (bug j2t). */ levelStash?: Map<string, ManifestRec[]>; restyled?: Record<string, string> }
+interface Session { /** Family-test tester index and session id once the page said ?tester=N (ADR 0034). */ tester?: { n: number; sid: string }; manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string>; mood?: MoodSpec; moodMods?: Set<string>; /** Level mods a sketch replaced, by the sketch mod id, so undo can put them back (bug j2t). */ levelStash?: Map<string, ManifestRec[]>; restyled?: Record<string, string>; /** Time-travel steps and the command that probably explains the next one (ADR 0041). */ timeline?: Timeline; lastCommand?: { text: string; at: number }; tlTimer?: ReturnType<typeof setTimeout> }
 const sessions = new WeakMap<WebSocket, Session>();
 function sess(ws: WebSocket): Session {
   let s = sessions.get(ws);
@@ -177,6 +178,53 @@ interface Route {
 
 function send(ws: WebSocket, msg: ServerMsg): void {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+  if (msg.kind === "removed") worldOf.set(ws, (worldOf.get(ws) ?? []).filter((m) => m.id !== msg.modId));
+  if (msg.kind === "mod" || msg.kind === "removed" || msg.kind === "mood") noteTimelineSoon(ws);
+}
+
+// --- time-travel timeline (ADR 0041) -----------------------------------------------
+function timelineSnapshot(ws: WebSocket): Snapshot {
+  const s = sess(ws);
+  const mods = snapshotWorld(worldOf.get(ws) ?? [], s.manifest, BUILTIN_IDS);
+  const stash = s.levelStash && s.levelStash.size > 0 ? [...s.levelStash].map(([k, v]) => [k, v.map((r) => structuredClone(r))] as [string, unknown[]]) : undefined;
+  return { mods, ...(s.mood ? { mood: s.mood } : {}), ...(s.restyled ? { restyled: { ...s.restyled } } : {}), ...(stash ? { stash } : {}) };
+}
+
+/** Record the world as a step if it changed, and tell the client. The player's last command, if fresh, names the step. */
+function noteTimeline(ws: WebSocket, force?: { kind: TimelineStep["kind"]; label: string }): void {
+  const s = sess(ws);
+  const tl = (s.timeline ??= new Timeline());
+  const cmd = s.lastCommand && Date.now() - s.lastCommand.at < 90_000 ? s.lastCommand.text : undefined;
+  const step = tl.record(timelineSnapshot(ws), cmd, force);
+  if (!step) return;
+  s.lastCommand = undefined;
+  send(ws, { kind: "timeline", steps: tl.list(), current: step.n });
+}
+
+/** Coalesce a compound change (sketch + floor, mood + restyle) into one step. */
+function noteTimelineSoon(ws: WebSocket): void {
+  const s = sess(ws);
+  if (s.tlTimer) clearTimeout(s.tlTimer);
+  s.tlTimer = setTimeout(() => { s.tlTimer = undefined; noteTimeline(ws); }, 450);
+}
+
+function handleTimelineRestore(ws: WebSocket, n: number): void {
+  const s = sess(ws);
+  const step = s.timeline?.get(n);
+  if (!step) { send(ws, { kind: "say", text: "That step is no longer in the timeline." }); return; }
+  s.manifest.clear();
+  for (const m of step.mods) {
+    if (m.builtin !== true) s.manifest.set(m.id, { id: m.id, title: m.title, source: m.source, compiled: m.compiled, knobs: structuredClone(m.knobs), ...(m.art ? { art: m.art } : {}), ...(m.look ? { look: m.look } : {}) });
+  }
+  s.mood = step.mood;
+  s.moodMods = step.mood ? new Set(s.manifest.keys()) : undefined;
+  s.restyled = step.restyled ? { ...step.restyled } : undefined;
+  s.levelStash = step.stash ? new Map(step.stash.map(([k, v]) => [k, (v as ManifestRec[]).map((r) => structuredClone(r))])) : undefined;
+  worldOf.set(ws, step.mods.map((m) => ({ id: m.id, values: m.values ?? {} })));
+  adoptingOf.set(ws, adoptBuiltins(s.manifest, step.mods.filter((m) => m.builtin === true).map((m) => m.id)));
+  if (s.tlTimer) { clearTimeout(s.tlTimer); s.tlTimer = undefined; }
+  send(ws, { kind: "world", id: "", mods: step.mods, ...(step.mood ? { mood: step.mood } : {}), ...(step.restyled ? { restyled: step.restyled } : {}) });
+  noteTimeline(ws, { kind: "restore", label: `Restored: ${step.label}` });
 }
 
 function stage(ws: WebSocket, s: ServerMsg & { kind: "stage" }): void {
@@ -1050,6 +1098,7 @@ function handleMessage(ws: WebSocket, raw: string): void {
       const prev = new Set((worldOf.get(ws) ?? []).map((m) => m.id));
       worldOf.set(ws, msg.mods.filter((m) => m && typeof m.id === "string").map((m) => ({ id: m.id, values: m.values ?? {} })));
       for (const m of worldOf.get(ws) ?? []) if (!prev.has(m.id)) noteTouched(sess(ws).recent, m.id);
+      noteTimelineSoon(ws);
     }
     adoptingOf.set(ws, adoptBuiltins(manifest, (worldOf.get(ws) ?? []).map((m) => m.id)));
   } else if (msg.kind === "worldSave") handleWorldSave(ws, msg);
@@ -1065,7 +1114,9 @@ function handleMessage(ws: WebSocket, raw: string): void {
     const row = sanitizeTester(msg, sid, Date.now());
     if (row) { s.tester = { n: row.tester, sid }; appendTester(row); }
   }
+  else if (msg.kind === "timelineRestore") handleTimelineRestore(ws, Number(msg.n));
   else if (msg.kind === "command") {
+    sess(ws).lastCommand = { text: msg.text, at: Date.now() };
     handleCommand(ws, msg.text).catch((err) => {
       send(ws, { kind: "say", text: `Command failed: ${err instanceof Error ? err.message : String(err)}` });
     });

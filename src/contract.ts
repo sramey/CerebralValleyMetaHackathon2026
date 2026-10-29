@@ -207,6 +207,8 @@ export type ClientMsg =
   | { kind: "photoBring"; key: string }
   | { kind: "photoBringLocal"; key: string; prompt: string; aspect: number }
   /** The mods in the player's world right now, in load order, sent before each command so the playtest runs in a copy of it (ADR 0013). */
+  /** Make step `n` the world again, as a new step; nothing is deleted (ADR 0041). */
+  | { kind: "timelineRestore"; n: number }
   | { kind: "worldState"; mods: { id: string; values: Record<string, KnobValue> }[] }
   // Voice (ADR 0012). Mic audio itself travels as binary frames: PCM16 mono 16 kHz.
   | { kind: "voiceWarm" }
@@ -234,6 +236,9 @@ export type ClientMsg =
 export type WorldMod =
   | { builtin: true; id: string; values: KnobValues }
   | { builtin?: false; id: string; title: string; source: string; compiled: string; knobs: KnobDefs; values: KnobValues; art?: { key: string; url: string; scenery?: boolean }; look?: Look };
+
+/** One step of the session's time-travel strip (ADR 0041): what the world was after a build, mood, undo or restore. */
+export interface TimelineStep { n: number; kind: "start" | "build" | "mood" | "undo" | "restore"; label: string; mood?: string; mods: { id: string; title: string }[] }
 
 export interface DemoWorld { id: string; title: string; blurb: string }
 
@@ -312,6 +317,8 @@ export type ServerMsg =
   | { kind: "voiceState"; state: "ready" | "listening" | "error"; detail?: string }
   | { kind: "transcript"; text: string; final: boolean; ms?: { firstPartial: number; final: number } }
   | { kind: "worldSaved"; id: string }
+  /** The session's steps, newest last; `current` is the step the world is at right now (ADR 0041). */
+  | { kind: "timeline"; steps: TimelineStep[]; current: number }
   | { kind: "world"; id: string; mods: WorldMod[]; mood?: MoodSpec | null; restyled?: Record<string, string> }
   // Visitor mode (no key, kill-switch, or budget spent): the game still plays; offer these instead.
   | { kind: "visitor"; reason: "nokey" | "killswitch" | "budget"; demos: DemoWorld[] };

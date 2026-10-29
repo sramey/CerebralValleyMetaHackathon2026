@@ -19,6 +19,7 @@ import { drawScenery } from "./scenery";
 import { drawFluffyCloud, drawParallaxEntities, isParallaxOrSkyEntity, isSkyOrBackgroundEntity } from "./parallax";
 import { ModLoader } from "../sim/loader";
 import { createGhost } from "./ghost";
+import { mountTimeline } from "./timeline";
 import { createPipeline } from "./pipeline";
 import { createTheater } from "./build-theater";
 import { createHud } from "./hud";
@@ -920,6 +921,8 @@ function renderMods(): void {
   }
 }
 
+const timelineView = mountTimeline($("#timeline"), (n) => send({ kind: "timelineRestore", n }));
+
 // --- commands -------------------------------------------------------------------
 function sendWorldState(): void {
   if (ws?.readyState === WebSocket.OPEN) {
@@ -1643,6 +1646,7 @@ async function applyWorld(msg: Extract<ServerMsg, { kind: "world" }>): Promise<v
     }
   }
   renderMods();
+  if (!msg.id) { say(`Restored a world of ${loaded} mods. The steps before it are still on the timeline.`, "done"); return; } // timeline restore (ADR 0041)
   history.replaceState(null, "", `?w=${msg.id}`);
   say(`Opened a world with ${loaded} mods. Keep building to remix it.`, "done");
 }
@@ -1743,6 +1747,7 @@ function connect(): void {
     else if (msg.kind === "routed") { routedBy(msg); }
     else if (msg.kind === "timing") { builds.finish(msg.command); log(`timing route ${msg.ms.route}ms write ${msg.ms.write}ms compile ${msg.ms.compile}ms verify ${msg.ms.verify}ms total ${msg.ms.total}ms`); }
     else if (msg.kind === "tweak") tweak(msg.modId, msg.knob, msg.value, "Tweaked.");
+    else if (msg.kind === "timeline") timelineView.update(msg.steps, msg.current);
     else if (msg.kind === "removed") { loader.unload(msg.modId); renderMods(); }
     else if (msg.kind === "mod") {
       try {
