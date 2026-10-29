@@ -11,6 +11,7 @@ import { moodKey, moodSpecFor, pool, restyleSheet, sheetPath } from "./mood";
 import { fallbackVisual, lookFor, parseShape, parseVisual } from "./visual";
 import type { Visual } from "./visual";
 import type { ClientMsg, KnobDefs, Look, MoodSpec, ShapeName, KnobValue, ServerMsg, WorldMod } from "../src/contract";
+import { routerChat } from "./router-model";
 import { chat, hasApiKey, loadEnv, SPARK, WONDER } from "./meta";
 import { compileMod } from "./compile";
 import { importMod, verifyMod } from "./verify";
@@ -514,12 +515,12 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
   let route: Route | null = null;
   try {
     const r0 = performance.now();
-    const res = await chat(SPARK, [
+    const res = await routerChat([
       { role: "system", content: ROUTER_SYSTEM },
       { role: "user", content: buildRouterPrompt(command, manifestText(ws), recentText(sess(ws).recent)) },
     ], 1024);
     routeMs = Math.round(performance.now() - r0);
-    void res.ms;
+    send(ws, { kind: "routed", command, model: res.model, open: res.open, ms: res.ms, fellBack: res.fellBack });
     route = parseRoute(res.text);
     if (forceEditModId && manifest.has(forceEditModId)) {
       route = { ...(route ?? { action: "edit" }), action: "edit", target: forceEditModId };
