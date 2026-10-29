@@ -239,6 +239,7 @@ function drawPlayer(e: Entity, x: number, y: number): void {
   const bx = x + (e.w - bw) / 2;
   const by = y + (e.h - bh); // anchor feet
   const right = e.facing > 0;
+  gfx.rect(bx - 1.5, by - 1.5, bw + 3, bh + 3).fill(OUTLINE);
   gfx.rect(bx, by, bw, bh).fill(e.color);
   // headband stripe + tail streaming behind
   const bandH = Math.max(3, bh * 0.12);
@@ -258,7 +259,10 @@ function drawBlob(e: Entity, x: number, y: number): void {
   const by = y + (e.h - bh);
   const r = Math.min(bw, bh) / 2;
   const cx = bx + bw / 2;
-  // dome top + blocky base = rounded-ish walker
+  // dome top + blocky base = rounded-ish walker; the outline is the same silhouette, grown
+  const o = 1.5;
+  gfx.ellipse(cx, by + r, r + o, r * 0.9 + o).fill(OUTLINE);
+  gfx.rect(bx - o, by + r * 0.7, bw + 2 * o, bh - r * 0.7 + o).fill(OUTLINE);
   gfx.ellipse(cx, by + r, r, r * 0.9).fill(e.color);
   gfx.rect(bx, by + r * 0.7, bw, bh - r * 0.7).fill(e.color);
   // feet nubs
@@ -280,6 +284,7 @@ function drawCoin(e: Entity, x: number, y: number): void {
   const r = Math.min(e.w, e.h) / 2;
   const spin = Math.abs(Math.cos(world.tickCount / 6));
   const rx = Math.max(1.5, r * (0.25 + 0.75 * spin));
+  gfx.ellipse(cx, cy, rx + 1.5, r + 1.5).fill(OUTLINE);
   gfx.ellipse(cx, cy, rx, r).fill(GOLD);
   gfx.ellipse(cx - rx * 0.2, cy - r * 0.25, Math.max(1, rx * 0.35), Math.max(1, r * 0.3)).fill(SHINE);
 }
@@ -375,17 +380,17 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   }
   if (isCliff(e)) { drawCliff(gfx, e, x, y); return; }
   if (t.indexOf("ground") >= 0 || t.indexOf("platform") >= 0 || /floor|bridge/i.test(t)) { drawGround(e, x, y); return; }
-  // dark outline behind every code-drawn entity
-  gfx.rect(x - 1.5, y - 1.5, e.w + 3, e.h + 3).fill(OUTLINE);
+  // Each code-drawn look outlines its own silhouette (a box behind a dome left black corners).
   if (t === "player") {
     drawPlayer(e, x, y);
     return;
   }
   if (t.indexOf("coin") >= 0) { drawCoin(e, x, y); return; }
-  if (t.indexOf("stair") >= 0 || t.indexOf("step") >= 0 || t.indexOf("wall") >= 0 || t.indexOf("block") >= 0 || t.indexOf("brick") >= 0 || t.indexOf("pillar") >= 0 || t.indexOf("ledge") >= 0 || t.indexOf("ramp") >= 0 || entityKind(e) === "terrain") { drawStair(e, x, y); return; }
-  if (isProjectileType(t) || entityKind(e) === "projectile" || t.indexOf("arrow") >= 0 || t.indexOf("fire") >= 0) { drawShot(e, x, y); return; }
   if (t.indexOf("slime") >= 0 || t.indexOf("gel") >= 0 || t.indexOf("enemy") >= 0 ||
     t.indexOf("walker") >= 0 || t.indexOf("turtle") >= 0) { drawBlob(e, x, y); return; }
+  gfx.rect(x - 1.5, y - 1.5, e.w + 3, e.h + 3).fill(OUTLINE); // rectangular looks below: outline is the rectangle
+  if (t.indexOf("stair") >= 0 || t.indexOf("step") >= 0 || t.indexOf("wall") >= 0 || t.indexOf("block") >= 0 || t.indexOf("brick") >= 0 || t.indexOf("pillar") >= 0 || t.indexOf("ledge") >= 0 || t.indexOf("ramp") >= 0 || entityKind(e) === "terrain") { drawStair(e, x, y); return; }
+  if (isProjectileType(t) || entityKind(e) === "projectile" || t.indexOf("arrow") >= 0 || t.indexOf("fire") >= 0) { drawShot(e, x, y); return; }
   gfx.rect(x, y, e.w, e.h).fill(e.color);
 }
 
