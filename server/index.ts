@@ -23,7 +23,7 @@ import { runPool } from "./pool";
 import { forget, newRecent, noteCommand, noteTouched, recentText, resolvePronoun } from "./context";
 import type { Recent } from "./context";
 import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, formatManifest, ROUTER_SYSTEM, WONDER_SYSTEM } from "./prompt";
-import { logBuild, saveModSources } from "./createlog";
+import { logBuild, logMood, saveModSources } from "./createlog";
 import { artCachedUrl, artKeyForType, clearCachedArt, deriveSubject, generateSubjectArt, isScenerySubject, pickArtType } from "./art";
 import { learnFromFix, learnRuleFromFeedback, learnSkillFromFeedback } from "./learn";
 import { segmentPhoto } from "./photo";
@@ -853,6 +853,7 @@ const BUILTIN_IDS: ReadonlySet<string> = new Set(BUILTINS.map((b) => b.id));
 
 /** "make it spooky": Spark routed here. Design the mood, tell the client to repaint, then it asks for the sprite edits (ADR 0017). */
 async function handleMood(ws: WebSocket, moodWords: string): Promise<void> {
+  const t0 = performance.now();
   const words = moodWords.trim() || "spooky";
   send(ws, { kind: "say", text: `Making it ${words}...` });
   const spec = await moodSpecFor(words);
@@ -860,6 +861,7 @@ async function handleMood(ws: WebSocket, moodWords: string): Promise<void> {
   sess(ws).moodMods = new Set(sess(ws).manifest.keys()); // to tell whether the mood is still the latest change
   sess(ws).restyled = {};
   send(ws, { kind: "mood", mood: spec });
+  logMood({ mood: spec.name, ms: Math.round(performance.now() - t0) });
 }
 
 /** Edit each sprite sheet the client lists toward the mood anchor, a few at a time; every image counts against the spend guard. */

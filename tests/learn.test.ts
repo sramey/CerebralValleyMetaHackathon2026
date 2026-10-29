@@ -14,6 +14,7 @@ import {
   setLearnedDir,
 } from "../server/learn";
 import { buildEditPrompt, buildRouterPrompt, buildWonderPrompt } from "../server/prompt";
+import { setLogFile } from "../server/createlog";
 
 describe("self-improving rules & skills (server/learn.ts)", () => {
   let tempDir = "";
@@ -22,10 +23,12 @@ describe("self-improving rules & skills (server/learn.ts)", () => {
     process.env.MODEL_API_KEY = "test-key-not-real";
     tempDir = mkdtempSync(join(tmpdir(), "metabuild-learn-"));
     setLearnedDir(tempDir);
+    setLogFile(join(tempDir, "builds.jsonl")); // never write into the real evidence log
   });
 
   afterEach(() => {
     setLearnedDir(null);
+    setLogFile(null);
     vi.unstubAllGlobals();
     if (tempDir && existsSync(tempDir)) {
       rmSync(tempDir, { recursive: true, force: true });

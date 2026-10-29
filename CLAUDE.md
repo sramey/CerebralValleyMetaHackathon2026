@@ -12,7 +12,7 @@ Every AI call the game makes at runtime goes to a Meta model or Meta agent featu
 - The verifier runs each mod alone in an empty world (ADR 0003): tests must spawn their own ground.
 - Entity-cap eviction once deleted the ground; spawner mods must despawn what they make.
 - Server/client ports come from `.env` (`PORT`, `VITE_PORT`, `VITE_WS_URL`) so worktrees run live side by side.
-- Antigravity (`agy`) can be a third worker, but only headless: `agy -p "<brief>" --model gemini-4-argon-high --dangerously-skip-permissions` from inside a slot-3 worktree (owner approved skip-permissions 2026-10-29). `--mode auto` isn't available on this account, and without skipping permissions a headless run stalls. The owner's interactive `agy` window can't receive SendMessage.
+- Antigravity (`agy`) can be a third worker, but only headless: `agy -p "<brief>" --model gemini-3.8-flash-high --dangerously-skip-permissions` (Argon quota is out until ~Nov 5; default to Flash) from inside a slot-3 worktree (owner approved skip-permissions 2026-10-29). `--mode auto` isn't available on this account, and without skipping permissions a headless run stalls. The owner's interactive `agy` window can't receive SendMessage.
 - OpenCode can run two more headless workers: `opencode run -m opencode-go/<model> --auto --title <bead> "<brief>"` from inside the leased worktree (owner approved `--auto` 2026-10-29). Use OpenCode Go subscription models; default to `opencode-go/deepseek-v4.1-flash` (owner 10-29: kimi-k3.1-pro and glm-5.3 burned the Go cap in ~1 h), never pay-per-token OpenRouter, without asking. Brief = scratchpad worker preamble + `bd show <id>`.
 
 ## Public repo: nothing personal or secret
