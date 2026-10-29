@@ -96,7 +96,9 @@ function presence(params: URLSearchParams, name: string): boolean {
 }
 
 export function isWorldId(id: unknown): id is string {
-  return typeof id === "string" && WORLD_ID.test(id);
+  return typeof id === "string"
+    && id.length >= MIN_WORLD_ID_LEN && id.length <= MAX_WORLD_ID_LEN
+    && WORLD_ID.test(id);
 }
 
 /** Mirrors `moodKey` in server/mood.ts: `Deep Winter!` -> `deep-winter`, empty/junk -> null. */
@@ -132,7 +134,7 @@ export function decodeWorldId(raw: unknown): { id: string | null; issue: ShareIs
   const v = raw.trim();
   if (!v) return { id: null, issue: "empty" };
   if (v.length > 200) return { id: null, issue: "oversized" };
-  if (WORLD_ID.test(v)) return { id: v, issue: null };
+  if (v.length >= MIN_WORLD_ID_LEN && v.length <= MAX_WORLD_ID_LEN && WORLD_ID.test(v)) return { id: v, issue: null };
   return { id: null, issue: looksLegacy(v) ? "legacy" : "invalid" };
 }
 
