@@ -140,3 +140,4 @@ Original prompt: lets setup our project, get oriented, organized, and setup, see
 - 10-29 merged wt/starter (bottom): starter world recomposed: three fogged scenery bands (castle, trees, lamp posts, focal tree), stacked ledges; make me huge still 2/2; 61 fps.
 - 10-29 merged wt/look4 (bottom): scenery takes each mood (snow caps, bare spooky trees, neon rims), night castle rim-lit with windows; 61 fps.
 - 10-29 integrated regression (top, h8l): demo set 5/5, aware 15/16 (giant after huge = order effect), compound end marker live 9.4 s, stairs/sketch/P stats/share/camera upload/voice all pass. No code change.
+- 10-29 merged wt/feel (bottom): lookahead camera with airborne deadzone, squash/stretch, dust, coin pop, hit flash, optional micro-shake (?noshake). Render-only.
