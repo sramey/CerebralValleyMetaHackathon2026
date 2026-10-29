@@ -61,6 +61,8 @@ export interface Pipeline {
   /** Feed every server message; the view picks out what it needs. */
   onMsg(msg: ServerMsg): void;
   toggle(force?: boolean): void;
+  /** The paced code stream from the build theater, shown in the Wonder node. */
+  setCode(lines: string[], partial: string, active: boolean): void;
 }
 
 export function createPipeline(host: HTMLElement): Pipeline {
@@ -106,7 +108,7 @@ export function createPipeline(host: HTMLElement): Pipeline {
     el.style.gridColumn = String(n.col);
     el.style.gridRow = String(n.row);
     el.innerHTML = `<div class="pl-name">${n.name}</div><div class="pl-model">${n.model}</div><div class="pl-role">${n.role}</div>
-      ${n.id === "wonder" ? `<div class="pl-tools"><span data-tool="inspect_world">inspect_world</span><span data-tool="run_playtest">run_playtest</span></div>` : ""}
+      ${n.id === "wonder" ? `<pre class="pl-code" aria-hidden="true"></pre><div class="pl-tools"><span data-tool="inspect_world">inspect_world</span><span data-tool="run_playtest">run_playtest</span></div>` : ""}
       <div class="pl-meta"><span class="pl-count"></span><span class="pl-last"></span></div>`;
     graph.appendChild(el);
     nodeEls.set(n.id, el);
@@ -240,5 +242,11 @@ export function createPipeline(host: HTMLElement): Pipeline {
     else if (e.code === "Escape" && open) toggle(false);
   });
   paint();
-  return { onMsg, toggle };
+  const codeEl = root.querySelector<HTMLElement>(".pl-code")!;
+  function setCode(lines: string[], partial: string, active: boolean): void {
+    codeEl.classList.toggle("live", active);
+    if (!open) return;
+    codeEl.textContent = [...lines.slice(-7), partial].join("\n");
+  }
+  return { onMsg, toggle, setCode };
 }

@@ -111,3 +111,46 @@ describe("runAgent (native tool-calling loop)", () => {
     expect(seen[1].messages.at(-1).content).toContain("kaput");
   });
 });
+
+describe("streaming (ADR 0022)", () => {
+  beforeEach(() => { process.env.MODEL_API_KEY = "test-key-not-real"; });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("sourcePreview decodes a half-received tool argument and never emits a torn escape", async () => {
+    const { sourcePreview } = await import("../server/agent");
+    expect(sourcePreview('{"source":"export default {\\n  id: \\"a\\"')).toBe('export default {\n  id: "a"');
+    expect(sourcePreview('{"source":"abc\\')).toBe("abc");
+    expect(sourcePreview('{"sou')).toBe("");
+  });
+
+  const sse = (events: unknown[]) => {
+    const text = events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("") + "data: [DONE]\n\n";
+    return { ok: true, body: new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode(text)); c.close(); } }) };
+  };
+
+  it("streams content and tool-call source to onText and still returns the assembled answer", async () => {
+    const chunks: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_u: string, init: { body: string }) => {
+      expect(JSON.parse(init.body).stream).toBe(true);
+      return sse([
+        { choices: [{ delta: { content: "export default " } }] },
+        { choices: [{ delta: { content: "{ id: \"x\" }" } }] },
+      ]);
+    }));
+    const r = await runAgent({ system: "s", user: "u", tools: [], onText: (c) => chunks.push(c) });
+    expect(chunks.join("")).toBe('export default { id: "x" }');
+    expect(r.text).toBe('export default { id: "x" }');
+  });
+
+  it("falls back to a plain request and still reports the finished code when streaming is refused", async () => {
+    const chunks: string[] = [];
+    let n = 0;
+    vi.stubGlobal("fetch", vi.fn(async (): Promise<any> => {
+      if (n++ === 0) return { ok: false, status: 400, text: async () => "no stream", body: null };
+      return { ok: true, json: async () => ({ choices: [{ message: { content: "export default { id: \"y\" }" } }] }), text: async () => "" };
+    }));
+    const r = await runAgent({ system: "s", user: "u", tools: [], onText: (c) => chunks.push(c) });
+    expect(r.text).toBe('export default { id: "y" }');
+    expect(chunks.join("")).toBe('export default { id: "y" }');
+  });
+});
