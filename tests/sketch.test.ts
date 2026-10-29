@@ -25,6 +25,7 @@ import { compileMod } from "../server/compile";
 import { verifyMod } from "../server/verify";
 import { World } from "../src/sim/world";
 import { ModLoader } from "../src/sim/loader";
+import playerMod from "../src/mods/player";
 import type { SketchStroke } from "../src/contract";
 
 const PNG = `data:image/png;base64,${"A".repeat(400)}`;
@@ -222,6 +223,36 @@ describe("compiled level mod", () => {
     player.vy = 200;
     world.step();
     expect(player.vy).toBeLessThan(0);
+  });
+
+  it("lets the player stand on a drawn ledge and walk off it", async () => {
+    const source = levelToModSource(level);
+    const compiled = compileMod(source);
+    const verified = await verifyMod(source, compiled.js);
+    const world = new World(5);
+    const loader = new ModLoader(world);
+    loader.load(playerMod);
+    loader.load(verified.def!);
+    const ledge = world.entities.find((e) => e.type === "sketch-platform")!;
+    const player = world.entities.find((e) => e.type === "player")!;
+    player.x = ledge.x + 40;
+    player.y = ledge.y - 90;
+    player.vx = 0;
+    player.vy = 0;
+    for (let i = 0; i < 120; i++) world.step();
+    expect(player.onGround).toBe(true);
+    expect(Math.abs(player.y + player.h - ledge.y)).toBeLessThan(1.5); // feet on the drawn surface
+    // The one-way ledge lets the player jump up through it from below.
+    player.x = ledge.x + 90;
+    player.y = ledge.y + 60;
+    player.vy = -720;
+    player.onGround = false;
+    let passed = false;
+    for (let i = 0; i < 40; i++) {
+      world.step();
+      if (player.y + player.h < ledge.y) passed = true;
+    }
+    expect(passed).toBe(true);
   });
 
   it("builds an empty-but-valid level when a sketch only has coins", async () => {

@@ -16,6 +16,7 @@ import { createGhost } from "./ghost";
 import { createPipeline } from "./pipeline";
 import { createTheater } from "./build-theater";
 import { createHud } from "./hud";
+import { createSketch } from "./sketch";
 import { World } from "../sim/world";
 import playerMod from "../mods/player";
 import groundMod from "../mods/ground";
@@ -112,6 +113,14 @@ const pendingPhotos = new Map<string, HTMLCanvasElement>();
 const spritePool = new Map<number, Sprite>();
 let camYSmooth: number | null = null;
 let camXSmooth: number | null = null;
+// Draw-to-build (ADR 0023): ✏️ sketch overlay over the stage; sends image + world stroke boxes.
+const sketch = createSketch(stageWrapEl, {
+  send: (msg) => send(msg),
+  say,
+  camera: () => ({ x: camXSmooth ?? world.camera.x, y: camYSmooth ?? world.camera.y }),
+  log,
+});
+$("#sketch-btn").addEventListener("click", () => sketch.open());
 const layerOverride = new Map<number, number>();
 function subjectKeyFor(e: Entity): string | undefined {
   const frames = framesFor(framesBySubject, e.type, e.type === "player");
@@ -1606,6 +1615,7 @@ function connect(): void {
     try { msg = JSON.parse(String(ev.data)) as ServerMsg; } catch { return; }
     pipeline.onMsg(msg);
     theater.onMsg(msg);
+    sketch.onServerMsg(msg);
     if (voice.onServerMsg(msg)) return;
     if (msg.kind === "world") { await applyWorld(msg); return; }
     if (msg.kind === "mood") { onMood(msg.mood); return; }

@@ -145,3 +145,33 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #
 .hud-banner-text { color: #ffc94d; }
 @keyframes hud-banner-pop { 0% { opacity: 0; transform: translateY(-8px) scale(.85); } 100% { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .hud-banner { animation: none; } .hud-bar-fill { transition: none; } }
+
+/* Draw-to-build level sketcher (ADR 0023): ✏️ overlay directly over the stage. */
+#sketch-btn { width: 100%; margin-top: 8px; background: #232c3b; color: #e8e4d8; border: 1px solid #54e0ff55; padding: 10px 12px; font-weight: 700; cursor: pointer; }
+#sketch-btn:hover { border-color: #54e0ff; color: #b8f4ff; }
+#sketch-overlay { position: absolute; inset: 0; z-index: 40; background: rgba(5,7,10,.55); display: block; transition: opacity .55s ease; }
+#sketch-overlay[hidden] { display: none; }
+#sketch-overlay.settle { opacity: 0; pointer-events: none; }
+#sketch-canvas { position: absolute; inset: 0; display: block; touch-action: none; cursor: crosshair; }
+#sketch-overlay[data-state="building"] #sketch-canvas { animation: sketch-shimmer 1.5s ease-in-out infinite; cursor: progress; }
+#sketch-overlay[data-state="building"] #sketch-palette .sketch-brushes,
+#sketch-overlay[data-state="building"] #sketch-palette .sketch-actions,
+#sketch-overlay[data-state="building"] #sketch-hint { opacity: .35; pointer-events: none; }
+@keyframes sketch-shimmer { 50% { filter: brightness(1.5) drop-shadow(0 0 18px rgba(84,224,255,.55)); } }
+@media (prefers-reduced-motion: reduce) { #sketch-overlay[data-state="building"] #sketch-canvas { animation: none; } }
+#sketch-palette { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(620px, calc(100% - 28px)); padding: 10px; display: grid; gap: 8px; background: rgba(12,16,23,.92); border: 1px solid rgba(84,224,255,.45); border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.sketch-brushes { display: flex; flex-wrap: wrap; gap: 6px; }
+.sketch-brush { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; background: #171d28; border: 1px solid #3a4454; color: #c9c2ae; font-size: 12px; font-weight: 600; cursor: pointer; transition: border-color .15s ease, color .15s ease, background .15s ease; }
+.sketch-brush .glyph { color: var(--brush, #3fd06a); font-size: 13px; }
+.sketch-brush.on { border-color: var(--brush, #3fd06a); color: #fff; background: #1f2836; box-shadow: 0 0 12px color-mix(in srgb, var(--brush, #3fd06a) 40%, transparent); }
+.sketch-brush.on .glyph { text-shadow: 0 0 8px var(--brush, #3fd06a); }
+#sketch-hint { width: 100%; background: #05070a; border: 1px solid #3a4454; color: #e8e4d8; padding: 8px 10px; font-size: 13px; border-radius: 6px; }
+#sketch-hint::placeholder { color: #6f7783; }
+.sketch-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.sketch-actions button { flex: 1 1 auto; padding: 9px 12px; background: #232c3b; color: #e8e4d8; border: 1px solid #3a4454; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; }
+.sketch-actions button:hover { border-color: #8f97a3; }
+.sketch-actions button.primary { background: #54e0ff; color: #062028; border-color: #54e0ff; flex: 2 1 auto; }
+.sketch-actions button:hover { filter: brightness(1.12); }
+#sketch-status { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); max-width: calc(100% - 28px); padding: 6px 14px; border-radius: 999px; background: rgba(12,16,23,.9); border: 1px solid rgba(84,224,255,.4); color: #d7f6ff; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#sketch-status[data-kind="error"] { border-color: rgba(226,72,61,.7); color: #ffb3ab; white-space: normal; }
+#sketch-status[data-kind="building"] { border-color: rgba(255,201,77,.7); color: #ffe9a8; }
