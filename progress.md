@@ -136,3 +136,4 @@ Original prompt: lets setup our project, get oriented, organized, and setup, see
 - 10-29 merged wt/depth3 (bottom): slab top faces, in-front foreground parallax, light-leaning shadows + rim light, per-mood ridge fog; 60 fps. Gates 210/210.
 - 10-29 merged wt/statpane (OpenCode DeepSeek): press P → pipeline overlay shows live impact numbers (landed %, first-try %, auto-fix saves, median time) from GET /api/stats (aggregates only, no prompt text). Gates 215/215.
 - 10-29 merged wt/sketch2 (OpenCode): 'let me draw a level' opens sketch, sim pauses, side palette. Judge dry run #2 (Flash, hyv.3): fresh clone, every try-this row + christmas/stairs/gun passed; README rows added. Gates 221/221.
+- 10-29 merged wt/beats (top): demo set 3x each all pass (slime p50 10.9 s; dragon/coins/rain splits into 3 parallel lanes; double jump p50 14.7 s; make me huge rejected→fixed 3/3 p50 22.6 s; spooky palette <1.2 s). Compound commands now send an end marker.
