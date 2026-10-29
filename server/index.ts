@@ -34,6 +34,7 @@ import type { Kind } from "./budget";
 import { isWorldId, restyledForWorld, snapshotWorld, WorldStore } from "./worlds";
 import { createStaticHandler } from "./static";
 import { createVoiceHub } from "./voice";
+import { appendTester, sanitizeTester } from "./testers";
 import { runSketchBuild } from "./sketch";
 
 loadEnv();
@@ -50,7 +51,7 @@ interface ManifestRec {
 }
 
 // Each connection has its own world (ADR 0014): a public server must never mix visitors' mods.
-interface Session { manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string>; mood?: MoodSpec; moodMods?: Set<string>; restyled?: Record<string, string> }
+interface Session { /** Family-test tester index and session id once the page said ?tester=N (ADR 0033). */ tester?: { n: number; sid: string }; manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string>; mood?: MoodSpec; moodMods?: Set<string>; restyled?: Record<string, string> }
 const sessions = new WeakMap<WebSocket, Session>();
 function sess(ws: WebSocket): Session {
   let s = sessions.get(ws);
@@ -1043,6 +1044,12 @@ function handleMessage(ws: WebSocket, raw: string): void {
       send(ws, { kind: "say", text: `Feedback failed: ${err instanceof Error ? err.message : String(err)}` });
     });
   }
+  else if (msg.kind === "tester") {
+    const s = sess(ws);
+    const sid = s.tester?.sid ?? Math.random().toString(36).slice(2, 8);
+    const row = sanitizeTester(msg, sid, Date.now());
+    if (row) { s.tester = { n: row.tester, sid }; appendTester(row); }
+  }
   else if (msg.kind === "command") {
     handleCommand(ws, msg.text).catch((err) => {
       send(ws, { kind: "say", text: `Command failed: ${err instanceof Error ? err.message : String(err)}` });
@@ -1120,6 +1127,8 @@ wss.on("connection", (ws: WebSocket, req) => {
   ws.on("close", () => {
     connsByIp.set(ip, Math.max(0, (connsByIp.get(ip) ?? 1) - 1));
     pendingFinds.delete(ws);
+    const t = sessions.get(ws)?.tester;
+    if (t) appendTester({ ts: Date.now(), sid: t.sid, tester: t.n, ev: "close" });
     voiceHub.close(ws);
   });
   ws.on("message", (data, isBinary) => {

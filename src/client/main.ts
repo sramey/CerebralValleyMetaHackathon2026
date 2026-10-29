@@ -10,6 +10,7 @@ import { initVoice } from "./voice";
 import { Fx } from "./fx";
 import { Feel } from "./feel";
 import { Sound, buildSfx } from "./sound";
+import { createTester } from "./tester";
 import { createOnboarding, createSoundButton, plainBuildMessage } from "./onboard";
 import { Portal } from "./portal";
 import { drawCliff, drawShape, isCliff, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
@@ -448,6 +449,7 @@ function revertMood(): void {
 function onMood(m: MoodSpec | null): void {
   if (!m) { revertMood(); say("Back to normal.", "done"); return; }
   if (mood && mood.name === m.name) return; // duplicate of the mood already on
+  tester.mood(m.name);
   restoreSheets();
   applyMood(m);
   sound.play("swell");
@@ -1667,17 +1669,21 @@ function shareUrl(id: string): string {
   return `${location.origin}${location.pathname}?w=${id}`;
 }
 
+// Anonymous family-test metrics, only with ?tester=N (ADR 0033).
+const tester = createTester(urlFlags, (m) => { if (ws?.readyState === WebSocket.OPEN) { ws.send(JSON.stringify(m)); return true; } return false; });
+let inputVia: "typed" | "voice" = "typed";
+addEventListener("pagehide", () => tester.close());
 const voice = initVoice({
   bar: $("#orb-bar"), feedback: orbFeedback,
   isOpen: () => ws?.readyState === WebSocket.OPEN,
   sendJson: send, sendBinary: (b) => ws?.send(b),
-  say, submit: (text) => submitCommand(text), log,
+  say, submit: (text) => { inputVia = "voice"; try { submitCommand(text); } finally { inputVia = "typed"; } }, log,
 });
 
 function connect(): void {
   try { ws = new WebSocket(WS_URL); }
   catch { serverStatus.textContent = "Server: offline (local mods still work)"; return; }
-  ws.addEventListener("open", () => { serverStatus.textContent = `Server: connected on ${WS_URL}`; voice.onOpen(); sendWorldState();
+  ws.addEventListener("open", () => { serverStatus.textContent = `Server: connected on ${WS_URL}`; voice.onOpen(); tester.onOpen(); sendWorldState();
     if (worldParam && !worldRequested) {
       worldRequested = true;
       send({ kind: "worldLoad", id: worldParam });
@@ -1713,6 +1719,7 @@ function connect(): void {
       const shown = msg.stage === "rejected" || msg.stage === "failed" ? plainBuildMessage(msg.stage, msg.detail) : msg.detail;
       log(`${msg.stage}: ${shown}`);
       onboarding.event(msg.stage === "done" ? "built" : "working");
+      tester.stage(msg.stage, msg.command);
       const sx = buildSfx(msg.stage);
       if (sx) sound.play(sx);
       if (msg.command) builds.stage(msg.command, msg.stage, msg.detail);
@@ -1780,7 +1787,17 @@ function submitCommand(text: string): void {
   if (handleLocal(text)) { if (loader.list().length > modsBefore) onboarding.event("built"); }
   else {
     if (ws?.readyState === WebSocket.OPEN) send({ kind: "worldState", mods: loader.list().map((m) => ({ id: m.id, values: m.values })) });
-    if (ws?.readyState === WebSocket.OPEN) send({ kind: "command", text });
+    if (ws?.readyState === WebSocket.OPEN) { send({ kind: "command", text }); tester.attempt(inputVia, text); }
+    else if (ws?.readyState === WebSocket.CONNECTING) {
+      // Page just loaded and the socket is still opening: hold the command and send it the moment it is up.
+      say("Connecting to the builder…", "building");
+      const via = inputVia;
+      ws.addEventListener("open", () => {
+        sendWorldState();
+        send({ kind: "command", text });
+        tester.attempt(via, text);
+      }, { once: true });
+    }
     else say("That needs the AI server. Start it with: npm run server — local builds above still work.", "failed");
   }
 }

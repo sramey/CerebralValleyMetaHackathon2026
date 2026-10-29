@@ -196,6 +196,8 @@ export interface SketchStroke {
 /** Wire protocol: client <-> server over WebSocket (JSON text frames). */
 export type ClientMsg =
   | { kind: "command"; text: string }
+  /** Anonymous family-test metrics (ADR 0033), sent only when the page has ?tester=N. Never carries what anyone typed or said. */
+  | { kind: "tester"; n: number; ev: "open" | "typed" | "voice" | "landed" | "rejected" | "failed" | "mood" | "close"; cid?: number; mood?: string }
   | { kind: "undo"; modId: string }
   | { kind: "knob"; modId: string; knob: string; value: KnobValue }
   | { kind: "photo"; key: string; image: string; prompt: string }
