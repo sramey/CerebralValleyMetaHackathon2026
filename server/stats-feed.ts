@@ -43,6 +43,14 @@ export function statsFeed(rows: LogRow[], malformed = 0): StatsFeed {
       p90Ms: ms(s.latency.p90Ms),
     },
     mods: { distinct: s.distinctMods, edits: s.edits },
+    agent: {
+      builds: s.agent.builds,
+      callsPerBuild: s.agent.meanCalls === null ? null : Math.round(s.agent.meanCalls * 10) / 10,
+      playtests: s.agent.playtests,
+      rejected: s.agent.rejected,
+      selfCorrected: s.agent.selfCorrected,
+      selfCorrectedPct: ratio(s.agent.selfCorrected, s.agent.landed),
+    },
   };
 }
 

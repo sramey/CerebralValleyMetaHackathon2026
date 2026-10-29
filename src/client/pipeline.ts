@@ -5,6 +5,9 @@
 import "./pipeline.css";
 import type { ServerMsg } from "../contract";
 import { createStatsPanel } from "./stats-panel";
+import { isLiveBuildMsg } from "./stats-refresh";
+import { chain, stepLine } from "./agent-steps";
+import type { AgentStepMsg } from "./agent-steps";
 
 type NodeId = "voice" | "spark" | "wonder" | "esbuild" | "verifier" | "live" | "image" | "sam";
 type Slot = "route" | "write" | "compile" | "verify";
@@ -22,6 +25,7 @@ interface Lane {
   rejected: boolean;
   tool?: string;
   counted: boolean;
+  steps: AgentStepMsg[];
 }
 
 interface NodeDef { id: NodeId; name: string; model: string; role: string; col: number; row: number; slot?: Slot }
@@ -171,6 +175,26 @@ export function createPipeline(host: HTMLElement): Pipeline {
     out.className = "pl-lane-out";
     out.textContent = l.phase === "running" ? fmt(now - l.startedAt) : l.phase === "landed" ? `${l.rejected ? "fixed + " : ""}live · ${fmt(l.total ?? l.lastAt - l.startedAt)}` : l.phase === "failed" ? "rolled back" : fmt(l.total);
     el.append(title, segs, out);
+    if (l.steps.length > 0) {
+      const box = document.createElement("div");
+      box.className = "pl-steps";
+      const row = document.createElement("div");
+      row.className = "pl-chain";
+      for (const c of chain(l.steps)) {
+        const chip = document.createElement("span");
+        chip.className = `pl-chip ${c.kind}`;
+        chip.textContent = c.label;
+        row.appendChild(chip);
+      }
+      box.appendChild(row);
+      for (const s of l.steps) {
+        const d = document.createElement("div");
+        d.className = `pl-step${s.ok ? "" : " bad"}`;
+        d.textContent = stepLine(s);
+        box.appendChild(d);
+      }
+      el.appendChild(box);
+    }
     return el;
   }
 
@@ -178,7 +202,7 @@ export function createPipeline(host: HTMLElement): Pipeline {
     let l = [...lanes].reverse().find((x) => x.command === command && x.phase === "running");
     if (!l) {
       const now = performance.now();
-      l = { command, node: "spark", phase: "running", times: {}, startedAt: now, lastAt: now, slot: "route", rejected: false, counted: false };
+      l = { command, node: "spark", phase: "running", times: {}, startedAt: now, lastAt: now, slot: "route", rejected: false, counted: false, steps: [] };
       lanes.push(l);
       if (lanes.length > 24) lanes.shift();
     }
@@ -206,6 +230,12 @@ export function createPipeline(host: HTMLElement): Pipeline {
       // Name the model that actually answered on the Spark node (open weights or hosted).
       nodeEls.get("spark")!.querySelector(".pl-model")!.textContent = msg.open ? `${msg.model} (open weights)` : msg.model;
     }
+    else if (msg.kind === "agentStep") {
+      const l = laneFor(msg.command);
+      l.steps.push(msg);
+      l.tool = msg.tool;
+      lit("wonder");
+    }
     else if (msg.kind === "art") lit("image");
     else if (msg.kind === "segment") lit("sam");
     else if (msg.kind === "mod" && (msg.mod.art || msg.mod.artPending)) lit("image");
@@ -232,6 +262,9 @@ export function createPipeline(host: HTMLElement): Pipeline {
         settle(l, "other"); // tweaks, undo and questions end here without landing a mod
       }
     }
+    // A build that just settled moved the impact numbers: re-read the log now (ADR 0027),
+    // not on the next 20 s poll. Coalesced and skipped while the panel is off screen.
+    if (isLiveBuildMsg(msg)) statsPanel.refreshSoon();
     paint();
   }
 

@@ -70,18 +70,21 @@
   background: rgba(3, 5, 8, 0.78);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  padding: 16px;
+  padding: clamp(12px, 2vh, 20px);
+  overflow-y: auto;
 }
 #feedback-modal[hidden] {
   display: none;
 }
 .feedback-card {
   width: min(440px, 100%);
+  max-height: 90vh;
   border-radius: 10px;
   background: #10141b;
   border: 1px solid #2a3342;
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.65);
-  padding: 16px;
+  padding: clamp(12px, 2vh, 20px);
+  overflow-y: auto;
   display: grid;
   gap: 11px;
 }

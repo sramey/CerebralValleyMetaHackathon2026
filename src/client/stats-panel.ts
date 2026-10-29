@@ -7,12 +7,19 @@
 // never a source — when the endpoint is down it says so instead of inventing a figure.
 import "./stats-panel.css";
 import type { StatsFeed } from "../contract";
+import { refreshDelay } from "./stats-refresh";
 
 export interface StatsPanel {
   /** The strip to insert into the pipeline overlay. */
   element: HTMLElement;
-  /** Fetch fresh numbers. Called whenever the overlay opens; also polls while visible. */
+  /** Fetch fresh numbers now. Called whenever the overlay opens; also polls while visible. */
   refresh(): void;
+  /**
+   * A build just landed or failed (`isLiveBuildMsg`): read again after the settle gap, so a
+   * judge watching the pipeline sees the tile move with the build instead of 20 s later.
+   * Coalesced (one queued read at most) and skipped while the panel is off screen.
+   */
+  refreshSoon(): void;
 }
 
 /** Dev: the page is on Vite's port, the log endpoint on the game server's (VITE_WS_URL). Production: one port (ADR 0014). */
@@ -43,6 +50,13 @@ const TILES = [
   { key: "total", label: "builds logged" },
 ] as const;
 
+// Wonder's autonomy (ADR 0033): what the agent did on its own, from the same log.
+const AUTO_TILES = [
+  { key: "calls", label: "tool calls / build" },
+  { key: "selfFix", label: "self-corrected" },
+  { key: "playtests", label: "playtests run" },
+] as const;
+
 export function createStatsPanel(): StatsPanel {
   const root = document.createElement("section");
   root.className = "st-panel";
@@ -54,6 +68,9 @@ export function createStatsPanel(): StatsPanel {
     </div>
     <div class="st-tiles">
       ${TILES.map((t) => `<div class="st-tile" data-k="${t.key}"><b data-big>–</b><span>${t.label}</span><i data-sub></i></div>`).join("")}
+    </div>
+    <div class="st-tiles st-auto">
+      ${AUTO_TILES.map((t) => `<div class="st-tile" data-k="${t.key}"><b data-big>–</b><span>${t.label}</span><i data-sub></i></div>`).join("")}
     </div>`;
 
   const big = (key: string) => root.querySelector<HTMLElement>(`[data-k="${key}"] [data-big]`)!;
@@ -61,7 +78,15 @@ export function createStatsPanel(): StatsPanel {
   const note = root.querySelector<HTMLElement>("[data-note]")!;
 
   let timer = 0;
+  let pending = 0;
+  let queued = false;
+  let lastStarted: number | null = null;
   let inflight: AbortController | null = null;
+
+  /** Only read what the viewer can see: a hidden panel has zero width. */
+  function visible(): boolean {
+    return root.clientWidth > 0 && document.visibilityState === "visible";
+  }
 
   function render(feed: StatsFeed): void {
     const b = feed.builds;
@@ -75,6 +100,13 @@ export function createStatsPanel(): StatsPanel {
     sub("median").textContent = b.p90Ms === null ? "" : `p90 ${msText(b.p90Ms)}`;
     big("total").textContent = num(b.total);
     sub("total").textContent = feed.window.days > 0 ? `${feed.lines} log lines · ${feed.window.days} day${feed.window.days === 1 ? "" : "s"}` : `${feed.lines} log lines`;
+    const a = feed.agent;
+    big("calls").textContent = a.callsPerBuild === null ? "–" : String(a.callsPerBuild);
+    sub("calls").textContent = a.builds > 0 ? `over ${a.builds} agent build${a.builds === 1 ? "" : "s"}` : "no agent builds yet";
+    big("selfFix").textContent = pct(a.selfCorrectedPct);
+    sub("selfFix").textContent = a.selfCorrected > 0 ? `${a.selfCorrected} landed after a rejection` : "none needed a correction yet";
+    big("playtests").textContent = num(a.playtests);
+    sub("playtests").textContent = a.playtests > 0 ? `${a.rejected} said no, Wonder fixed them` : "Wonder has not playtested yet";
     note.dataset.state = "ok";
     note.textContent = b.total === 0 ? "build log is empty — build something" : "source: this machine's build log (GET /api/stats)";
   }
@@ -88,6 +120,7 @@ export function createStatsPanel(): StatsPanel {
     inflight?.abort();
     const control = new AbortController();
     inflight = control;
+    lastStarted = Date.now();
     const stop = window.setTimeout(() => control.abort(), TIMEOUT_MS);
     try {
       const res = await fetch(`${apiBase()}/api/stats`, { cache: "no-store", signal: control.signal });
@@ -101,19 +134,39 @@ export function createStatsPanel(): StatsPanel {
     } finally {
       window.clearTimeout(stop);
       if (inflight === control) inflight = null;
+      // A build landed while we were reading: read again once the settle gap has passed.
+      if (queued) { queued = false; refreshSoon(); }
     }
   }
 
-  /** Poll only while the overlay is actually on screen (a hidden panel has zero width). */
+  /** Wait out the settle gap, then read — unless a read is already queued. */
+  function schedule(waitMs: number): void {
+    if (pending) return;
+    pending = window.setTimeout(() => { pending = 0; void load(); }, Math.max(0, waitMs));
+  }
+
+  /** A live build message asked for numbers (see `isLiveBuildMsg`). */
+  function refreshSoon(): void {
+    if (!visible()) return; // the panel is a view: nothing to show, nothing to fetch
+    if (inflight) { queued = true; return; } // coalesce bursts into one follow-up read
+    const wait = refreshDelay(lastStarted, Date.now());
+    if (wait <= 0) void load();
+    else schedule(wait);
+  }
+
+  /** Poll only while the overlay is actually on screen. */
   function tick(): void {
-    if (root.clientWidth > 0 && document.visibilityState === "visible") void load();
+    if (visible()) void load();
   }
 
   return {
     element: root,
     refresh() {
+      if (pending) { window.clearTimeout(pending); pending = 0; }
+      queued = false;
       void load();
       if (!timer) timer = window.setInterval(tick, POLL_MS);
     },
+    refreshSoon,
   };
 }

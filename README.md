@@ -60,6 +60,10 @@ All code, docs and assets in this repo were created during the hackathon. Kickof
 
 Every build is logged as it happens. [docs/evidence/build-stats.md](docs/evidence/build-stats.md) aggregates that log (numbers only, no prompts): about 96% of AI builds land verified and hot-loaded, most on the first try, with a median of about 10 s from request to playable. Regenerate it with `npm run stats`.
 
+## Watch the agent work
+
+Wonder's tool loop (inspect_world, run_playtest, fix) is visible live in the pipeline (press P); autonomy numbers (tool calls per build, self-corrected %, playtests run) come from the build log via /api/stats (ADR 0033).
+
 ## Open weights (optional)
 
 Router: Muse Spark Open (open weights) on Baseten when `BASETEN_API_KEY` is set, otherwise hosted Muse Spark; it falls back automatically, and the orb shows which model routed each command. `npm run bench:router` compares latency (ADR 0032).
