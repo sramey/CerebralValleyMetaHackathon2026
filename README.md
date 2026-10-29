@@ -14,6 +14,40 @@ Each change is written by AI agents, **verified by a headless playtest before it
 
 Entry for the Meta Global AI Developer Hackathon (solo, Indie track). **Deadline: Wed Nov 4 2026, 9:00 PM ET.**
 
+## Run it in 5 minutes (judges start here)
+
+You need **Node 22+** and a **Meta Model API key**. Get one from the [Meta Model API docs](https://dev.meta.ai/docs/models). Calls are billed to your account through the standard billing setup, and a card must be on file before calls work. Every model the game calls at runtime is a Meta model; no other AI provider is used.
+
+```sh
+git clone https://github.com/sramey/CerebralValleyMetaHackathon2026.git
+cd CerebralValleyMetaHackathon2026
+npm install
+cp .env.example .env        # then set MODEL_API_KEY=<your Meta key>
+npm run build && npm start  # game + AI server on one port
+```
+
+Open **http://127.0.0.1:8787/** in Chrome, click the game once, and try:
+
+| Do this | What you'll see |
+|---|---|
+| Type `add a bouncing green slime` in the orb bar at the top (or **hold Shift and say it**) | Spark routes it, Wonder writes a mod, the verifier playtests it, and it hot-loads in ~10–20 s while you keep playing |
+| `make me huge` | The playtest bot finds you can't fit through the gap, the change is **rejected with a reason**, Wonder fixes it as a tool-using agent, and it lands. Watch the ghost window |
+| `make it rain`, `add trees`, `add a dragon` | Muse Image draws art on demand; a digitize placeholder shows until it arrives |
+| **Bring an object in (camera)** in the side panel: type what you're holding (e.g. `coffee mug`) and hold it up to the webcam | SAM 3.1 finds it (green box; or click the object yourself), then it's cut out, pixelated and dropped into the game as a physics prop |
+| Click any creature or object | A radial menu: bigger, smaller, front, back, remove |
+| **Share this world (copy link)** in the side panel | Copies a link that reopens this exact world for anyone to remix |
+
+Move with A/D or the arrows, jump with W or Space, shoot with X. Fresh-clone test (2026-10-29): `npm install` ~9 s, build ~3 s, first AI build landed in ~20 s.
+
+**No key?** The game still runs: built-in mods and curated demo worlds (for example `http://127.0.0.1:8787/?w=demo-bouncy`) play without any AI calls. Developing instead? `npm run dev` (Vite on :5173) plus `npm run server` (:8787) in a second terminal, then `npm test`.
+
+## Built during the event
+
+All code, docs and assets in this repo were created during the hackathon. Kickoff ended Mon Oct 26 2026, 12:24 PM ET; the first commit is `990a62c` (Tue Oct 27, 1:26 PM ET), and the full history is public. No pre-hackathon code is included.
+
+- **Open-source libraries we build on** (npm, unmodified): [PixiJS](https://pixijs.com) (rendering), [ws](https://github.com/websockets/ws) (WebSocket), [esbuild](https://esbuild.github.io) (compiles AI-written mods), [Vite](https://vite.dev) (client build), [tsx](https://tsx.is), TypeScript and [Vitest](https://vitest.dev). Everything else (the engine, simulation, mod API, verifier and playtest bot, the agent loops, the art pipeline, voice proxy, camera import, share links and spend guard) is ours, written during the event.
+- **Assets:** every sprite in the game is generated at runtime by Muse Image or cut from your own camera photo. There are no third-party images, fonts (system fonts only) or sound files.
+
 ## How it works
 
 - **Engine (built-in, never generated):** 60 fps fixed-step deterministic simulation, rendering, tile collision, physics, input, camera, particles, lighting, mod loader, verifier, and the orb UI. Runs identically in the browser and headless (Node / worker) so mods can be playtested at 100x speed before they ship.
@@ -26,13 +60,14 @@ See [docs/DESIGN.md](docs/DESIGN.md) for all locked product and architecture dec
 
 ## Current milestone: the win plan
 
-The spike passed its go/no-go early (10/10). The remaining plan, in priority order, is in [docs/WINPLAN.md](docs/WINPLAN.md): voice (done), deploy-ready server with share links (done), a visible verifier (done) with a ghost playtest, deploy with share links, a non-coder user test, then rehearsal. Work runs in parallel git worktrees ([docs/ORCHESTRATION.md](docs/ORCHESTRATION.md)).
+The spike passed its go/no-go early (10/10). The remaining plan, in priority order, is in [docs/WINPLAN.md](docs/WINPLAN.md): voice (done), a deploy-ready server with share links (done), the visible verifier with a ghost playtest (done), then parallel agent builds, visual effects, a non-coder user test, and rehearsal. Work runs in parallel git worktrees ([docs/ORCHESTRATION.md](docs/ORCHESTRATION.md)).
 
 ## Hackathon
 
 - **Event:** Meta Global AI Developer Hackathon (Cerebral Valley), solo entry, Indie track.
-- **Deadline:** Wed Nov 4 2026, 9:00 PM ET (targeting 3 PM submission: 3-min demo video, public repo, live product URL).
+- **Deadline:** Wed Nov 4 2026, 9:00 PM ET (targeting 3 PM). Submission: 3-minute demo video, this public repo, and the product running from the setup instructions above.
 - **Rubric:** Impact 30 · Meta tooling 25 · Depth 20 · Demo 25.
+- **Theme:** Push the Frontier: software that rewrites itself live, with agents verifying every change before it lands.
 - **Targeting:** Best Creative (Muse Image/Wonder), Best Agentic, Community vote, Most Viral on X.
 
 ## Tech at a glance
@@ -43,25 +78,24 @@ The spike passed its go/no-go early (10/10). The remaining plan, in priority ord
 | Client | Vite + PixiJS (WebGL), on-demand generated art with digitize placeholder while it loads |
 | Game server | Node + `ws` WebSocket on port 8787, esbuild compiles mods, verifier steps the sim headless in-process |
 | Sim core | Pure deterministic 60 Hz simulation (`src/sim`), no DOM/clock/`Math.random` — identical in browser and server verifier |
-| Models (Meta Model API, `https://api.meta.ai/v1`) | **Muse Spark `muse-spark-1.2`** routes commands · **Muse Wonder `muse-wonder-1.0`** writes/edits/fixes mods · **Muse Image** sprite sheets on demand · **SAM 3.1** sprite cutout (probe/validate; mask decode deferred) · **Muse Voice Transcribe** hold-to-talk, realtime. All text calls use `reasoning_effort: minimal` — see [ADR 0001](docs/adr/0001-reasoning-effort-minimal.md) |
+| Models (Meta Model API, `https://api.meta.ai/v1`) | **Muse Spark `muse-spark-1.2`** routes commands · **Muse Wonder `muse-wonder-1.0`** writes/edits mods and fixes rejected ones as a tool-using agent (`run_playtest`) · **Muse Image `muse-image-1.0`** sprite sheets on demand · **SAM 3.1** finds objects in camera photos · **Muse Voice Transcribe** hold-to-talk, realtime. All text calls use `reasoning_effort: minimal` — see [ADR 0001](docs/adr/0001-reasoning-effort-minimal.md) |
 
 Key decisions and why: [docs/adr/](docs/adr/README.md) · Product/architecture: [docs/DESIGN.md](docs/DESIGN.md) · Current milestone: [docs/SPIKE.md](docs/SPIKE.md) · Model notes: [docs/META-API.md](docs/META-API.md) · Build log: [progress.md](progress.md)
 
-## Run it locally
+## Developer commands
 
 ```sh
-npm install
-cp .env.example .env   # then fill in MODEL_API_KEY (Meta Model API key)
 npm run dev            # game client  -> http://127.0.0.1:5173/
 npm run server         # AI server    -> ws://127.0.0.1:8787 (second terminal)
 npm test               # vitest suite
+npx tsx scripts/deploy-check.ts   # live share-link round trip against a running server
 npx tsx scripts/spike-run.ts   # re-run the 10-command spike exam against the live server
 powershell scripts/voice-synth.ps1; npx tsx scripts/voice-check.ts 10   # live voice check (synthesized speech)
 ```
 
 **Production (one port):** `npm run build && npm start` serves the game and its WebSocket on one port (`PORT`, default 8787; `HOST=0.0.0.0` to expose). **Share this world** copies a `/?w=<id>` link that reopens the exact world for anyone to remix. Per-visitor and global spend caps plus curated demo worlds keep a public URL playable without burning Meta credit; `AI_KILL_SWITCH=1` turns all AI off. A `Dockerfile` is included (`docker run -p 8787:8787 -e MODEL_API_KEY=... -v metabuild-data:/app/data metabuild`). Env vars are listed in `.env.example`; details in [ADR 0014](docs/adr/0014-deploy-share-spend-visitor.md).
 
-Never commit keys. `.env` is gitignored. Without a key the game still runs on built-in mods; the AI server answers that it can't write mods yet.
+Never commit keys. `.env` is gitignored.
 
 ## Status (2026-10-29)
 
