@@ -287,6 +287,8 @@ export type ServerMsg =
   | { kind: "playtest"; command: string; attempt: number; ok: boolean; plain: string; seed: number; frames: number; inputs: number[]; mod: { id: string; compiled: string }; replaces?: string; ms: number }
   /** A piece of the code Wonder is writing for `command`, as it arrives (ADR 0022). */
   | { kind: "codeStream"; command: string; text: string }
+  // Which model answered the router for `command` (ADR 0032): open-weights Spark on Baseten, or hosted Spark.
+  | { kind: "routed"; command: string; model: string; open: boolean; ms: number; fellBack: boolean }
   | { kind: "timing"; command: string; ms: { route: number; write: number; compile: number; verify: number; total: number } }
   | { kind: "voiceState"; state: "ready" | "listening" | "error"; detail?: string }
   | { kind: "transcript"; text: string; final: boolean; ms?: { firstPartial: number; final: number } }

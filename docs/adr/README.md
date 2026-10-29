@@ -60,3 +60,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0026](0026-draw-to-build-level-sketcher.md) | Draw-to-build: sketch overlay → multimodal Wonder → bounded level spec | Draft |
 | [0027](0027-in-app-stats-feed.md) | In-app stats feed: GET /api/stats + impact panel in the pipeline view | Draft |
 | [0028](0028-sketch-mode-phrases-pause-side-palette.md) | Sketch mode: local phrases, frozen sim, side palette | Draft |
+| [0032](0032-open-weights-router-on-baseten.md) | Open-weights router: Muse Spark Open on Baseten with hosted fallback | Draft |
