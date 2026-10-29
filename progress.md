@@ -134,3 +134,4 @@ Original prompt: lets setup our project, get oriented, organized, and setup, see
 - 10-29 merged wt/pencil (OpenCode DeepSeek): ✏️ sketch mode, draw platforms/coins/enemies on the game, Done sends the sketch image + stroke coordinates to Wonder (multimodal), which returns a level spec compiled into a mod; deterministic stroke fallback; undo removes it. Gates 206/206.
 - 10-29 merged wt/lookpass2 (bottom): frosted overhang in snow moods, moon halo focal glow, readable daytime snowflakes; 60 fps.
 - 10-29 merged wt/depth3 (bottom): slab top faces, in-front foreground parallax, light-leaning shadows + rim light, per-mood ridge fog; 60 fps. Gates 210/210.
+- 10-29 merged wt/statpane (OpenCode DeepSeek): press P → pipeline overlay shows live impact numbers (landed %, first-try %, auto-fix saves, median time) from GET /api/stats (aggregates only, no prompt text). Gates 215/215.
