@@ -434,6 +434,9 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
       const t0 = performance.now();
       await runPool(items, limit, (item) => handleSingle(ws, item, { size: items.length, parallel: Math.min(limit, items.length) }));
       console.log(`[batch] ${items.length} builds, parallel ${Math.min(limit, items.length)}, ${Math.round(performance.now() - t0)} ms`);
+      // End marker for the whole compound command (the sub-builds each sent their own), so clients and the rehearsal harness can tell it is done.
+      const total = Math.round(performance.now() - t0);
+      send(ws, { kind: "timing", command: text, ms: { route: 0, write: 0, compile: 0, verify: 0, total } });
       return;
     }
   }
