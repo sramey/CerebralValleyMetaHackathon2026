@@ -10,10 +10,14 @@ import type { ClientMsg, KnobDefs, KnobValue, ServerMsg, WorldMod } from "../src
 import { chat, hasApiKey, loadEnv, SPARK, WONDER } from "./meta";
 import { compileMod } from "./compile";
 import { importMod, verifyMod } from "./verify";
-import { playtestMod } from "./playtest";
+import { inspectWorld, playtestMod } from "./playtest";
 import type { PlaytestWorldMod } from "./playtest";
-import { fixWithAgent } from "./agent";
-import { forceModId } from "./modid";
+import { inspectTool, playtestTool, runAgent } from "./agent";
+import type { AgentTrace } from "./agent";
+import { forceModId, modIdOf } from "./modid";
+import { runPool } from "./pool";
+import { forget, newRecent, noteCommand, noteTouched, recentText, resolvePronoun } from "./context";
+import type { Recent } from "./context";
 import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, formatManifest, ROUTER_SYSTEM, WONDER_SYSTEM } from "./prompt";
 import { logBuild, saveModSources } from "./createlog";
 import { artCachedUrl, artKeyForType, deriveSubject, generateSubjectArt, isScenerySubject, pickArtType } from "./art";
@@ -37,11 +41,11 @@ interface ManifestRec {
 }
 
 // Each connection has its own world (ADR 0014): a public server must never mix visitors' mods.
-interface Session { manifest: Map<string, ManifestRec>; ip: string }
+interface Session { manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string> }
 const sessions = new WeakMap<WebSocket, Session>();
 function sess(ws: WebSocket): Session {
   let s = sessions.get(ws);
-  if (!s) { s = { manifest: new Map(), ip: "unknown" }; sessions.set(ws, s); }
+  if (!s) { s = { manifest: new Map(), ip: "unknown", recent: newRecent(), reserved: new Set(), inflight: new Set() }; sessions.set(ws, s); }
   return s;
 }
 
@@ -96,7 +100,9 @@ async function adoptBuiltins(manifest: Map<string, ManifestRec>, ids: string[]):
 
 function worldMods(ws: WebSocket): PlaytestWorldMod[] {
   const manifest = sess(ws).manifest;
-  const listing = worldOf.get(ws) ?? [...manifest.keys()].map((id) => ({ id, values: {} }));
+  // The client's list, plus mods that landed since it was sent (parallel builds finishing under this one).
+  const reported = worldOf.get(ws);
+  const listing = reported ? [...reported, ...[...manifest.keys()].filter((id) => !reported.some((m) => m.id === id)).map((id) => ({ id, values: {} }))] : [...manifest.keys()].map((id) => ({ id, values: {} }));
   const out: PlaytestWorldMod[] = [];
   for (const m of listing) {
     let compiled = manifest.get(m.id)?.compiled ?? builtinJs.get(m.id);
@@ -409,17 +415,20 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
   if (/^\s*(add|make|create|spawn|build)\b/i.test(text) && (text.includes(",") || text.toLowerCase().includes(" and "))) {
     const items = await trySplitCompound(text);
     if (items && items.length >= 2) {
-      for (const item of items) {
-        await handleSingle(ws, item);
-      }
+      const limit = Math.max(1, Number(process.env.MAX_PARALLEL ?? 3));
+      noteCommand(sess(ws).recent, text);
+      const t0 = performance.now();
+      await runPool(items, limit, (item) => handleSingle(ws, item, { size: items.length, parallel: Math.min(limit, items.length) }));
+      console.log(`[batch] ${items.length} builds, parallel ${Math.min(limit, items.length)}, ${Math.round(performance.now() - t0)} ms`);
       return;
     }
   }
   await handleSingle(ws, text);
 }
 
-async function handleSingle(ws: WebSocket, text: string): Promise<void> {
+async function handleSingle(ws: WebSocket, text: string, batch?: { size: number; parallel: number }): Promise<void> {
   await adoptingOf.get(ws);
+  if (!batch) noteCommand(sess(ws).recent, text);
   const t0 = performance.now();
   let routeMs = 0;
   let writeMs = 0;
@@ -442,7 +451,7 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
     const r0 = performance.now();
     const res = await chat(SPARK, [
       { role: "system", content: ROUTER_SYSTEM },
-      { role: "user", content: buildRouterPrompt(command, manifestText(ws)) },
+      { role: "user", content: buildRouterPrompt(command, manifestText(ws), recentText(sess(ws).recent)) },
     ], 1024);
     routeMs = Math.round(performance.now() - r0);
     void res.ms;
@@ -470,6 +479,12 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
     return;
   }
 
+  // Pronoun memory (ADR 0016): "it"/"them" with no target means the mod touched last.
+  if (route && (route.action === "tweak" || route.action === "edit" || route.action === "undo") && (!route.target || !manifest.has(route.target))) {
+    const pid = resolvePronoun(command, sess(ws).recent);
+    if (pid && (manifest.has(pid) || route.action === "tweak")) route.target = pid;
+  }
+
   // 2. Non-generation routes.
   if (route.action === "question") {
     send(ws, { kind: "say", text: route.answer ?? "Hello! Tell me what to build — e.g. 'add a player', 'make it rain'." });
@@ -481,6 +496,7 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
     const id = route.target ?? "";
     if (id && manifest.has(id)) {
       manifest.delete(id);
+      forget(sess(ws).recent, id);
       send(ws, { kind: "removed", modId: id });
     } else {
       send(ws, { kind: "say", text: id ? `Nothing loaded with id "${id}".` : "Tell me which mod to remove." });
@@ -492,6 +508,7 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
     const rec = route.target ? manifest.get(route.target) : undefined;
     if (rec && route.knob && route.value !== undefined && route.knob in rec.knobs) {
       rec.knobs[route.knob] = { ...rec.knobs[route.knob], value: route.value };
+      noteTouched(sess(ws).recent, rec.id);
       send(ws, { kind: "tweak", modId: rec.id, knob: route.knob, value: route.value });
       send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
       logBuild({ command, route: "tweak", outcome: "tweak", modId: rec.id, knob: route.knob, value: route.value, timings: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) }, fixAttempted: false });
@@ -502,6 +519,7 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
     // let the client apply or reject it, instead of rebuilding from scratch.
     if (!rec && route.target && route.knob && typeof route.value === "number") {
       console.log(`[route] tweak forwarded to client: ${route.target}.${route.knob}=${route.value}`);
+      noteTouched(sess(ws).recent, route.target);
       send(ws, { kind: "tweak", modId: route.target, knob: route.knob, value: route.value });
       send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
       logBuild({ command, route: "tweak", outcome: "tweak", modId: route.target, knob: route.knob, value: route.value, timings: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) }, fixAttempted: false });
@@ -569,28 +587,32 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
       route = { action: "new" };
     }
   }
-  // An edit keeps its mod id (ADR 0016).
-  const keepId = (src: string) => (editRec ? forceModId(src, editRec.id) : src);
+  const session = sess(ws);
+  // An edit keeps its mod id (ADR 0016). A new mod gets an id no other mod or running build has, and keeps it across fixes.
+  let myId: string | undefined = editRec?.id;
+  const keepId = (src: string): string => {
+    if (myId) return forceModId(src, myId);
+    const wanted = modIdOf(src);
+    if (!wanted) return src;
+    let id = wanted;
+    for (let n = 2; manifest.has(id) || session.reserved.has(id); n++) id = `${wanted}-${n}`;
+    myId = id;
+    session.reserved.add(id);
+    return id === wanted ? src : forceModId(src, id);
+  };
+  session.inflight.add(command);
+  const releaseBuild = () => { session.inflight.delete(command); if (myId && !editRec) session.reserved.delete(myId); };
+  const others = [...session.inflight].filter((c) => c !== command);
+  const context = [recentText(session.recent), others.length > 0 ? `Other builds running right now for this player (do not duplicate them; choose a different mod id): ${others.map((c) => `"${c}"`).join("; ")}.` : ""].filter(Boolean).join("\n");
+  const agentTrace: AgentTrace[] = [];
+  let agentTurns = 0;
+  const agentInfo = () => (agentTurns > 0 ? { agent: { turns: agentTurns, calls: agentTrace.length, tools: agentTrace } } : {});
+  const batchInfo = batch ? { batch } : {};
   stage(ws, { kind: "stage", stage: "writing", detail: "writing the mod", command });
   let source = "";
   const sources: string[] = [];
   let fixAttempted = false;
   const routeAction = route.action;
-  try {
-    const w0 = performance.now();
-    const res = await chat(WONDER, [
-      { role: "system", content: WONDER_SYSTEM },
-      { role: "user", content: editRec ? buildEditPrompt(command, editRec.source, manifestText(ws)) : buildWonderPrompt(command, manifestText(ws)) },
-    ], 4096);
-    writeMs = Math.round(performance.now() - w0);
-    source = keepId(stripFences(res.text));
-    sources.push(source);
-  } catch (err) {
-    send(ws, { kind: "say", text: `The writer failed: ${err instanceof Error ? err.message : String(err)}` });
-    send(ws, { kind: "timing", command, ms: { route: routeMs, write: writeMs, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
-    logBuild({ command, route: routeAction, outcome: "say", timings: { route: routeMs, write: writeMs, compile: 0, verify: 0, total: Math.round(performance.now() - t0) }, fixAttempted: false });
-    return;
-  }
 
   // Results are cached by source so the agent's own playtest runs aren't repeated (or re-shown) at the end.
   const attemptCache = new Map<string, Awaited<ReturnType<typeof attemptOnce>>>();
@@ -624,6 +646,42 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
     return { ok: true as const, errors: [] as string[], js: compiled.js, res };
   };
 
+  // Wonder's tools: look at the live world, and playtest its own draft (ADR 0016).
+  const tools = () => [
+    inspectTool(() => inspectWorld(worldMods(ws), Object.fromEntries([...manifest.values()].map((m) => [m.id, m.title])))),
+    playtestTool(async (src) => {
+      const r = await attempt(keepId(stripFences(src)));
+      return { ok: r.ok, message: r.ok ? "passed: it works and the player can still play" : r.errors.join("; ").slice(0, 700) };
+    }),
+  ];
+  const onTool = (name: string) => stage(ws, { kind: "stage", stage: "writing", detail: name === "inspect_world" ? "looking at the world" : "playtesting a draft", command });
+  const TOOL_RULES = "You have two tools. inspect_world shows the live world (mods, knob values, entity types and sizes): call it only when the request depends on what already exists. run_playtest compiles, verifies and playtests your complete source in the player's world: call it with your finished source; if it passes you are done, if it fails read the reason and call it again with a corrected source. If you skip the tools, reply with ONLY the module source.";
+
+  try {
+    const w0 = performance.now();
+    const spent0 = compileMs + verifyMs;
+    const user = editRec ? buildEditPrompt(command, editRec.source, manifestText(ws), context) : buildWonderPrompt(command, manifestText(ws), context);
+    let text: string;
+    try {
+      const ag = await runAgent({ system: `${WONDER_SYSTEM}\n\n${TOOL_RULES}`, user, tools: tools(), maxCalls: 3, onTool });
+      agentTrace.push(...ag.trace);
+      agentTurns += ag.turns;
+      text = ag.text;
+    } catch (agentErr) {
+      console.log(`[agent] tool loop failed, plain completion instead: ${agentErr instanceof Error ? agentErr.message : String(agentErr)}`);
+      text = (await chat(WONDER, [{ role: "system", content: WONDER_SYSTEM }, { role: "user", content: user }], 4096)).text;
+    }
+    writeMs = Math.round(performance.now() - w0) - (compileMs + verifyMs - spent0);
+    source = keepId(stripFences(text));
+    sources.push(source);
+  } catch (err) {
+    releaseBuild();
+    send(ws, { kind: "say", text: `The writer failed: ${err instanceof Error ? err.message : String(err)}` });
+    send(ws, { kind: "timing", command, ms: { route: routeMs, write: writeMs, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
+    logBuild({ command, route: routeAction, outcome: "say", timings: { route: routeMs, write: writeMs, compile: 0, verify: 0, total: Math.round(performance.now() - t0) }, fixAttempted: false, ...agentInfo(), ...batchInfo });
+    return;
+  }
+
   stage(ws, { kind: "stage", stage: "compiling", detail: "compiling the mod", command });
   let first = await attempt(source);
   if (!first.ok) {
@@ -632,30 +690,31 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
     fixAttempted = true;
     try {
       const w0 = performance.now();
-      // Wonder as an agent: it can call run_playtest on its own candidate before answering (ADR 0013).
-      const fix = await fixWithAgent(
-        `${WONDER_SYSTEM}
-
-You have a run_playtest tool. Call it with your complete fixed source to check that the player can still play; if it fails, revise and call it again. When it passes, reply with ONLY the final module source. Be terse: change only what the failure requires, keep the mod's id and every other line as is, and write no comments.`,
-        buildFixPrompt(command, source, first.errors),
-        async (src) => {
-          const r = await attempt(keepId(stripFences(src)));
-          return { ok: r.ok, message: r.ok ? "passed: the player can still play" : r.errors.join("; ").slice(0, 600) };
-        },
-      );
-      writeMs += Math.round(performance.now() - w0);
+      const spent0 = compileMs + verifyMs;
+      const fix = await runAgent({
+        system: `${WONDER_SYSTEM}\n\n${TOOL_RULES} Be terse: change only what the failure requires, keep the mod's id and every other line as is, and write no comments.`,
+        user: buildFixPrompt(command, source, first.errors),
+        tools: tools(),
+        maxCalls: 3,
+        onTool,
+      });
+      agentTrace.push(...fix.trace);
+      agentTurns += fix.turns;
+      writeMs += Math.round(performance.now() - w0) - (compileMs + verifyMs - spent0);
       source = keepId(stripFences(fix.text));
       sources.push(source);
       stage(ws, { kind: "stage", stage: "compiling", detail: "recompiling the fix", command });
       first = await attempt(source);
     } catch (err) {
+      releaseBuild();
       send(ws, { kind: "say", text: `Fix attempt failed: ${err instanceof Error ? err.message : String(err)}` });
       send(ws, { kind: "timing", command, ms: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) } });
       const files = saveModSources(sources);
-      logBuild({ command, route: routeAction, outcome: "say", timings: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) }, fixAttempted, sourceFile: files[files.length - 1], sourceFiles: files });
+      logBuild({ command, route: routeAction, outcome: "say", timings: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) }, fixAttempted, ...agentInfo(), ...batchInfo, sourceFile: files[files.length - 1], sourceFiles: files });
       return;
     }
   }
+  releaseBuild();
 
   if (first.ok) {
     const def = first.res.def!;
@@ -684,6 +743,7 @@ You have a run_playtest tool. Call it with your complete fixed source to check t
     // renamed it anyway, drop the stale entry instead of duplicating.
     if (editRec && def.id !== editRec.id) { manifest.delete(editRec.id); send(ws, { kind: "removed", modId: editRec.id }); }
     manifest.set(def.id, rec);
+    noteTouched(session.recent, def.id);
     stage(ws, { kind: "stage", stage: "done", detail: `loaded ${def.id} (${SIM.healthFrames} frames OK)`, command });
     send(ws, { kind: "mod", mod: { id: def.id, title: def.title, source, compiled: first.js, knobs: rec.knobs, ...(art ? { art } : {}), ...(artPending ? { artPending } : {}) } });
     if (pendingArt) {
@@ -692,12 +752,12 @@ You have a run_playtest tool. Call it with your complete fixed source to check t
       send(ws, { kind: "say", text: `Drawing ${subject}...` });
     }
     const files = saveModSources(sources, def.id);
-    logBuild({ command, route: editRec ? "edit" : routeAction, outcome: editRec ? "edit" : "mod", modId: def.id, title: def.title, timings: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) }, verify: { ok: true, errors: [], msPerFrame: first.res.msPerFrame }, fixAttempted, sourceFile: files[files.length - 1], sourceFiles: files });
+    logBuild({ command, route: editRec ? "edit" : routeAction, outcome: editRec ? "edit" : "mod", modId: def.id, title: def.title, timings: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) }, verify: { ok: true, errors: [], msPerFrame: first.res.msPerFrame }, fixAttempted, ...agentInfo(), ...batchInfo, sourceFile: files[files.length - 1], sourceFiles: files });
   } else {
     stage(ws, { kind: "stage", stage: "failed", detail: first.errors.join("; ").slice(0, 500), command });
     send(ws, { kind: "say", text: `That didn't verify: ${first.errors.join("; ").slice(0, 500)}` });
     const files = saveModSources(sources);
-    logBuild({ command, route: routeAction, outcome: "failed", timings: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) }, verify: { ok: false, errors: first.errors, msPerFrame: first.msPerFrame }, fixAttempted, sourceFile: files[files.length - 1], sourceFiles: files });
+    logBuild({ command, route: routeAction, outcome: "failed", timings: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) }, verify: { ok: false, errors: first.errors, msPerFrame: first.msPerFrame }, fixAttempted, ...agentInfo(), ...batchInfo, sourceFile: files[files.length - 1], sourceFiles: files });
   }
   send(ws, { kind: "timing", command, ms: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) } });
 }
@@ -766,7 +826,11 @@ function handleMessage(ws: WebSocket, raw: string): void {
   if (voiceHub.handle(ws, msg)) return;
   const manifest = sess(ws).manifest;
   if (msg.kind === "worldState") {
-    if (Array.isArray(msg.mods)) worldOf.set(ws, msg.mods.filter((m) => m && typeof m.id === "string").map((m) => ({ id: m.id, values: m.values ?? {} })));
+    if (Array.isArray(msg.mods)) {
+      const prev = new Set((worldOf.get(ws) ?? []).map((m) => m.id));
+      worldOf.set(ws, msg.mods.filter((m) => m && typeof m.id === "string").map((m) => ({ id: m.id, values: m.values ?? {} })));
+      for (const m of worldOf.get(ws) ?? []) if (!prev.has(m.id)) noteTouched(sess(ws).recent, m.id);
+    }
     adoptingOf.set(ws, adoptBuiltins(manifest, (worldOf.get(ws) ?? []).map((m) => m.id)));
   } else if (msg.kind === "worldSave") handleWorldSave(ws, msg);
   else if (msg.kind === "worldLoad") handleWorldLoad(ws, msg);

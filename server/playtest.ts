@@ -93,3 +93,24 @@ export async function playtestMod(worldMods: PlaytestWorldMod[], candidate: { de
     ms: Math.round(performance.now() - t0), msPerFrame, skipped: ok && !v.baseline.hadPlayer,
   };
 }
+
+/** Snapshot of the player's world for Wonder's inspect_world tool: mods with knob values, entity types with a sample each. */
+export async function inspectWorld(worldMods: PlaytestWorldMod[], titles: Record<string, string> = {}): Promise<unknown> {
+  const entries: Entry[] = [];
+  for (const m of worldMods) {
+    try { entries.push({ def: await defOf(m.compiled), values: m.values ?? {} }); } catch { /* skip unloadable */ }
+  }
+  const world = buildWorld(PLAYTEST.seeds[0], entries);
+  for (let i = 0; i < 30; i++) world.step();
+  const types = new Map<string, { count: number; sample: Record<string, unknown> }>();
+  for (const e of world.entities) {
+    const t = types.get(e.type);
+    if (t) { t.count++; continue; }
+    types.set(e.type, { count: 1, sample: { owner: e.owner, x: Math.round(e.x), y: Math.round(e.y), w: Math.round(e.w), h: Math.round(e.h), solid: e.solid, gravityScale: e.gravityScale, hostile: e.data.hostile === true } });
+  }
+  return {
+    note: "y grows down; ground top is y=400",
+    mods: entries.map((e) => ({ id: e.def.id, title: titles[e.def.id] ?? e.def.title, knobs: e.values })),
+    entityTypes: [...types.entries()].slice(0, 30).map(([type, v]) => ({ type, count: v.count, ...v.sample })),
+  };
+}
