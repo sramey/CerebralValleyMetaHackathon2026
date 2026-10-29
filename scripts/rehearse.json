@@ -6,5 +6,14 @@
   "add trees",
   "make it bigger",
   "make it smaller",
-  "undo"
+  "undo",
+  { "cmd": "make this christmas themed", "mood": "christmas" },
+  { "cmd": "add some stairs", "source": "stair|step", "noArt": true },
+  { "cmd": "make it snow", "source": "snow", "noArt": true },
+  { "cmd": "turn this into daytime", "mood": "daytime" },
+  { "cmd": "give me a gun", "source": "api\.player\(", "notSource": "type:\s*[\"']ninja[\"']" },
+  { "cmd": "make it so my character can double jump", "source": "api\.player\(", "notSource": "type:\s*[\"']player[\"']\s*,\s*x:" },
+  { "cmd": "make it look like a beach", "mood": "beach" },
+  { "cmd": "put a ladder here", "noArt": true },
+  { "cmd": "let me shoot fireballs", "source": "api\.player\(|input", "noArt": true }
 ]

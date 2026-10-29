@@ -13,7 +13,19 @@ const LOG_FILE = join("logs", "rehearse.jsonl");
 export type Outcome = "landed" | "rejected" | "failed";
 export type Expectation = "landed" | "rejected-then-fixed" | "rejected";
 
-export interface RehearsalSpec {
+/** World-awareness checks (bead 4fa): what the router should have understood, not just that something landed. */
+export interface AwareChecks {
+  /** The command must restyle the world with this mood (and build no mod). */
+  mood?: string;
+  /** A regex (case-insensitive) the built mod's source must match, e.g. "api\.player\(" for a player ability. */
+  source?: string;
+  /** A regex the built mod's source must NOT match, e.g. an NPC edit when the player was meant. */
+  notSource?: string;
+  /** The built mod must not get a sprite sheet (terrain, effects, projectiles): art stays code-drawn. */
+  noArt?: boolean;
+}
+
+export interface RehearsalSpec extends AwareChecks {
   cmd: string;
   expect?: Expectation;
 }
@@ -27,6 +39,8 @@ export interface RehearsalRow {
   rejectedThenFixed: boolean;
   expect?: Expectation;
   metExpect?: boolean;
+  /** Why an aware check failed, when one did. */
+  awareMiss?: string;
 }
 
 export interface CommandSummary {
@@ -45,7 +59,21 @@ export interface CommandSummary {
 
 const EXPECTATIONS: readonly Expectation[] = ["landed", "rejected-then-fixed", "rejected"];
 
-export function metExpectation(row: Pick<RehearsalRow, "outcome" | "rejectedThenFixed">, expect: Expectation = "landed"): boolean {
+/** What one command did to the world, as seen on the wire. */
+export interface Observed { moods: string[]; sources: string[]; arts: string[] }
+
+/** Pure: the first aware check this command's observed effects fail, or undefined when all hold. */
+export function awareMiss(checks: AwareChecks, seen: Observed): string | undefined {
+  if (checks.mood !== undefined && !seen.moods.includes(checks.mood)) return `expected mood "${checks.mood}", saw ${seen.moods.join(",") || "none"}${seen.sources.length ? " + a mod build" : ""}`;
+  if (checks.mood !== undefined && seen.sources.length > 0) return "a mood command also built a mod";
+  if (checks.source !== undefined && !seen.sources.some((src) => new RegExp(checks.source!, "i").test(src))) return `mod source did not match /${checks.source}/`;
+  if (checks.notSource !== undefined && seen.sources.some((src) => new RegExp(checks.notSource!, "i").test(src))) return `mod source matched forbidden /${checks.notSource}/`;
+  if (checks.noArt && seen.arts.length > 0) return `got sprite art: ${seen.arts.join(",")}`;
+  return undefined;
+}
+
+export function metExpectation(row: Pick<RehearsalRow, "outcome" | "rejectedThenFixed"> & { awareMiss?: string }, expect: Expectation = "landed"): boolean {
+  if (row.awareMiss) return false;
   if (expect === "rejected-then-fixed") return row.outcome === "landed" && row.rejectedThenFixed;
   if (expect === "rejected") return row.outcome === "rejected";
   return row.outcome === "landed";
@@ -132,9 +160,15 @@ export function parseCommandList(parsed: unknown, only?: string): RehearsalSpec[
     if (entry && typeof entry === "object") {
       const obj = entry as { cmd?: unknown; expect?: unknown };
       if (typeof obj.cmd === "string" && obj.cmd.trim().length > 0) {
-        if (obj.expect === undefined) return { cmd: obj.cmd };
+        const checks: AwareChecks = {};
+        for (const key of ["mood", "source", "notSource"] as const) {
+          const v = (entry as Record<string, unknown>)[key];
+          if (v !== undefined) { if (typeof v !== "string" || !v) throw new Error(`rehearse.json "${key}" must be a non-empty string`); checks[key] = v; }
+        }
+        if ((entry as Record<string, unknown>).noArt === true) checks.noArt = true;
+        if (obj.expect === undefined) return { cmd: obj.cmd, ...checks };
         if (typeof obj.expect === "string" && EXPECTATIONS.includes(obj.expect as Expectation)) {
-          return { cmd: obj.cmd, expect: obj.expect as Expectation };
+          return { cmd: obj.cmd, expect: obj.expect as Expectation, ...checks };
         }
       }
     }
@@ -169,12 +203,15 @@ function runCommand(ws: WebSocket, world: WorldMod[], spec: RehearsalSpec, run: 
     let landed = false;
     let rejected = false;
     let autoFixRounds = 0;
+    const seen: Observed = { moods: [], sources: [], arts: [] };
 
     const done = (totalMs: number): void => {
       clearTimeout(timer);
       ws.off("message", onMessage);
       const outcome: Outcome = landed ? "landed" : rejected ? "rejected" : "failed";
       const rejectedThenFixed = rejected && landed;
+      const miss = awareMiss(spec, seen);
+      const hasChecks = spec.mood !== undefined || spec.source !== undefined || spec.notSource !== undefined || spec.noArt === true;
       const base: RehearsalRow = {
         run,
         command,
@@ -182,7 +219,8 @@ function runCommand(ws: WebSocket, world: WorldMod[], spec: RehearsalSpec, run: 
         totalMs,
         autoFixRounds,
         rejectedThenFixed,
-        ...(spec.expect ? { expect: spec.expect, metExpect: metExpectation({ outcome, rejectedThenFixed }, spec.expect) } : {}),
+        ...(spec.expect || hasChecks ? { expect: spec.expect ?? "landed", metExpect: metExpectation({ outcome, rejectedThenFixed, awareMiss: miss }, spec.expect ?? "landed") } : {}),
+        ...(miss ? { awareMiss: miss } : {}),
       };
       resolveCommand(base);
     };
@@ -198,8 +236,14 @@ function runCommand(ws: WebSocket, world: WorldMod[], spec: RehearsalSpec, run: 
       } catch {
         return;
       }
-      if (msg.kind === "mod") {
+      if (msg.kind === "mood") {
+        if (msg.mood) { landed = true; seen.moods.push(msg.mood.name); }
+      } else if (msg.kind === "art") {
+        seen.arts.push(msg.art.key);
+      } else if (msg.kind === "mod") {
         landed = true;
+        seen.sources.push(msg.mod.source);
+        if (msg.mod.art) seen.arts.push(msg.mod.art.key);
         const values = Object.fromEntries(Object.entries(msg.mod.knobs).map(([knob, def]) => [knob, def.value]));
         const index = world.findIndex((mod) => mod.id === msg.mod.id);
         if (index < 0) world.push({ id: msg.mod.id, values });
@@ -276,7 +320,7 @@ async function main(): Promise<void> {
         const row = await runCommand(ws, world, spec, run);
         rows.push(row);
         appendFileSync(join(process.cwd(), LOG_FILE), `${JSON.stringify({ ...row, at: new Date().toISOString() })}\n`);
-        const expectNote = row.expect ? `  [expect ${row.expect}: ${row.metExpect ? "pass" : "miss"}]` : "";
+        const expectNote = row.expect ? `  [expect ${row.expect}: ${row.metExpect ? "pass" : "miss"}${row.awareMiss ? ` - ${row.awareMiss}` : ""}]` : "";
         console.log(`run ${run}/${options.runs}  ${row.outcome.padEnd(8)} ${String(row.totalMs).padStart(7)} ms  ${spec.cmd}${expectNote}`);
       }
     } finally {
