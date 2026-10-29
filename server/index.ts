@@ -51,7 +51,7 @@ interface ManifestRec {
 }
 
 // Each connection has its own world (ADR 0014): a public server must never mix visitors' mods.
-interface Session { /** Family-test tester index and session id once the page said ?tester=N (ADR 0034). */ tester?: { n: number; sid: string }; manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string>; mood?: MoodSpec; moodMods?: Set<string>; restyled?: Record<string, string> }
+interface Session { /** Family-test tester index and session id once the page said ?tester=N (ADR 0034). */ tester?: { n: number; sid: string }; manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string>; mood?: MoodSpec; moodMods?: Set<string>; /** Level mods a sketch replaced, by the sketch mod id, so undo can put them back (bug j2t). */ levelStash?: Map<string, ManifestRec[]>; restyled?: Record<string, string> }
 const sessions = new WeakMap<WebSocket, Session>();
 function sess(ws: WebSocket): Session {
   let s = sessions.get(ws);
@@ -378,6 +378,8 @@ async function handleSketchMessage(ws: WebSocket, msg: Extract<ClientMsg, { kind
   const command = "✏️ sketched level";
   if (!spend(ws, "build")) return;
   const manifest = sess(ws).manifest;
+  await adoptingOf.get(ws);
+  await adoptBuiltins(manifest, ["ground"]); // so the starter ground can be stashed and restored
   const timings: DeliverTimings = { route: 0, write: 0, compile: 0, verify: 0 };
   const deliver = async (source: string): Promise<{ ok: boolean; errors: string[] }> => {
     stage(ws, { kind: "stage", stage: "compiling", detail: "building your level", command });
@@ -391,6 +393,11 @@ async function handleSketchMessage(ws: WebSocket, msg: Extract<ClientMsg, { kind
     timings.verify += Math.round(performance.now() - v0);
     if (!verified.ok || !verified.def) return { ok: false, errors: verified.errors.length > 0 ? verified.errors : ["verification failed"] };
     const def = verified.def;
+    // A sketched level REPLACES the level: the starter ground and any earlier sketch come out (undo puts them back).
+    const stash = (sess(ws).levelStash ??= new Map());
+    const replaced = [...manifest.values()].filter((m) => m.id !== def.id && (m.id === "ground" || m.id.startsWith("sketch-")));
+    if (replaced.length > 0 && !stash.has(def.id)) stash.set(def.id, replaced);
+    for (const m of replaced) { manifest.delete(m.id); send(ws, { kind: "removed", modId: m.id }); }
     manifest.set(def.id, { id: def.id, title: def.title, source, compiled: compiled.js, knobs: def.knobs ?? {} });
     noteTouched(sess(ws).recent, def.id);
     stage(ws, { kind: "stage", stage: "done", detail: `loaded ${def.id} (${SIM.healthFrames} frames OK)`, command });
@@ -1094,6 +1101,15 @@ function handleMessage(ws: WebSocket, raw: string): void {
     } else if (manifest.has(msg.modId)) {
       manifest.delete(msg.modId);
       send(ws, { kind: "removed", modId: msg.modId });
+      // Undoing a sketched level brings back the level it replaced (bug j2t).
+      const back = sess(ws).levelStash?.get(msg.modId);
+      if (back) {
+        sess(ws).levelStash!.delete(msg.modId);
+        for (const m of back) {
+          manifest.set(m.id, m);
+          send(ws, { kind: "mod", mod: { id: m.id, title: m.title, source: m.source, compiled: m.compiled, knobs: m.knobs } });
+        }
+      }
     } else {
       send(ws, { kind: "say", text: `Nothing loaded with id "${msg.modId}".` });
     }
