@@ -44,6 +44,7 @@ export function initVoice(deps: VoiceDeps) {
   let failsafe: ReturnType<typeof setTimeout> | null = null;
   let mic: Promise<boolean> | null = null;
   let micReady = false;
+  let micError = "";
   let ds: Downsampler | null = null;
   const stats: VoiceStat[] = [];
 
@@ -86,7 +87,8 @@ export function initVoice(deps: VoiceDeps) {
         node.port.onmessage = (ev: MessageEvent<Float32Array>) => onChunk(ev.data);
         micReady = true;
         return true;
-      } catch {
+      } catch (err) {
+        micError = err instanceof Error ? err.message : String(err);
         mic = null; // let a later press retry (e.g. after the user allows the mic)
         return false;
       }
@@ -197,6 +199,7 @@ export function initVoice(deps: VoiceDeps) {
     release: () => release("api"),
     stats,
     get phase() { return phase; },
+    get mic() { return micReady ? "ready" : micError || "pending"; },
   };
 
   return { onServerMsg, onOpen: warm };
