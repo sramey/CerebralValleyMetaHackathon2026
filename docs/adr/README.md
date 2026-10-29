@@ -44,3 +44,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0010](0010-camera-object-prototype.md) | Camera object prototype: SAM box + client flood-fill cutout, template mod | Draft |
 | [0011](0011-combat-targeting-and-health.md) | Combat targeting and health: opt-in hostiles/heroes, 100 HP + damage, exact-match routing | Draft |
 | [0012](0012-voice-hold-to-talk.md) | Voice: hold-to-talk proxied through our server to a pre-warmed Muse Voice Transcribe session | Draft |
+| [0014](0014-deploy-share-spend-visitor.md) | Deploy: single-port server, per-session worlds, share links, spend guard, visitor mode | Draft |

@@ -26,7 +26,7 @@ See [docs/DESIGN.md](docs/DESIGN.md) for all locked product and architecture dec
 
 ## Current milestone: the win plan
 
-The spike passed its go/no-go early (10/10). The remaining plan, in priority order, is in [docs/WINPLAN.md](docs/WINPLAN.md): voice (done), a visible verifier with a ghost playtest, deploy with share links, a non-coder user test, then rehearsal. Work runs in parallel git worktrees ([docs/ORCHESTRATION.md](docs/ORCHESTRATION.md)).
+The spike passed its go/no-go early (10/10). The remaining plan, in priority order, is in [docs/WINPLAN.md](docs/WINPLAN.md): voice (done), deploy-ready server with share links (done), a visible verifier with a ghost playtest, deploy with share links, a non-coder user test, then rehearsal. Work runs in parallel git worktrees ([docs/ORCHESTRATION.md](docs/ORCHESTRATION.md)).
 
 ## Hackathon
 
@@ -59,6 +59,8 @@ npx tsx scripts/spike-run.ts   # re-run the 10-command spike exam against the li
 powershell scripts/voice-synth.ps1; npx tsx scripts/voice-check.ts 10   # live voice check (synthesized speech)
 ```
 
+**Production (one port):** `npm run build && npm start` serves the game and its WebSocket on one port (`PORT`, default 8787; `HOST=0.0.0.0` to expose). **Share this world** copies a `/?w=<id>` link that reopens the exact world for anyone to remix. Per-visitor and global spend caps plus curated demo worlds keep a public URL playable without burning Meta credit; `AI_KILL_SWITCH=1` turns all AI off. A `Dockerfile` is included (`docker run -p 8787:8787 -e MODEL_API_KEY=... -v metabuild-data:/app/data metabuild`). Env vars are listed in `.env.example`; details in [ADR 0014](docs/adr/0014-deploy-share-spend-visitor.md).
+
 Never commit keys. `.env` is gitignored. Without a key the game still runs on built-in mods; the AI server answers that it can't write mods yet.
 
 ## Status (2026-10-29)
@@ -72,7 +74,8 @@ Never commit keys. `.env` is gitignored. Without a key the game still runs on bu
 - **Voice:** hold Shift and talk. 10/10 live runs transcribed correctly in the worktree check, 4/4 on main; release → final text p50 ~126 ms ([ADR 0012](docs/adr/0012-voice-hold-to-talk.md)).
 - **Camera import:** hold up a real object; SAM 3.1 finds it (~1.2 s), it's cut out, pixelated and dropped into the game as a physics prop ([ADR 0010](docs/adr/0010-camera-object-prototype.md)).
 - **Combat and health:** opt-in hostiles and heroes, 100 HP, health bars, player respawn ([ADR 0011](docs/adr/0011-combat-targeting-and-health.md)). Clickable objects with a radial menu.
-- Tests: 41 passing (`npm test`), typecheck clean, production build green.
+- **Share links, spend guard, visitor mode:** a live check builds 3 AI mods, saves the world, reopens the link in a fresh session with byte-identical code, and remixes it (`scripts/deploy-check.ts`, 8/8 on main).
+- Tests: 59 passing (`npm test`), typecheck clean, production build green.
 
 **Art pipeline: first proof (2026-10-27)**
 
@@ -81,5 +84,5 @@ Never commit keys. `.env` is gitignored. Without a key the game still runs on bu
 **Not built yet**
 - Visible verifier: "can you still play?" bot playtest, ghost playtest window, agentic auto-fix (in progress).
 - Endless level generator (cut for the hackathon).
-- Hosting/share links, session limits, worker-thread verifier isolation ([ADR 0003](docs/adr/0003-verifier-in-process-empty-world.md)).
+- Public hosting (deploy-ready; host not chosen yet), worker-thread verifier isolation ([ADR 0003](docs/adr/0003-verifier-in-process-empty-world.md)).
 - Known nit: relative tweaks ("jump higher") sometimes build a new mod instead of instantly tweaking a knob ([ADR 0005](docs/adr/0005-tweak-edit-fallbacks.md)).

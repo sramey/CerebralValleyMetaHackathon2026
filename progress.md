@@ -87,3 +87,10 @@ Original prompt: lets setup our project, get oriented, organized, and setup, see
 - Rough: the first press asks for mic permission and is a throwaway; the mic stays open after that; gamepad hold untested live. Deploy must cap warm voice sessions (one per connected client; Meta limit 256 concurrent).
 - Gates on main after merge: tsc clean, 41/41 tests, build green.
 - Starter level will gain a low overhang (verifier lease) so "make me huge" fails honestly.
+
+## Status update — 2026-10-29 (deploy-ready merged)
+
+- Deploy merged (bead f9m, ADR 0014): `npm run build && npm start` serves dist + WebSocket on one port with /healthz; production client uses the page origin (wss on HTTPS). The world manifest is now **per connection** (it was global and shared by every visitor). Share links save only server-verified mods; demo worlds ship in `worlds/`.
+- Spend guard: per-IP per-UTC-day caps (20 builds, 8 images, 6 SAM, 8 voice min) and global caps (400 builds, 120 images, 100 SAM, 120 voice min); warm voice sessions capped at 30, freed after 2 min idle; `AI_KILL_SWITCH=1`; no key → visitor mode with demo worlds.
+- Verified on main: tsc clean, 59/59 tests, build green; production server on a spare port served /, /?w=demo-bouncy and /healthz, rejected a `..%2f.env` traversal (404), and `scripts/deploy-check.ts` passed 8/8 live (3 AI mods built, saved, reopened byte-identical, remixed, isolated per visitor).
+- Not done: docker build (Docker daemon not running locally). Worlds, counters and runtime art live in DATA_DIR / public/art/gen and need a volume on the host. Going live = bead 2m4 (owner picks host).
