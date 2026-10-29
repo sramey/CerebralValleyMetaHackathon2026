@@ -32,4 +32,4 @@ Post a camera-import clip on X **now**, a voice clip when voice lands, the "it c
 78 AI builds → 74 landed (95%), median 9.4 s, p90 26.5 s, 9 saved by auto-fix. The 4 failures were all big asks (boss arena, card upgrades).
 
 ## Judging facts (CV office hours, 2026-10-29)
-Judges review the repo, the 3-minute video and the live product; a hosted version is optional. They run the integration with their own key, so the README setup must work cold. Building started when kickoff ended, Oct 26 12:24 PM ET. Keep keys out of the repo.
+Judges review the repo, the 3-minute video and the live product; a hosted version is optional. **Every judging stage requires a working demo that runs from the repo setup instructions** (CV #judging, 10-28). They run the integration with their own key, so the README setup must work cold. Building started when kickoff ended, Oct 26 12:24 PM ET. Keep keys out of the repo.
