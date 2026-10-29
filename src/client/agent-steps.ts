@@ -1,4 +1,4 @@
-// Wonder's tool loop as a short readable chain (ADR 0034): "inspect -> write -> playtest -> rejected -> fix -> ...".
+// Wonder's tool loop as a short readable chain (ADR 0033): "inspect -> write -> playtest -> rejected -> fix -> ...".
 // Pure, so the sequence a viewer reads is unit-tested rather than eyeballed.
 import type { ServerMsg } from "../contract";
 

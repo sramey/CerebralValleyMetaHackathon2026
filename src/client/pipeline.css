@@ -96,7 +96,7 @@
 }
 .pl-code:empty { display: none; }
 .pl-code.live { color: rgba(255, 224, 150, .95); }
-/* Wonder's tool loop inside a build lane (ADR 0034). Sized to read on a 1080p recording. */
+/* Wonder's tool loop inside a build lane (ADR 0033). Sized to read on a 1080p recording. */
 .pl-steps { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .pl-chain { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .pl-chip { padding: 3px 10px; border-radius: 999px; font: 700 clamp(13px, 1.5vh, 16px)/1.2 ui-monospace, Consolas, monospace; background: rgba(255, 255, 255, .09); }

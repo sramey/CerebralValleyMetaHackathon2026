@@ -21,7 +21,7 @@ export interface AgentTool {
 
 export interface AgentTrace { name: string; ms: number; ok?: boolean }
 
-/** One finished tool call, as the viewer sees it in the pipeline lane (ADR 0034). */
+/** One finished tool call, as the viewer sees it in the pipeline lane (ADR 0033). */
 export interface AgentStep { n: number; tool: string; args: string; result: string; ok: boolean; ms: number }
 
 /** One line about a tool call's arguments: the source size for a playtest, nothing for a look. */
@@ -61,7 +61,7 @@ export interface AgentOptions {
   model?: string;
   /** Called before each tool runs (for stage updates). */
   onTool?: (name: string) => void;
-  /** Called after each tool finishes, with a one-line summary (ADR 0034). */
+  /** Called after each tool finishes, with a one-line summary (ADR 0033). */
   onStep?: (step: AgentStep) => void;
   /** If set, the model is streamed (stream: true) and every piece of text or tool-call source is passed here as it arrives (ADR 0022). */
   onText?: (chunk: string) => void;

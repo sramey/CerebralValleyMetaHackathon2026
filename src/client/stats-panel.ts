@@ -50,7 +50,7 @@ const TILES = [
   { key: "total", label: "builds logged" },
 ] as const;
 
-// Wonder's autonomy (ADR 0034): what the agent did on its own, from the same log.
+// Wonder's autonomy (ADR 0033): what the agent did on its own, from the same log.
 const AUTO_TILES = [
   { key: "calls", label: "tool calls / build" },
   { key: "selfFix", label: "self-corrected" },

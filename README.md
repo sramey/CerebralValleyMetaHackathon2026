@@ -60,6 +60,10 @@ All code, docs and assets in this repo were created during the hackathon. Kickof
 
 Every build is logged as it happens. [docs/evidence/build-stats.md](docs/evidence/build-stats.md) aggregates that log (numbers only, no prompts): about 96% of AI builds land verified and hot-loaded, most on the first try, with a median of about 10 s from request to playable. Regenerate it with `npm run stats`.
 
+## Testing with non-coders
+
+[docs/USER-TEST.md](docs/USER-TEST.md) is a one-page facilitator script. Open the game with `?tester=N` (an anonymous number, never a name) and run `npm run testers` afterwards: it writes aggregates only to docs/evidence/user-test.md.
+
 ## Watch the agent work
 
 Wonder's tool loop (inspect_world, run_playtest, fix) is visible live in the pipeline (press P); autonomy numbers (tool calls per build, self-corrected %, playtests run) come from the build log via /api/stats (ADR 0033).
