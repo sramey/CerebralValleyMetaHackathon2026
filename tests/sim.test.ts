@@ -10,6 +10,7 @@ import rainMod from "../src/mods/rain";
 import coinsMod from "../src/mods/coins";
 import movingPlatformMod from "../src/mods/platform-moving";
 import fireArrowMod from "../src/mods/fire-arrow";
+import gunMod from "../src/mods/gun";
 
 function run(seed: number, steps: number) {
   const w = new World(seed);
@@ -54,7 +55,7 @@ describe("sim", () => {
     l.unload("player");
     expect(w.entities).toHaveLength(0);
   });
-  it.each([playerMod, groundMod, enemyMod, rainMod, coinsMod, movingPlatformMod, fireArrowMod])(
+  it.each([playerMod, groundMod, enemyMod, rainMod, coinsMod, movingPlatformMod, fireArrowMod, gunMod])(
     "sample mod $id passes its test()",
     (mod) => {
       const r = runModTest(mod);
