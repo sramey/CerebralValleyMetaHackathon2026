@@ -445,7 +445,10 @@ async function handleSketchMessage(ws: WebSocket, msg: Extract<ClientMsg, { kind
       return;
     }
   }
-  if (!spend(ws, "build")) return;
+  if (!spend(ws, "build")) {
+    send(ws, { kind: "stage", stage: "done", detail: "feedback saved" });
+    return;
+  }
   const manifest = sess(ws).manifest;
   await adoptingOf.get(ws);
   await adoptBuiltins(manifest, ["ground"]); // so the starter ground can be stashed and restored

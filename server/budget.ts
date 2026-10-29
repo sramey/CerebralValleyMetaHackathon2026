@@ -15,6 +15,13 @@ export type Verdict =
   | { ok: true }
   | { ok: false; scope: "killswitch" | "session" | "global"; message: string };
 
+/** Local loopback IPs never count against visitor session caps in dev (bead hvd). */
+export function isLocalIp(ip: string): boolean {
+  if (!ip) return false;
+  const clean = ip.replace(/^::ffff:/, "");
+  return clean === "127.0.0.1" || clean === "::1" || clean === "localhost" || clean === "unknown";
+}
+
 const WHAT: Record<Kind, string> = {
   build: "AI builds",
   image: "AI art",
@@ -145,6 +152,11 @@ export class Budget {
     this.roll();
     if (this.killSwitch()) {
       return { ok: false, scope: "killswitch", message: "The AI is switched off right now, but you can still play and try the demo worlds." };
+    }
+    // Development loopback: local developer & family playtesting on localhost
+    // must never be locked out with session build caps (bead hvd, ADR 0014).
+    if (isLocalIp(who) && process.env.NODE_ENV !== "production") {
+      return { ok: true };
     }
     const s = (this.used.sessions[who] ??= zero());
     if (s[kind] + amount > this.session[kind]) {

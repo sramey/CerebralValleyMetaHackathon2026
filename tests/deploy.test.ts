@@ -4,7 +4,7 @@ import type { Server } from "node:http";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Budget, DEFAULT_SESSION, readLimits } from "../server/budget";
+import { Budget, DEFAULT_SESSION, isLocalIp, readLimits } from "../server/budget";
 import { WorldStore, isWorldId, parseWorld, restyledForWorld, sanitizeValues, snapshotWorld } from "../server/worlds";
 import { moodSpecFor } from "../server/mood";
 import type { SessionMod } from "../server/worlds";
@@ -81,6 +81,21 @@ describe("budget", () => {
     expect(l.session.build).toBe(3);
     expect(l.global.voice).toBe(120);
     expect(l.session.image).toBe(DEFAULT_SESSION.image);
+  });
+
+  it("bypasses visitor session limit for localhost loopback in development (bead hvd)", () => {
+    expect(isLocalIp("127.0.0.1")).toBe(true);
+    expect(isLocalIp("::1")).toBe(true);
+    expect(isLocalIp("::ffff:127.0.0.1")).toBe(true);
+    expect(isLocalIp("203.0.113.1")).toBe(false);
+
+    const b = new Budget({ session: lim(1), global: lim(100) });
+    expect(b.take("203.0.113.1", "build").ok).toBe(true);
+    expect(b.take("203.0.113.1", "build").ok).toBe(false);
+
+    expect(b.take("127.0.0.1", "build").ok).toBe(true);
+    expect(b.take("127.0.0.1", "build").ok).toBe(true);
+    expect(b.take("127.0.0.1", "build").ok).toBe(true);
   });
 });
 
