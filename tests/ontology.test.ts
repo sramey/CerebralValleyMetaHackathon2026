@@ -172,4 +172,13 @@ describe("entity ontology & art invariants (x9i, 98v, olm)", () => {
     const text = formatManifest([{ id: "holiday", title: "Holiday", knobs: {}, entities: extracted }]);
     expect(text).toContain("entities=[snow-ground:terrain, christmas-gift:prop]");
   });
+
+  it("deriveSubject strips quantifiers ('some stairs' -> 'stairs') and pickArtType rejects stairs/walls", () => {
+    expect(deriveSubject("Add some stairs.", "stair")).toBe("stairs");
+    expect(deriveSubject("add a few trees", "tree")).toBe("trees");
+    expect(deriveSubject("spawn many blocks", "block")).toBe("blocks");
+    expect(pickArtType('api.spawn({ type: "stair", x: 200, y: 380, w: 30, h: 20, solid: true, gravityScale: 0 })')).toBeNull();
+    expect(pickArtType('api.spawn({ type: "wall", x: 200, y: 380, w: 30, h: 100, solid: true, gravityScale: 0 })')).toBeNull();
+  });
+
 });

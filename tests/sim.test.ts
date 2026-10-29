@@ -181,4 +181,55 @@ describe("sim", () => {
     expect(w.entities.some((e) => e.id === junkIds[junkIds.length - 1])).toBe(true);
     expect(w.entities.filter((e) => e.type === "junk").length).toBeLessThan(600);
   });
+
+  it("auto-step-up: smooth horizontal movement on low stair steps (<= 28px) without zeroing vx (cjj)", () => {
+    const w = new World(42);
+    // Ground at y=400, player height=40 standing at y=360 (y+h=400), onGround=true
+    w.spawn({ type: "ground", x: 0, y: 400, w: 800, h: 40, solid: true, gravityScale: 0 }, "level");
+    const p = w.spawn({ type: "player", x: 100, y: 360, w: 26, h: 40, solid: true, gravityScale: 1 }, "level");
+    p.onGround = true;
+    p.vx = 120; // moving right
+
+    // A low stair step 20px high (top at y=380, h=20, base at y=400) directly ahead at x=101
+    const step = w.spawn({ type: "stair", x: 101, y: 380, w: 40, h: 20, solid: true, gravityScale: 0 }, "level");
+
+    w.step();
+    // Player should have stepped up onto the step (y = 380 - 40 = 340) with vx preserved
+    expect(p.y).toBeCloseTo(340, 0);
+    expect(p.onGround).toBe(true);
+    expect(p.vx).toBe(120);
+    expect(p.x).toBeGreaterThan(100);
+  });
+
+  it("tall walls (> 28px) block horizontal movement and zero vx (cjj)", () => {
+    const w = new World(42);
+    w.spawn({ type: "ground", x: 0, y: 400, w: 800, h: 40, solid: true, gravityScale: 0 }, "level");
+    const p = w.spawn({ type: "player", x: 100, y: 360, w: 26, h: 40, solid: true, gravityScale: 1 }, "level");
+    p.onGround = true;
+    p.vx = 120;
+
+    // A tall wall 50px high (top at y=350, step height = 400 - 350 = 50 > 28)
+    w.spawn({ type: "wall", x: 101, y: 350, w: 40, h: 50, solid: true, gravityScale: 0 }, "level");
+
+    w.step();
+    expect(p.vx).toBe(0);
+    expect(p.x).toBe(101 - p.w); // clamped to wall left face
+  });
+
+  it("overhead ceiling blocks step-up when head space is obstructed (cjj)", () => {
+    const w = new World(42);
+    w.spawn({ type: "ground", x: 0, y: 400, w: 800, h: 40, solid: true, gravityScale: 0 }, "level");
+    const p = w.spawn({ type: "player", x: 100, y: 360, w: 26, h: 40, solid: true, gravityScale: 1 }, "level");
+    p.onGround = true;
+    p.vx = 120;
+
+    // Step of 20px (top y=380), but with an obstacle at y=330 (steppedBox would be y=340..380, overlapping y=330..350)
+    w.spawn({ type: "stair", x: 101, y: 380, w: 40, h: 20, solid: true, gravityScale: 0 }, "level");
+    w.spawn({ type: "ceiling-block", x: 101, y: 330, w: 40, h: 20, solid: true, gravityScale: 0 }, "level");
+
+    w.step();
+    expect(p.vx).toBe(0);
+    expect(p.x).toBe(101 - p.w);
+  });
+
 });

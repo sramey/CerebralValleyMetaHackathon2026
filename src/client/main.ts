@@ -9,7 +9,7 @@ import type { ClientMsg, Entity, KnobValue, ModDefinition, MoodSpec, ServerMsg }
 import { initVoice } from "./voice";
 import { Fx } from "./fx";
 import { Portal } from "./portal";
-import { drawCliff, drawShape, isCliff, kindOf, registerLook, setGrade } from "./shapes";
+import { drawCliff, drawShape, isCliff, kindOf, registerLook, scale, setGrade } from "./shapes";
 import { ModLoader } from "../sim/loader";
 import { createGhost } from "./ghost";
 import { createPipeline } from "./pipeline";
@@ -237,6 +237,23 @@ function drawCoin(e: Entity, x: number, y: number): void {
   gfx.ellipse(cx - rx * 0.2, cy - r * 0.25, Math.max(1, rx * 0.35), Math.max(1, r * 0.3)).fill(SHINE);
 }
 
+function drawStair(e: Entity, x: number, y: number): void {
+  const c = e.color || 0x7a8a99;
+  gfx.rect(x, y, e.w, e.h).fill(c);
+  const lip = Math.min(6, Math.max(2, Math.floor(e.h * 0.2)));
+  gfx.rect(x, y, e.w, lip).fill(scale(c, 1.35));
+  const shadow = Math.max(2, Math.floor(lip * 0.7));
+  gfx.rect(x, y + e.h - shadow, e.w, shadow).fill(scale(c, 0.6));
+  const seamW = 24;
+  const count = Math.floor(e.w / seamW);
+  for (let k = 1; k < count; k++) {
+    const sx = x + k * seamW;
+    gfx.rect(sx, y + lip, 1.5, e.h - lip - shadow).fill({ color: scale(c, 0.5), alpha: 0.7 });
+  }
+  const snowy = mood?.ambient === "snow" || mood?.name === "christmas" || mood?.name === "snowy" || e.type.toLowerCase().includes("snow") || e.type.toLowerCase().includes("ice");
+  if (snowy) gfx.rect(x, y, e.w, Math.max(2, lip * 0.6)).fill(0xffffff);
+}
+
 function drawGround(e: Entity, x: number, y: number): void {
   gfx.rect(x, y, e.w, e.h).fill(e.color);
   const gh = Math.min(8, Math.max(3, e.h * 0.22));
@@ -318,6 +335,7 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   }
   if (t.indexOf("coin") >= 0) { drawCoin(e, x, y); return; }
   if (t.indexOf("ground") >= 0 || t.indexOf("platform") >= 0) { drawGround(e, x, y); return; }
+  if (t.indexOf("stair") >= 0 || t.indexOf("step") >= 0 || t.indexOf("wall") >= 0 || t.indexOf("block") >= 0 || t.indexOf("brick") >= 0 || t.indexOf("pillar") >= 0 || t.indexOf("ledge") >= 0 || t.indexOf("ramp") >= 0 || entityKind(e) === "terrain") { drawStair(e, x, y); return; }
   if (t.indexOf("projectile") >= 0 || t.indexOf("arrow") >= 0 || t.indexOf("fire") >= 0 || entityKind(e) === "projectile") { drawShot(e, x, y); return; }
   if (t.indexOf("slime") >= 0 || t.indexOf("gel") >= 0 || t.indexOf("enemy") >= 0 ||
     t.indexOf("walker") >= 0 || t.indexOf("turtle") >= 0) { drawBlob(e, x, y); return; }
@@ -634,7 +652,7 @@ function render(): void {
     const subjectKey = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0];
     const frame = frames.length === 1 ? frames[0]
       : (subjectKey !== undefined && scenerySubjects.has(subjectKey)) || entityKind(e) === "prop" ? frames[e.id % frames.length]
-      : !e.onGround && e.gravityScale === 0 && frames.length >= 2 ? frames[Math.floor(world.tickCount / 5) % frames.length]
+      : !e.solid && !e.onGround && e.gravityScale === 0 && frames.length >= 2 ? frames[Math.floor(world.tickCount / 5) % frames.length]
       : frames.length >= 4 && !e.onGround ? frames[3]
       : moving ? frames[1 + Math.floor(world.tickCount / 8) % Math.min(2, frames.length - 1)]
       : frames[0];
