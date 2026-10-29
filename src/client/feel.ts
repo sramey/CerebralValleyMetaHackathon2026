@@ -12,7 +12,8 @@ export type FeelEvent =
   | { kind: "step" }
   | { kind: "coin" }
   | { kind: "hit"; damage: number; self: boolean }
-  | { kind: "shoot" };
+  | { kind: "shoot" }
+  | { kind: "die" };
 
 const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
 
@@ -49,6 +50,7 @@ export class FollowCam {
 
 interface Track {
   seen: number;
+  type: string;
   x: number;
   y: number;
   w: number;
@@ -96,6 +98,8 @@ export class Feel {
   private g = new Graphics();
   private shots = new Set<number>();
   private shotsPrimed = false;
+  /** Last frame's player and projectile positions: something that vanishes next to one of them was knocked out. */
+  private hitters: { x: number; y: number }[] = [];
 
   /** `kick` nudges the screen shake (Fx owns the shake); impacts below the "big" threshold never call it. */
   constructor(stage: Container, private kick: (amp: number) => void, private shakeOn = true, private emit: (e: FeelEvent) => void = () => {}) {
@@ -153,7 +157,7 @@ export class Feel {
       if (e.solid || e.gravityScale <= 0 || e.w > TRACKED_MAX_W) continue;
       let t = this.tracks.get(e.id);
       if (!t) {
-        t = { seen: f, x: e.x, y: e.y, w: e.w, h: e.h, vy: e.vy, onGround: e.onGround, health: e.health, stride: 0, sx: 1, sy: 1, svx: 0, svy: 0, flash: 0 };
+        t = { seen: f, type, x: e.x, y: e.y, w: e.w, h: e.h, vy: e.vy, onGround: e.onGround, health: e.health, stride: 0, sx: 1, sy: 1, svx: 0, svy: 0, flash: 0 };
         this.tracks.set(e.id, t);
         continue;
       }
@@ -202,7 +206,20 @@ export class Feel {
         this.emit({ kind: "coin" });
       }
     }
-    for (const [id, t] of this.tracks) if (t.seen !== f) this.tracks.delete(id);
+    for (const [id, t] of this.tracks) {
+      if (t.seen === f) continue;
+      this.tracks.delete(id);
+      // A creature that disappears right beside the player or a shot was defeated (not despawned by an undo).
+      if (t.type !== "player" && t.health > 0 && this.hitters.some((h) => Math.abs(h.x - (t.x + t.w / 2)) < 70 && Math.abs(h.y - (t.y + t.h / 2)) < 70)) {
+        this.emit({ kind: "die" });
+        this.dust(t.x + t.w / 2, t.y + t.h, 6, 1);
+      }
+    }
+    this.hitters.length = 0;
+    for (let i = 0; i < entities.length; i++) {
+      const e = entities[i];
+      if (e.type === "player" || isProjectileOrAttachment(e)) this.hitters.push({ x: e.x + e.w / 2, y: e.y + e.h / 2 });
+    }
     for (let i = this.parts.length - 1; i >= 0; i--) {
       const p = this.parts[i];
       p.life += dt;

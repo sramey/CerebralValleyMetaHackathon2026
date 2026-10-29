@@ -4,7 +4,7 @@
 import type { BuildStage, MoodSpec } from "../contract";
 import type { FeelEvent } from "./feel";
 
-export type Sfx = "jump" | "land" | "step" | "coin" | "hit" | "hurt" | "shoot" | "portal" | "chime" | "thunk" | "swell";
+export type Sfx = "jump" | "land" | "step" | "coin" | "hit" | "hurt" | "shoot" | "portal" | "chime" | "thunk" | "swell" | "defeat";
 export type Bed = "night" | "christmas" | "spooky" | "day";
 
 /** Which sound a game-feel event makes, and how loud (0..1). */
@@ -16,6 +16,7 @@ export function sfxFor(ev: FeelEvent): { sfx: Sfx; gain: number } | null {
     case "coin": return { sfx: "coin", gain: 1 };
     case "hit": return { sfx: ev.self ? "hurt" : "hit", gain: Math.min(1, 0.5 + ev.damage / 40) };
     case "shoot": return { sfx: "shoot", gain: 1 };
+    case "die": return { sfx: "defeat", gain: 1 };
   }
 }
 
@@ -39,7 +40,7 @@ export function bedFor(m: MoodSpec | null): Bed {
 }
 
 /** Shortest gap (ms) between two plays of one sound, so a held key or a burst never machine-guns. */
-const MIN_GAP: Record<Sfx, number> = { jump: 80, land: 80, step: 140, coin: 40, hit: 50, hurt: 120, shoot: 70, portal: 150, chime: 300, thunk: 300, swell: 800 };
+const MIN_GAP: Record<Sfx, number> = { jump: 80, land: 80, step: 140, coin: 40, hit: 50, hurt: 120, shoot: 70, portal: 150, chime: 300, thunk: 300, swell: 800, defeat: 90 };
 
 export interface SoundOpts { muted?: boolean; volume?: number }
 
@@ -318,4 +319,6 @@ const SFX: Record<Sfx, (s: Sound, g: number) => void> = {
   chime: (s) => { [1047, 1319, 1568, 2093].forEach((f, i) => s.tone("sine", f, f, 0.9, 0.075, i * 0.085)); },
   thunk: (s) => { s.tone("sine", 125, 52, 0.24, 0.22); s.hiss("lowpass", 320, 90, 0.1, 0.1); },
   swell: (s) => s.pad(0.05, 2.4),
+  // A comic pop: a fast downward blip with a puff of noise, and a little falling "bwoop" after it.
+  defeat: (s) => { s.tone("square", 520, 110, 0.18, 0.07); s.hiss("bandpass", 1800, 500, 0.09, 0.1, 0, 0.8); s.tone("triangle", 330, 80, 0.22, 0.06, 0.1); },
 };
