@@ -49,3 +49,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0015](0015-spark-visual-kind-shapes-fx.md) | Spark picks each entity's visual kind in the router call; shapes and effects drawn in code | Accepted |
 | [0016](0016-parallel-agentic-builds.md) | Parallel build pool, Wonder as a Meta tool-calling agent, pronoun memory | Accepted |
 | [0018](0018-unstick-casual-locomotion.md) | One-way floating platforms, engine stuck recovery, casual hop over the player | Accepted |
+| [0021](0021-in-app-pipeline-view.md) | In-app live pipeline view replaces the architecture slide | Draft |
