@@ -9,6 +9,7 @@ import { initVoice } from "./voice";
 import { Fx } from "./fx";
 import { Portal } from "./portal";
 import { drawCliff, drawShape, isCliff, kindOf, registerLook, setGrade } from "./shapes";
+import { drawContactShadows, drawDistantMountains, drawForegroundDepth, drawGround25D, drawHorizonMist } from "./depth";
 import { ModLoader } from "../sim/loader";
 import { createGhost } from "./ghost";
 import { createPipeline } from "./pipeline";
@@ -176,8 +177,13 @@ function drawRidge(pts: number[], camX: number, par: number, baseY: number, seed
   for (let sx = -step; sx <= W + step; sx += step) {
     pts.push(sx, baseY - ridgeY(sx + camX * par, seed));
   }
+  const topCount = pts.length;
   pts.push(W + step, H, -step, H);
   gfx.poly(pts).fill(color);
+  const rim = mixC(color, pal.moon, 0.22);
+  for (let i = 0; i + 3 < topCount; i += 2) {
+    gfx.moveTo(pts[i], pts[i + 1]).lineTo(pts[i + 2], pts[i + 3]).stroke({ width: 1.5, color: rim, alpha: 0.30 });
+  }
 }
 
 function squash(e: Entity): { bw: number; bh: number } {
@@ -237,20 +243,7 @@ function drawCoin(e: Entity, x: number, y: number): void {
 }
 
 function drawGround(e: Entity, x: number, y: number): void {
-  gfx.rect(x, y, e.w, e.h).fill(e.color);
-  const gh = Math.min(8, Math.max(3, e.h * 0.22));
-  gfx.rect(x, y, e.w, gh).fill(pal.grass);
-  // deterministic speckles from world coords (no per-frame random)
-  const base = Math.floor(e.x) * 31 + Math.floor(e.y) * 7;
-  const n = Math.floor(e.w / 14);
-  for (let k = 0; k < n; k++) {
-    const hsh = ((base + k * 57) % 11 + 11) % 11;
-    if (hsh % 2 !== 0) continue;
-    const px = x + k * 14 + (hsh % 5);
-    const span = e.h - gh - 6;
-    const py = y + gh + 3 + (span > 0 ? hsh % span : 0);
-    gfx.rect(px, py, 3, 2).fill(pal.soil);
-  }
+  drawGround25D(gfx, e, x, y, pal, app.screen.width, app.screen.height, grade);
 }
 
 function drawShot(e: Entity, x: number, y: number): void {
@@ -306,6 +299,7 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
     }
   }
   if (isCliff(e)) { drawCliff(gfx, e, x, y); return; }
+  if (t.indexOf("ground") >= 0 || t.indexOf("platform") >= 0) { drawGround(e, x, y); return; }
   // dark outline behind every code-drawn entity
   gfx.rect(x - 1.5, y - 1.5, e.w + 3, e.h + 3).fill(OUTLINE);
   if (t === "player") {
@@ -313,7 +307,6 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
     return;
   }
   if (t.indexOf("coin") >= 0) { drawCoin(e, x, y); return; }
-  if (t.indexOf("ground") >= 0 || t.indexOf("platform") >= 0) { drawGround(e, x, y); return; }
   if (t.indexOf("projectile") >= 0 || t.indexOf("arrow") >= 0 || t.indexOf("fire") >= 0) { drawShot(e, x, y); return; }
   if (t.indexOf("slime") >= 0 || t.indexOf("gel") >= 0 || t.indexOf("enemy") >= 0 ||
     t.indexOf("walker") >= 0 || t.indexOf("turtle") >= 0) { drawBlob(e, x, y); return; }
@@ -586,18 +579,29 @@ function render(): void {
   gfx.circle(W - 70, 60, 24).fill({ color: pal.moon, alpha: 0.15 });
   gfx.circle(W - 70, 60, 17).fill(pal.moon);
   gfx.circle(W - 76, 54, 14).fill(SKY[1]);
-  // far hill silhouettes
+  // far hill silhouettes + atmospheric horizon mist (bead 1z7)
   const horizon = H * 0.62 - camYSmooth * 0.1;
+  drawDistantMountains(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
   drawRidge(ridgeFar, camX, 0.3, horizon, 0, pal.ridgeFar);
   drawRidge(ridgeNear, camX, 0.55, horizon + 34, 1, pal.ridgeNear);
-  // solids-first, reuse scratch array
+  drawHorizonMist(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
+  // solids-first, then contact shadows on solid surfaces, then dynamic entities
   order.length = 0;
   for (let i = 0; i < world.entities.length; i++) order.push(world.entities[i]);
   order.sort((a, b) => Number(b.solid) - Number(a.solid));
-  for (let i = 0; i < order.length; i++) drawEntity(order[i], camX, camYSmooth);
+  let shadowsDrawn = false;
+  for (let i = 0; i < order.length; i++) {
+    if (!shadowsDrawn && !order[i].solid) {
+      drawContactShadows(gfx, world.entities, camX, camYSmooth, W, H, isEffectType);
+      shadowsDrawn = true;
+    }
+    drawEntity(order[i], camX, camYSmooth);
+  }
+  if (!shadowsDrawn) drawContactShadows(gfx, world.entities, camX, camYSmooth, W, H, isEffectType);
   for (const p of world.particles) {
     gfx.rect(p.x - camX, p.y - camYSmooth, p.size, p.size).fill({ color: p.color, alpha: Math.max(0, 1 - p.life / p.maxLife) });
   }
+  drawForegroundDepth(gfx, camX, camYSmooth, W, H, pal);
   // Sprite primaries: per owner+subject every entity at >=30% of the group's
   // max area gets the sprite; small assembled sub-parts stay rects under it.
   const seen = new Set<number>();
@@ -660,12 +664,6 @@ function render(): void {
     if (x + e.w < -40 || x > W + 40 || y + e.h < -40 || y > H + 40) continue;
     drawHealthBar(e, x, y);
   }
-  // subtle vignette: 4 edge rects
-  const V = 26;
-  gfx.rect(0, 0, W, V).fill({ color: 0x000000, alpha: 0.28 });
-  gfx.rect(0, H - V, W, V).fill({ color: 0x000000, alpha: 0.28 });
-  gfx.rect(0, 0, V, H).fill({ color: 0x000000, alpha: 0.22 });
-  gfx.rect(W - V, 0, V, H).fill({ color: 0x000000, alpha: 0.22 });
   hud.render(world);
 }
 

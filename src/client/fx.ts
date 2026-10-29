@@ -5,6 +5,7 @@
 import { Container, Graphics, Sprite, Texture } from "pixi.js";
 import type { Entity, MoodSpec, Particle } from "../contract";
 import type { World } from "../sim/world";
+import { drawDynamicLighting } from "./depth";
 
 const FIRE_RAMP = [0xfff6c8, 0xffd34d, 0xff8a1f, 0xd8321f, 0x4a3030];
 
@@ -112,6 +113,18 @@ export class Fx {
     this.g.clear();
 
     this.ambience(W, H);
+    drawDynamicLighting(
+      this.g,
+      (x, y, r, color, alpha, add) => this.puff(x, y, r, color, alpha, add),
+      world,
+      camX,
+      camY,
+      W,
+      H,
+      this.clock,
+      this.mood,
+      this.mood?.moon ?? 0xf2ead0,
+    );
     this.detectBursts(world);
     const drops = this.entities(world, W, H, isEffect);
     this.drawMist(drops, world, W, H);
@@ -129,12 +142,12 @@ export class Fx {
   /** Mood overlay: wash, vignette, and slow ambient motion (fog banks, snow, embers, neon sparks). */
   private ambience(W: number, H: number): void {
     const m = this.mood;
-    this.vig.visible = !!m && m.vignette > 0;
+    this.vig.visible = true;
+    this.vig.width = W; this.vig.height = H;
+    this.vig.alpha = m ? m.vignette : 0.24;
     if (!m) return;
     const g = this.g;
     if (m.grade > 0) g.rect(0, 0, W, H).fill({ color: m.tint, alpha: m.grade * 0.22 });
-    this.vig.width = W; this.vig.height = H;
-    this.vig.alpha = m.vignette;
     const t = this.clock;
     if (m.fog > 0 || m.ambient === "fog") {
       const n = Math.min(10, 4 + Math.round(m.fog * 8));
