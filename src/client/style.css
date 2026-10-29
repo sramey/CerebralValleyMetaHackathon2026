@@ -115,7 +115,8 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #
 #camera-video { width: 100%; max-height: 46vh; background: #05070a; object-fit: contain; }
 #camera-nocam { margin: 0; font-size: 13px; color: #c9c2ae; }
 #camera-label { width: 100%; background: #05070a; border: 1px solid #3a4454; color: #fff; padding: 10px; font-size: 14px; }
-.camera-pixel { display: flex; gap: 8px; align-items: center; font-size: 13px; color: #c9c2ae; cursor: pointer; }
+.camera-paper, .camera-pixel { display: flex; gap: 8px; align-items: center; font-size: 13px; color: #c9c2ae; cursor: pointer; }
+.camera-paper { color: #54e0ff; font-weight: 600; }
 .camera-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .camera-actions button, #camera-confirm { background: #ffc94d; color: #171106; border: 0; padding: 10px 12px; font-weight: 700; cursor: pointer; }
 #camera-cancel { background: #232c3b !important; color: #e8e4d8 !important; }

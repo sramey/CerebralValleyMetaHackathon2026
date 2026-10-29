@@ -76,3 +76,13 @@ export function matchSketchIntent(text: string): SketchIntent | null {
   if (OPEN_WORD_RE.test(n) || BARE_RE.test(n) || DRAW_LEVEL_RE.test(n)) return "open";
   return null;
 }
+
+const PAPER_DRAWING_RE = /^(?:build|make|scan|photograph|import|load)\s+(?:(?:a|an|the|this|my|our)\s+)?(?:drawing|paper\s+drawing|paper\s+level|paper\s+sketch|drawing\s+level)$/;
+
+/** Does this command mean "build my drawing" (ADR 0040: paper to level via camera)? */
+export function matchPaperIntent(text: string): boolean {
+  if (!text || text.length > 120) return false;
+  const n = normalizePhrase(text);
+  if (!n || NEGATION_RE.test(n)) return false;
+  return PAPER_DRAWING_RE.test(n) || n === "build my drawing" || n === "build my sketch";
+}
