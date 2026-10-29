@@ -4,6 +4,8 @@ import chickenMod from "../mods/chicken";
 import { SIM } from "../contract";
 import type { ClientMsg, Entity, KnobValue, ModDefinition, ServerMsg } from "../contract";
 import { initVoice } from "./voice";
+import { Fx } from "./fx";
+import { drawShape, kindOf, registerLook } from "./shapes";
 import { ModLoader } from "../sim/loader";
 import { World } from "../sim/world";
 import playerMod from "../mods/player";
@@ -60,6 +62,9 @@ const gfx = new Graphics();
 app.stage.addChild(gfx);
 app.stage.sortableChildren = true;
 gfx.zIndex = -100;
+const fx = new Fx(app.stage);
+let lastRenderAt = performance.now();
+const isEffectType = (type: string): boolean => kindOf(type)?.kind === "effect";
 
 // AI sprites (Muse Image sheets, chroma-keyed + sliced client-side). Frames:
 // 0 idle, 1-2 walk/run, 3 jump. Entities whose type names a subject get its
@@ -261,6 +266,8 @@ function drawEntity(e: Entity, camX: number, camY: number): void {
   const H = app.screen.height;
   if (x + e.w < -40 || x > W + 40 || y + e.h < -40 || y > H + 40) return; // off-screen cull
   const t = e.type;
+  const look = kindOf(t); // code-drawn shapes and engine effects never use sprites or the outline (ADR 0015)
+  if (look) { if (look.kind === "shape") drawShape(gfx, e, x, y, look.shape); return; }
   if (framesFor(framesBySubject, t, t === "player").length >= 1) return; // sprite pass below
   if (t !== "player") {
     for (const k of pendingArt) {
@@ -276,10 +283,6 @@ function drawEntity(e: Entity, camX: number, camY: number): void {
   if (t.indexOf("coin") >= 0) { drawCoin(e, x, y); return; }
   if (t.indexOf("ground") >= 0 || t.indexOf("platform") >= 0) { drawGround(e, x, y); return; }
   if (t.indexOf("projectile") >= 0 || t.indexOf("arrow") >= 0 || t.indexOf("fire") >= 0) { drawShot(e, x, y); return; }
-  if (t.indexOf("rain") >= 0 || t.indexOf("drop") >= 0) {
-    gfx.rect(x, y, e.w, e.h).fill({ color: RAIN_BLUE, alpha: 0.55 });
-    return;
-  }
   if (t.indexOf("slime") >= 0 || t.indexOf("gel") >= 0 || t.indexOf("enemy") >= 0 ||
     t.indexOf("walker") >= 0 || t.indexOf("turtle") >= 0) { drawBlob(e, x, y); return; }
   gfx.rect(x, y, e.w, e.h).fill(e.color);
@@ -442,7 +445,7 @@ function render(): void {
   order.sort((a, b) => Number(b.solid) - Number(a.solid));
   for (let i = 0; i < order.length; i++) drawEntity(order[i], camX, camYSmooth);
   for (const p of world.particles) {
-    gfx.rect(p.x - camX, p.y - camYSmooth, p.size, p.size).fill(p.color);
+    gfx.rect(p.x - camX, p.y - camYSmooth, p.size, p.size).fill({ color: p.color, alpha: Math.max(0, 1 - p.life / p.maxLife) });
   }
   // Sprite primaries: per owner+subject every entity at >=30% of the group's
   // max area gets the sprite; small assembled sub-parts stay rects under it.
@@ -452,7 +455,7 @@ function render(): void {
     const groups = new Map<string, { maxArea: number; items: { id: number; area: number }[] }>();
     for (const e of world.entities) {
       const frames = framesFor(framesBySubject, e.type, e.type === "player");
-      if (frames.length < 1) continue;
+      if (frames.length < 1 || kindOf(e.type)) continue;
       const subject = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0] ?? e.type;
       const gk = `${e.owner}|${subject}`;
       const area = e.w * e.h;
@@ -470,7 +473,7 @@ function render(): void {
   const spriteDraw: { e: Entity; frame: Texture; subjectKey: string | undefined }[] = [];
   for (const e of world.entities) {
     const frames = framesFor(framesBySubject, e.type, e.type === "player");
-    if (frames.length < 1 || !primaries.has(e.id)) continue;
+    if (frames.length < 1 || !primaries.has(e.id) || kindOf(e.type)) continue;
     seen.add(e.id);
     const moving = Math.abs(e.vx) > 5;
     const subjectKey = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0];
@@ -494,6 +497,10 @@ function render(): void {
     s.visible = true;
   }
   for (const [id, s] of spritePool) if (!seen.has(id)) s.visible = false;
+  const nowMs = performance.now();
+  fx.render(world, camX, camYSmooth, W, H, (nowMs - lastRenderAt) / 1000, isEffectType);
+  lastRenderAt = nowMs;
+  app.stage.position.set(fx.shakeX, fx.shakeY);
   // health bars: single pass after rect and sprite passes (player included)
   for (const e of world.entities) {
     const x = e.x - camX;
@@ -1284,6 +1291,7 @@ async function applyWorld(msg: Extract<ServerMsg, { kind: "world" }>): Promise<v
         if (!def) continue;
         loader.load(def, m.values);
       } else {
+        registerLook(m.look);
         loader.load(await importMod(m.compiled), m.values);
         if (m.art) { pendingArt.add(m.art.key); loadArtWithRetry(m.art.key, m.art.url, m.art.scenery === true); }
       }
@@ -1369,6 +1377,7 @@ function connect(): void {
         const loaded = (await import(/* @vite-ignore */ url)) as { default: ModDefinition };
         URL.revokeObjectURL(url);
         loader.load(loaded.default);
+        registerLook(msg.mod.look);
         say(`${msg.mod.title} verified and live.`, "done");
         renderMods();
         const artPending = (msg.mod as { artPending?: string }).artPending;
@@ -1439,6 +1448,7 @@ if (!worldParam) autoLoadStarterOnce();
   pendingArt: [...pendingArt],
   scenery: [...scenerySubjects],
   photoTex: Object.entries(framesBySubject).filter(([k]) => k.startsWith("photo")).map(([k, v]) => { const r = (v[0] as unknown as { source?: { resource?: unknown } })?.source?.resource; (window as unknown as Record<string, unknown>).__photoCanvas = r ?? null; return `${k}:${r instanceof HTMLCanvasElement ? `${r.width}x${r.height}` : typeof r}`; }),
+  fxMs: Number(fx.lastMs.toFixed(3)),
   camera: { x: Math.round(world.camera.x), y: Math.round(world.camera.y) },
   sprites: [...spritePool.entries()].map(([id, s]) => ({ id, vis: s.visible, x: Math.round(s.position.x), y: Math.round(s.position.y), sx: Number(s.scale.x.toFixed(2)), sy: Number(s.scale.y.toFixed(2)), tex: s.texture ? `${Math.round(s.texture.width)}x${Math.round(s.texture.height)}` : "none" })),
 });

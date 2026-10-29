@@ -33,6 +33,12 @@ export interface Entity {
   data: Record<string, number | string | boolean>;
 }
 
+/** Procedural shapes the client draws in code, so primitives never go to Muse Image (ADR 0015). */
+export type ShapeName = "circle" | "ring" | "triangle" | "spikes" | "pill" | "diamond" | "star" | "block";
+
+/** How the client draws entities of these types: a code-drawn shape, or an engine effect (no outline, no sprite). */
+export interface Look { visual: "shape" | "effect"; shape?: ShapeName; types: string[] }
+
 export interface Particle {
   x: number; y: number; vx: number; vy: number;
   life: number; maxLife: number; color: number; size: number;
@@ -107,7 +113,7 @@ export type ClientMsg =
 /** One mod in a saved world: a built-in the client bundles, or a verified AI mod with its source. */
 export type WorldMod =
   | { builtin: true; id: string; values: KnobValues }
-  | { builtin?: false; id: string; title: string; source: string; compiled: string; knobs: KnobDefs; values: KnobValues; art?: { key: string; url: string; scenery?: boolean } };
+  | { builtin?: false; id: string; title: string; source: string; compiled: string; knobs: KnobDefs; values: KnobValues; art?: { key: string; url: string; scenery?: boolean }; look?: Look };
 
 export interface DemoWorld { id: string; title: string; blurb: string }
 
@@ -115,7 +121,7 @@ export type BuildStage = "routing" | "writing" | "compiling" | "verifying" | "fi
 
 export type ServerMsg =
   | { kind: "stage"; stage: BuildStage; detail: string; command?: string }
-  | { kind: "mod"; mod: { id: string; title: string; source: string; compiled: string; knobs: KnobDefs; art?: { key: string; url: string; scenery?: boolean }; artPending?: string } }
+  | { kind: "mod"; mod: { id: string; title: string; source: string; compiled: string; knobs: KnobDefs; art?: { key: string; url: string; scenery?: boolean }; artPending?: string; look?: Look } }
   | { kind: "art"; modId: string; art: { key: string; url: string; scenery?: boolean } }
   | { kind: "tweak"; modId: string; knob: string; value: KnobValue }
   | { kind: "removed"; modId: string }
