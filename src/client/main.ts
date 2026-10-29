@@ -9,8 +9,8 @@ import { initVoice } from "./voice";
 import { Fx } from "./fx";
 import { Portal } from "./portal";
 import { drawCliff, drawShape, isCliff, kindOf, registerLook, setGrade } from "./shapes";
-import { computeDesiredCamY, drawContactShadows, drawDistantMountains, drawForegroundDepth, drawGround25D, drawHorizonMist } from "./depth";
-import { drawParallaxEntities, isParallaxOrSkyEntity } from "./parallax";
+import { computeDesiredCamY, drawContactShadows, drawDistantMountains, drawForegroundDepth, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
+import { drawFluffyCloud, drawParallaxEntities, isParallaxOrSkyEntity, isSkyOrBackgroundEntity } from "./parallax";
 import { ModLoader } from "../sim/loader";
 import { createGhost } from "./ghost";
 import { createPipeline } from "./pipeline";
@@ -301,6 +301,11 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
       if (t.includes(k)) { drawDigitize(e, x, y); return; }
     }
   }
+  if (t === "sun" || /\bsun\b/i.test(t)) { drawSunEntity(gfx, e, x, y); return; }
+  if (t.includes("cloud") || t.includes("cumulus")) {
+    drawFluffyCloud(gfx, x, y, e.w, e.h, e.color, pal.moon, SKY[SKY_BANDS - 1], e.id);
+    return;
+  }
   if (isCliff(e)) { drawCliff(gfx, e, x, y); return; }
   if (t.indexOf("ground") >= 0 || t.indexOf("platform") >= 0 || (e.solid && /wall|block|brick|pillar|column|ledge|step|terrain|floor|bridge/i.test(t))) { drawGround(e, x, y); return; }
   // dark outline behind every code-drawn entity
@@ -568,20 +573,36 @@ function render(): void {
     if (!target) closeRadialMenu();
     else positionRadialMenu(target, camX, camYSmooth);
   }
-  // vertical sky gradient via stacked bands
-  const bandH = Math.ceil(H / SKY_BANDS);
-  for (let i = 0; i < SKY_BANDS; i++) {
-    gfx.rect(0, i * bandH, W, bandH + 1).fill(SKY[i]);
+  const isDaytime = isDaytimeSky(mood, world.entities, SKY[0]);
+  const sunEntity = world.entities.find((e) => {
+    const t = e.type.toLowerCase();
+    return t === "sun" || /\bsun\b/.test(t);
+  });
+  const skyEntity = world.entities.find((e) => isSkyOrBackgroundEntity(e) && typeof e.color === "number" && e.color > 0);
+  const skyEntityCol = (!mood && skyEntity) ? skyEntity.color : undefined;
+
+  drawSkyAndCelestials(
+    gfx,
+    W,
+    H,
+    camX,
+    SKY_BANDS,
+    SKY,
+    pal,
+    isDaytime,
+    Boolean(sunEntity),
+    skyEntityCol,
+  );
+
+  if (isDaytime && !world.entities.some((e) => e.type.toLowerCase().includes("cloud"))) {
+    const skyBottomCol = SKY[SKY_BANDS - 1];
+    const c1x = ((140 - camX * 0.08) % (W + 220) + W + 220) % (W + 220) - 110;
+    drawFluffyCloud(gfx, c1x, 38, 120, 36, 0xffffff, pal.moon, skyBottomCol, 1);
+    const c2x = ((W * 0.48 - camX * 0.12) % (W + 260) + W + 260) % (W + 260) - 130;
+    drawFluffyCloud(gfx, c2x, 62, 150, 42, 0xffffff, pal.moon, skyBottomCol, 2);
+    const c3x = ((W * 0.82 - camX * 0.06) % (W + 200) + W + 200) % (W + 200) - 100;
+    drawFluffyCloud(gfx, c3x, 28, 95, 30, 0xffffff, pal.moon, skyBottomCol, 3);
   }
-  // stars (parallax markers)
-  for (let i = 0; i < 14; i++) {
-    const sx = ((i * 173 - camX * 0.3) % (W + 80) + W + 80) % (W + 80) - 40;
-    gfx.rect(sx, 40 + (i % 5) * 22, 3, 3).fill(pal.star);
-  }
-  // moon, fixed top-right
-  gfx.circle(W - 70, 60, 24).fill({ color: pal.moon, alpha: 0.15 });
-  gfx.circle(W - 70, 60, 17).fill(pal.moon);
-  gfx.circle(W - 76, 54, 14).fill(SKY[1]);
   // far hill silhouettes + parallax layers + atmospheric horizon mist (bead 1z7 & rm1)
   const horizon = H * 0.62 - camYSmooth * 0.1;
   drawDistantMountains(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);

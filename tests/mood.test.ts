@@ -9,6 +9,10 @@ describe("mood (ADR 0017)", () => {
     expect((await moodSpecFor("really scary")).name).toBe("spooky");
     expect((await moodSpecFor("snowy")).ambient).toBe("snow");
     expect((await moodSpecFor("cyberpunk")).name).toBe("neon");
+    expect((await moodSpecFor("daytime")).name).toBe("daytime");
+    expect((await moodSpecFor("sunny")).name).toBe("daytime");
+    expect((await moodSpecFor("sunset")).name).toBe("sunset");
+    expect((await moodSpecFor("dusk")).name).toBe("sunset");
   });
 
   it("validates Spark's palette JSON and clamps bad values", () => {

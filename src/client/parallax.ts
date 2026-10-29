@@ -36,10 +36,17 @@ export function parallaxFactorOf(e: Entity): number | null {
 }
 
 /** True when `e` is a sky/background or parallax-layer entity handled before the gameplay pass. */
-export function isParallaxOrSkyEntity(e: Entity): boolean {
+export function isSkyOrBackgroundEntity(e: Entity): boolean {
+  if (e.solid || e.type === "player") return false;
   const t = e.type.toLowerCase();
-  if (t === "sky" || t === "day-sky" || t === "night-sky" || t === "background") return true;
-  if (t.includes("cloud")) return true;
+  return t === "sky" || t === "background" || t.includes("sky") || t.includes("background");
+}
+
+export function isParallaxOrSkyEntity(e: Entity): boolean {
+  if (e.solid || e.type === "player") return false;
+  const t = e.type.toLowerCase();
+  if (isSkyOrBackgroundEntity(e)) return true;
+  if (t.includes("cloud") || t.includes("cumulus")) return true;
   return parallaxFactorOf(e) !== null;
 }
 
@@ -306,7 +313,7 @@ export function drawParallaxEntities(
   for (let i = 0; i < entities.length; i++) {
     const e = entities[i];
     const t = e.type.toLowerCase();
-    if (t === "sky" || t === "day-sky" || t === "night-sky" || t === "background") continue;
+    if (isSkyOrBackgroundEntity(e)) continue;
     const factor = parallaxFactorOf(e);
     if (factor !== null) items.push({ e, factor });
   }

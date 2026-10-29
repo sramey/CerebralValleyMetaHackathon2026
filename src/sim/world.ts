@@ -196,7 +196,7 @@ export class World {
       e.x += e.vx * dt;
       let blockedX = false;
       for (const s of solids) if (s !== e && !s.data.oneWay && overlap(e, s)) {
-        if (e.vx > 0) e.x = s.x - e.w;
+        if (!e.solid && s.y === 400) continue; if (e.vx > 0) e.x = s.x - e.w;
         else if (e.vx < 0) e.x = s.x + s.w;
         else e.x = (e.x + e.w / 2 < s.x + s.w / 2) ? s.x - e.w : s.x + s.w;
         e.vx = 0;
@@ -209,7 +209,7 @@ export class World {
       e.onGround = false;
       for (const s of solids) if (s !== e && overlap(e, s)) {
         if (s.data.oneWay && !(e.vy > 0 && prevBottom <= s.y + 0.5)) continue;
-        if (e.vy > 0) { e.y = s.y - e.h; e.onGround = true; }
+        if (!e.solid && s.y === 400) { e.y = s.y - e.h; e.onGround = true; } else if (e.vy > 0) { e.y = s.y - e.h; e.onGround = true; }
         else if (e.vy < 0) e.y = s.y + s.h;
         else if (e.y + e.h / 2 < s.y + s.h / 2) { e.y = s.y - e.h; e.onGround = true; }
         else e.y = s.y + s.h;

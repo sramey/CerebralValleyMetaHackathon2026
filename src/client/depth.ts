@@ -80,7 +80,7 @@ export function computeDesiredCamY(
 export function isDaytimeSky(mood: MoodSpec | null, entities: readonly Entity[], skyTopColor?: number): boolean {
   if (mood) {
     const n = mood.name.toLowerCase();
-    if (n === "daytime" || n === "day" || n === "sunny" || n === "morning" || n === "noon" || n === "bright" || n === "clear") {
+    if (n === "daytime" || n === "day" || n === "sunny" || n === "morning" || n === "noon" || n === "bright" || n === "clear" || n === "sunset" || n === "dusk" || n === "golden" || n === "twilight" || n === "dawn" || n === "sunrise") {
       return true;
     }
     if (colorLuminance(mood.skyTop) > 0.30) return true;
@@ -97,7 +97,7 @@ export function isDaytimeSky(mood: MoodSpec | null, entities: readonly Entity[],
 export function castsContactShadow(e: Entity, isEffect?: (type: string) => boolean): boolean {
   const t = e.type.toLowerCase();
   if (TERRAIN_TYPE_RE.test(t)) return false;
-  if (t.includes("ground") || t.includes("platform") || t.includes("cliff") || t.includes("wall") || t.includes("sky") || t.includes("cloud") || t.includes("parallax") || t.includes("bg-")) {
+  if (t.includes("ground") || t.includes("platform") || t.includes("cliff") || t.includes("wall") || t.includes("sky") || t.includes("cloud") || t.includes("parallax") || t.includes("bg-") || t === "sun" || /\bsun\b/.test(t)) {
     return false;
   }
   if (typeof e.data?.parallax === "number" && e.data.parallax < 0.95) return false;
@@ -569,4 +569,79 @@ export function drawDynamicLighting(
     }
     lightCount++;
   }
+}
+
+/**
+ * Render the vertical sky gradient, parallax night stars, and celestial body
+ * (radiant multi-ring golden Sun in daytime, Crescent Moon with shadow cutout at night).
+ * If a mod spawned an explicit sun entity, the fixed top-right celestial body is hidden.
+ */
+export function drawSkyAndCelestials(
+  gfx: Graphics,
+  W: number,
+  H: number,
+  camX: number,
+  skyBands: number,
+  skyColors: readonly number[],
+  pal: DepthPalette,
+  isDaytime: boolean,
+  hasSunEntity: boolean,
+  skyEntityColor?: number,
+): void {
+  const bandH = Math.ceil(H / skyBands);
+  let topColor = skyColors[0] ?? 0x05070a;
+  let bottomColor = skyColors[skyColors.length - 1] ?? 0x0d2229;
+  if (skyEntityColor !== undefined && skyEntityColor > 0) {
+    topColor = mixColor(topColor, skyEntityColor, 0.65);
+    bottomColor = mixColor(bottomColor, skyEntityColor, 0.88);
+  }
+
+  for (let i = 0; i < skyBands; i++) {
+    const col = mixColor(topColor, bottomColor, i / (skyBands - 1));
+    gfx.rect(0, i * bandH, W, bandH + 1).fill(col);
+  }
+
+  if (!isDaytime) {
+    // 14 night stars (parallax markers)
+    for (let i = 0; i < 14; i++) {
+      const sx = ((i * 173 - camX * 0.3) % (W + 80) + W + 80) % (W + 80) - 40;
+      gfx.rect(sx, 40 + (i % 5) * 22, 3, 3).fill(pal.star);
+    }
+  }
+
+  // Celestial body: only drawn if mod did not spawn an explicit sun entity
+  if (!hasSunEntity) {
+    const cx = W - 70;
+    const cy = 60;
+    if (isDaytime) {
+      // Radiant Sun: multi-ring warm golden glow + bright sun disc (NO crescent shadow cutout!)
+      gfx.circle(cx, cy, 38).fill({ color: 0xffd952, alpha: 0.16 });
+      gfx.circle(cx, cy, 26).fill({ color: 0xffe875, alpha: 0.30 });
+      gfx.circle(cx, cy, 18).fill(pal.moon || 0xffe042);
+      gfx.circle(cx, cy, 12).fill(0xfffae0);
+    } else {
+      // Crescent Moon
+      gfx.circle(cx, cy, 24).fill({ color: pal.moon, alpha: 0.15 });
+      gfx.circle(cx, cy, 17).fill(pal.moon);
+      gfx.circle(cx - 6, cy - 6, 14).fill(skyColors[1] ?? 0x05070a);
+    }
+  }
+}
+
+/**
+ * Render an explicit sun entity as a radiant sun disc without rectangular outlines.
+ */
+export function drawSunEntity(
+  gfx: Graphics,
+  e: Entity,
+  x: number,
+  y: number,
+): void {
+  const cx = x + e.w * 0.5;
+  const cy = y + e.h * 0.5;
+  const r = Math.max(16, Math.min(e.w, e.h) * 0.5);
+  gfx.circle(cx, cy, r * 2.2).fill({ color: 0xffd952, alpha: 0.18 });
+  gfx.circle(cx, cy, r * 1.5).fill({ color: 0xffe875, alpha: 0.32 });
+  gfx.circle(cx, cy, r).fill(e.color || 0xffe042);
+  gfx.circle(cx, cy, r * 0.65).fill(0xfffae0);
 }
