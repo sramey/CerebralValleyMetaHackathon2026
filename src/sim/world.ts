@@ -1,5 +1,6 @@
 import { SIM, emptyInput } from "../contract";
 import { entityKind } from "../ontology";
+import { isDamageableTarget } from "./combat";
 import type { Entity, HudDef, HudWidget, InputState, Particle, SpawnDef } from "../contract";
 import { createRng } from "./rng";
 
@@ -250,6 +251,82 @@ export class World {
       p.life += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 300 * dt;
     }
     this.particles = this.particles.filter((p) => p.life < p.maxLife);
+    // Post-step 1: Rigid player equipment / weapon mounting (bead qwc)
+    if (player) {
+      for (const e of this.entities) {
+        if (e === player) continue;
+        const isHeld = e.data.heldByPlayer === true || e.data.equipped === true || e.data.attachedTo === "player";
+        const isEquipment = /^(gun|blaster|sword|jetpack|backpack|shield|weapon|bow|wand|dagger|spear|axe|hat|crown|helmet|cape)$/i.test(e.type);
+        if (isHeld || isEquipment) {
+          e.facing = player.facing;
+          const socket = e.data.socket || (/^(jetpack|backpack|cape)$/i.test(e.type) ? "back" : /^(hat|crown|helmet)$/i.test(e.type) ? "head" : "hand");
+          if (socket === "back") {
+            const ox = typeof e.data.offsetX === "number" ? e.data.offsetX : 8;
+            const oy = typeof e.data.offsetY === "number" ? e.data.offsetY : 6;
+            e.x = player.facing >= 0 ? player.x - e.w + ox : player.x + player.w - ox;
+            e.y = player.y + oy;
+          } else if (socket === "head") {
+            e.x = player.x + (player.w - e.w) / 2;
+            e.y = player.y - e.h + 2;
+          } else {
+            // Hand socket: held in front at chest/waist height (player.h * 0.45)
+            const ox = typeof e.data.offsetX === "number" ? e.data.offsetX : 4;
+            const oy = typeof e.data.offsetY === "number" ? e.data.offsetY : Math.round(player.h * 0.45);
+            e.x = player.facing >= 0 ? player.x + player.w - ox : player.x - e.w + ox;
+            e.y = player.y + oy;
+          }
+          e.vx = player.vx;
+          e.vy = player.vy;
+        }
+      }
+    }
+
+    // Post-step 2: Universal projectile collision & enemy combat (bead 578)
+    const projectiles = this.entities.filter((e) => e.data.visual === "projectile" || entityKind(e) === "projectile" || /^(bullet|projectile|laser|arrow|fireball|plasma|shot)$/i.test(e.type));
+    for (const proj of projectiles) {
+      if ((proj as any).dead) continue;
+      const damage = typeof proj.data.damage === "number" ? proj.data.damage : 25;
+      for (const target of this.entities) {
+        if (target.id === proj.id || (target as any).dead) continue;
+        if (isDamageableTarget(target, proj) && overlap(proj, target)) {
+          this.burst(proj.x + proj.w / 2, proj.y + proj.h / 2, proj.color || 0xffd700, 8);
+          this.damage(target.id, damage);
+          this.despawn(proj.id);
+          break;
+        }
+      }
+      // Despawn on solid obstacles
+      if (!(proj as any).dead) {
+        for (const s of solids) {
+          if (!s.data.oneWay && overlap(proj, s)) {
+            this.burst(proj.x + proj.w / 2, proj.y + proj.h / 2, proj.color || 0xffd700, 4);
+            this.despawn(proj.id);
+            break;
+          }
+        }
+      }
+    }
+
+    // Post-step 3: Enemy contact damage to player with brief invulnerability timer
+    if (player && !(player as any).dead) {
+      const hitCd = typeof player.data.hitCooldown === "number" ? player.data.hitCooldown : 0;
+      if (hitCd > 0) {
+        player.data.hitCooldown = hitCd - 1;
+      } else {
+        for (const en of this.entities) {
+          if (en.id === player.id || (en as any).dead) continue;
+          const isEnemy = en.data.hostile === true || en.data.enemy === true || /^(enemy|walker|turtle|boss|monster|zombie|goblin|slime|spider|bat|skeleton|demon|orc)$/i.test(en.type);
+          if (isEnemy && overlap(player, en)) {
+            const dmg = typeof en.data.damage === "number" ? en.data.damage : 10;
+            this.damage(player.id, dmg);
+            player.data.hitCooldown = 30; // 0.5s cooldown at 60Hz
+            this.burst(player.x + player.w / 2, player.y + player.h / 2, 0xff3b30, 8);
+            break;
+          }
+        }
+      }
+    }
+
     if (player) {
       this.camera.x = player.x + player.w / 2 - 480;
       this.camera.y = Math.min(0, player.y + player.h / 2 - 270);

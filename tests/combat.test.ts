@@ -312,4 +312,35 @@ describe("hand cannon weapon mod (gunMod)", () => {
     expect(resolveItemMod("blaster")?.id).toBe("gun");
     expect(resolveItemMod("add some ground")).toBeUndefined();
   });
+
+  it("rigidly locks equipment to player, updates facing, and mirrors coordinates when turning (bead qwc)", () => {
+    const world = new World(11);
+    const p = world.spawn({ type: "player", x: 100, y: 300, w: 26, h: 34, solid: false, gravityScale: 1, color: 0xffffff }, "player");
+    p.facing = 1;
+    const jetpack = world.spawn({ type: "jetpack", x: 90, y: 310, w: 20, h: 26, solid: false, gravityScale: 0 }, "jetpack");
+    const gun = world.spawn({ type: "gun", x: 120, y: 315, w: 16, h: 8, solid: false, gravityScale: 0 }, "gun");
+
+    world.step();
+    expect(jetpack.facing).toBe(1);
+    expect(gun.facing).toBe(1);
+    expect(gun.y).toBe(p.y + Math.round(p.h * 0.45)); // hand height, not leg
+
+    // Turn player left:
+    p.facing = -1;
+    world.step();
+    expect(jetpack.facing).toBe(-1);
+    expect(gun.facing).toBe(-1);
+    // Gun mirrors to front-left of player:
+    expect(gun.x).toBeLessThan(p.x);
+  });
+
+  it("automatically collides any projectile against hostile enemy without custom weapon code (bead 578)", () => {
+    const world = new World(12);
+    const enemy = world.spawn({ type: "goblin", x: 200, y: 300, w: 30, h: 30, solid: false, gravityScale: 0, health: 100, data: { hostile: true } }, "enemy");
+    const bullet = world.spawn({ type: "bullet", x: 195, y: 305, w: 10, h: 6, vx: 400, vy: 0, solid: false, gravityScale: 0, data: { visual: "projectile", fromPlayer: true } }, "weapon");
+
+    world.step();
+    expect(enemy.health).toBeLessThan(100);
+    expect(world.entities.filter(e => e.id === bullet.id)).toHaveLength(0); // projectile despawned on hit
+  });
 });
