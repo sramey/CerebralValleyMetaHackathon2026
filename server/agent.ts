@@ -26,6 +26,7 @@ export async function fixWithAgent(
   if (!key) throw new Error("MODEL_API_KEY is not set (add it to .env)");
   const messages: Msg[] = [{ role: "system", content: system }, { role: "user", content: user }];
   let calls = 0;
+  let lastTried = "";
   for (let round = 0; round <= maxCalls; round++) {
     const body: Record<string, unknown> = { model: WONDER, messages, max_tokens: 4096, reasoning_effort: "minimal" };
     if (round < maxCalls) body.tools = TOOLS;
@@ -38,19 +39,24 @@ export async function fixWithAgent(
     const data: any = await res.json();
     const msg = data?.choices?.[0]?.message;
     const toolCalls: any[] = msg?.tool_calls ?? [];
-    if (toolCalls.length === 0) return { text: msg?.content ?? "", calls };
+    if (toolCalls.length === 0) {
+      const text: string = msg?.content ?? "";
+      return { text: lastTried && !/export\s+default/.test(text) ? lastTried : text, calls };
+    }
     messages.push({ role: "assistant", content: msg.content ?? "", tool_calls: toolCalls });
     for (const tc of toolCalls) {
       calls++;
       let result: PlaytestToolResult;
       try {
         const args = JSON.parse(tc.function?.arguments ?? "{}") as { source?: string };
-        result = await runPlaytest(String(args.source ?? ""));
+        lastTried = String(args.source ?? "");
+        result = await runPlaytest(lastTried);
+        if (result.ok) { messages.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(result) }); return { text: lastTried, calls }; } // verified: no need for another model round
       } catch (err) {
         result = { ok: false, message: `tool error: ${err instanceof Error ? err.message : String(err)}` };
       }
       messages.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(result) });
     }
   }
-  return { text: "", calls };
+  return { text: lastTried, calls };
 }

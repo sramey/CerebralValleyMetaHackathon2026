@@ -59,7 +59,7 @@ export interface PlaytestRun {
   startW: number;
   startH: number;
   /** Solid the player is jammed against at the end of the run, if stuck. */
-  blocker: { type: string; x: number; y: number; w: number; h: number } | null;
+  blocker: { type: string; x: number; y: number; w: number; h: number; headroom: number | null } | null;
   threw: string | null;
 }
 
@@ -95,7 +95,25 @@ function findBlocker(world: World, p: Entity): PlaytestRun["blocker"] {
       if (!best || e.x < best.x) best = e;
     }
   }
-  return best ? { type: best.type, x: Math.round(best.x), y: Math.round(best.y), w: Math.round(best.w), h: Math.round(best.h) } : null;
+  if (!best) {
+    // Relaxed second look: anything solid within reach ahead that overlaps the player's height at all.
+    for (const e of world.entities) {
+      if (!e.solid || e === p) continue;
+      if (e.x < front + 60 && e.x + e.w > front && e.y < p.y + p.h && e.y + e.h > p.y) {
+        if (!best || e.x < best.x) best = e;
+      }
+    }
+  }
+  if (!best) return null;
+  // Headroom: the vertical opening under a hanging blocker, down to the floor beneath it.
+  const bottom = best.y + best.h;
+  let floor = Infinity;
+  for (const e of world.entities) {
+    if (!e.solid || e === best || e === p) continue;
+    if (e.x < best.x + best.w && e.x + e.w > best.x && e.y >= bottom - 1 && e.y < floor) floor = e.y;
+  }
+  const headroom = floor === Infinity ? null : Math.round(floor - bottom);
+  return { type: best.type, x: Math.round(best.x), y: Math.round(best.y), w: Math.round(best.w), h: Math.round(best.h), headroom };
 }
 
 /** Drive the bot in an already-loaded world. Never throws. */
@@ -167,13 +185,14 @@ export function judge(baseline: PlaytestRun, run: PlaytestRun): PlaytestVerdict 
   if (run.progress < baseline.progress * PLAYTEST.minProgress) {
     const bigger = run.startW > baseline.startW * PLAYTEST.bigRatio || run.startH > baseline.startH * PLAYTEST.bigRatio;
     const b = run.blocker;
-    const what = b ? `the ${label(b.type)}` : "the level";
+    const what = b ? ` by the ${label(b.type)}` : "";
     const plain = bigger
-      ? `You'd be too big to fit through the gap by ${what}, so you couldn't get any further.`
-      : `You'd get stuck at ${what} and couldn't keep going.`;
+      ? `You'd be too big to fit through the gap${what}, so you couldn't get any further.`
+      : `You'd get stuck${what} and couldn't keep going.`;
     const where = b ? ` stuck against a "${b.type}" at x=${b.x},y=${b.y},w=${b.w},h=${b.h}` : " stuck";
+    const room = b?.headroom != null && bigger ? `. The opening past it is only ${b.headroom}px tall: the player must stay under ${b.headroom}px tall (and keep moving at normal speed) to get through` : "";
     return base("stuck", plain,
-      `the bot only got ${run.progress}px right (${baseline.progress}px without this mod),${where}. Player size ${baseline.startW}x${baseline.startH} -> ${run.startW}x${run.startH}`);
+      `the bot only got ${run.progress}px right (${baseline.progress}px without this mod),${where}. Player size ${baseline.startW}x${baseline.startH} -> ${run.startW}x${run.startH}${room}`);
   }
   return { ok: true, plain: "You can still play.", detail: "", run, baseline };
 }
