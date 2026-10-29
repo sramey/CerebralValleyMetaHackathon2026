@@ -9,6 +9,9 @@ import type { ClientMsg, KnobDefs, KnobValue, ServerMsg } from "../src/contract"
 import { chat, hasApiKey, loadEnv, SPARK, WONDER } from "./meta";
 import { compileMod } from "./compile";
 import { verifyMod } from "./verify";
+import { playtestMod } from "./playtest";
+import type { WorldMod } from "./playtest";
+import { fixWithAgent } from "./agent";
 import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, formatManifest, ROUTER_SYSTEM, WONDER_SYSTEM } from "./prompt";
 import { logBuild, saveModSources } from "./createlog";
 import { artCachedUrl, artKeyForType, deriveSubject, generateSubjectArt, isScenerySubject, pickArtType } from "./art";
@@ -50,6 +53,24 @@ const STARTER_WORLD: BuiltinDef[] = [
   { alias: "player", file: "player.ts", id: "player" },
   { alias: "ground", file: "ground.ts", id: "ground" },
 ];
+
+// The player's world as the client last reported it (ADR 0013): playtests run in a copy of it.
+const worldOf = new WeakMap<WebSocket, { id: string; values: Record<string, KnobValue> }[]>();
+const builtinJs = new Map<string, string>();
+
+function worldMods(ws: WebSocket): WorldMod[] {
+  const listing = worldOf.get(ws) ?? [...manifest.keys()].map((id) => ({ id, values: {} }));
+  const out: WorldMod[] = [];
+  for (const m of listing) {
+    let compiled = manifest.get(m.id)?.compiled ?? builtinJs.get(m.id);
+    if (!compiled) {
+      const b = BUILTINS.find((x) => x.id === m.id);
+      try { if (b) { const c = compileMod(readFileSync(join(process.cwd(), "src/mods", b.file), "utf8")); if (c.ok) { compiled = c.js; builtinJs.set(m.id, c.js); } } } catch { /* unknown mod: skip it */ }
+    }
+    if (compiled) out.push({ id: m.id, compiled, values: m.values });
+  }
+  return out;
+}
 
 function normalizeBuiltinCommand(command: string): string {
   let s = command.toLowerCase().trim().replace(/\s+/g, " ");
@@ -530,7 +551,17 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
     return;
   }
 
+  // Results are cached by source so the agent's own playtest runs aren't repeated (or re-shown) at the end.
+  const attemptCache = new Map<string, Awaited<ReturnType<typeof attemptOnce>>>();
+  let playtests = 0;
   const attempt = async (src: string) => {
+    const hit = attemptCache.get(src);
+    if (hit) return hit;
+    const r = await attemptOnce(src);
+    attemptCache.set(src, r);
+    return r;
+  };
+  const attemptOnce = async (src: string) => {
     const c0 = performance.now();
     const compiled = compileMod(src);
     compileMs += Math.round(performance.now() - c0);
@@ -540,6 +571,14 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
     const res = await verifyMod(src, compiled.js);
     verifyMs += Math.round(performance.now() - v0);
     if (!res.ok) return { ok: false as const, errors: res.errors, js: compiled.js, msPerFrame: res.msPerFrame };
+    // "Can you still play?": a scripted bot plays a copy of the player's world with this mod in it.
+    const pt = await playtestMod(worldMods(ws), { def: res.def! });
+    verifyMs += pt.ms;
+    if (!pt.skipped) send(ws, { kind: "playtest", command, attempt: ++playtests, ok: pt.ok, plain: pt.plain, seed: pt.seed, frames: pt.frames, inputs: pt.inputs, mod: { id: res.def!.id, compiled: compiled.js }, ms: pt.ms });
+    if (!pt.ok) {
+      stage(ws, { kind: "stage", stage: "rejected", detail: pt.plain, command });
+      return { ok: false as const, errors: [`playtest: ${pt.plain} (${pt.detail})`], js: compiled.js, msPerFrame: res.msPerFrame };
+    }
     return { ok: true as const, errors: [] as string[], js: compiled.js, res };
   };
 
@@ -551,10 +590,17 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
     fixAttempted = true;
     try {
       const w0 = performance.now();
-      const fix = await chat(WONDER, [
-        { role: "system", content: WONDER_SYSTEM },
-        { role: "user", content: buildFixPrompt(command, source, first.errors) },
-      ], 4096);
+      // Wonder as an agent: it can call run_playtest on its own candidate before answering (ADR 0013).
+      const fix = await fixWithAgent(
+        `${WONDER_SYSTEM}
+
+You have a run_playtest tool. Call it with your complete fixed source to check that the player can still play; if it fails, revise and call it again. When it passes, reply with ONLY the final module source.`,
+        buildFixPrompt(command, source, first.errors),
+        async (src) => {
+          const r = await attempt(stripFences(src));
+          return { ok: r.ok, message: r.ok ? "passed: the player can still play" : r.errors.join("; ").slice(0, 600) };
+        },
+      );
       writeMs += Math.round(performance.now() - w0);
       source = stripFences(fix.text);
       sources.push(source);
@@ -624,6 +670,10 @@ function handleMessage(ws: WebSocket, raw: string): void {
   }
   if (!msg || typeof msg !== "object" || typeof (msg as { kind?: unknown }).kind !== "string") {
     send(ws, { kind: "say", text: "I only speak JSON — try the text box again." });
+    return;
+  }
+  if (msg.kind === "world") {
+    if (Array.isArray(msg.mods)) worldOf.set(ws, msg.mods.filter((m) => m && typeof m.id === "string").map((m) => ({ id: m.id, values: m.values ?? {} })));
     return;
   }
   if (msg.kind === "command") {

@@ -106,4 +106,21 @@ describe("playtest", () => {
     expect(rleDecode(rleEncode(masks))).toEqual(masks);
     expect(PLAYTEST.frames).toBeGreaterThan(0);
   });
+
+  it("lets a normal player, the bot and every built-in mod get past the overhang", async () => {
+    for (const f of ["enemy.ts", "coins.ts", "rain.ts", "fire-arrow.ts", "platform-moving.ts", "chicken.ts"]) {
+      const r = await playtestMod(starter, await candidate(builtin(f)));
+      expect(r.ok, `${f}: ${r.detail}`).toBe(true);
+    }
+    const w = new World(11);
+    const l = new ModLoader(w);
+    for (const m of starter) l.load(await importMod(m.compiled));
+    expect(runBot(w, 11).progress).toBeGreaterThan(1000);
+  });
+
+  it("only rejects a huge player because of the overhang", async () => {
+    const noOverhang: WorldMod[] = [starter[0], { ...starter[1], values: { overhang: false } }];
+    const r = await playtestMod(noOverhang, await candidate(hugePlayer));
+    expect(r.ok, r.detail).toBe(true);
+  });
 });
