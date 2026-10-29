@@ -1,6 +1,6 @@
 # ADR 0008: Art streams asynchronously; digitize placeholder while it generates
 
-- **Status:** Draft
+- **Status:** Accepted (owner, 2026-10-29)
 - **Date:** 2026-10-28
 
 ## Context

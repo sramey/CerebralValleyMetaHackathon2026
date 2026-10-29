@@ -1,6 +1,6 @@
 # ADR 0006: Build work is delegated to Spark subagents by file ownership
 
-- **Status:** Draft
+- **Status:** Accepted (owner, 2026-10-29)
 - **Date:** 2026-10-27
 
 ## Context

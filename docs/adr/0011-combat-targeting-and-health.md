@@ -1,6 +1,6 @@
 # ADR 0011: Combat targeting and health
 
-- **Status:** Draft
+- **Status:** Accepted (owner, 2026-10-29)
 - **Date:** 2026-10-28
 
 ## Context

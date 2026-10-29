@@ -1,6 +1,6 @@
 # ADR 0002: Router sends its schema; build-shaped commands always build
 
-- **Status:** Draft
+- **Status:** Accepted (owner, 2026-10-29)
 - **Date:** 2026-10-27
 
 ## Context

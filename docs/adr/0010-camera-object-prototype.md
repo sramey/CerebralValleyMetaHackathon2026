@@ -1,6 +1,6 @@
 # ADR 0010: Camera object prototype — SAM box + client flood-fill cutout, template mod
 
-- **Status:** Draft
+- **Status:** Accepted (owner, 2026-10-29)
 - **Date:** 2026-10-28
 
 ## Context

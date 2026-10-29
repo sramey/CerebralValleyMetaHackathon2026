@@ -1,3 +1,4 @@
+import { createBuilds } from "./builds";
 import { Application, Graphics, Sprite, Texture } from "pixi.js";
 import { framesFor, loadSpriteSheet, loadSubjects } from "./sprites";
 import chickenMod from "../mods/chicken";
@@ -8,6 +9,7 @@ import { Fx } from "./fx";
 import { drawCliff, drawShape, isCliff, kindOf, registerLook, setGrade } from "./shapes";
 import { ModLoader } from "../sim/loader";
 import { createGhost } from "./ghost";
+import { createPipeline } from "./pipeline";
 import { World } from "../sim/world";
 import playerMod from "../mods/player";
 import groundMod from "../mods/ground";
@@ -26,6 +28,7 @@ const BUILTINS: Record<string, ModDefinition> = {
 const world = new World(1337);
 const loader = new ModLoader(world);
 const ghost = createGhost(document.getElementById("stage-wrap")!);
+const pipeline = createPipeline(document.getElementById("stage-wrap")!);
 let rejectedAt = 0;
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
 
@@ -49,6 +52,14 @@ function say(text: string, state = "idle"): void {
   const orbClass = state === "building" ? "building" : state === "failed" ? "failed" : state === "done" ? "done" : "listening";
   orbDot.className = `orb ${orbClass}`;
   orbFeedback.textContent = text;
+}
+const builds = createBuilds(orbSay.parentElement ?? document.body, () => {});
+/** While other builds are in flight the orb keeps saying "building"; returns true if it did. */
+function sayWhileBuilding(): boolean {
+  if (builds.active() === 0) return false;
+  const head = builds.headline();
+  if (head) say(head, "building");
+  return true;
 }
 function log(text: string): void {
   const li = document.createElement("li");
@@ -423,15 +434,40 @@ drawerToggle.addEventListener("click", () => {
   setTimeout(fitRenderer, 400);
 });
 addEventListener("resize", fitRenderer);
+const RADIAL_PAD_X = 104;
+const RADIAL_PAD_TOP = 134;
+const RADIAL_PAD_BOTTOM = 104;
+function formatRadialLabel(type: string): string {
+  return type.replace(/^photo-\d+-?/, "").replace(/[-_]+/g, " ").trim() || type;
+}
+function positionRadialMenu(e: Entity, camX: number, camY: number): void {
+  const rawX = e.x - camX + e.w / 2;
+  const rawY = e.y - camY + e.h / 2;
+  const w = app.screen.width || stageWrapEl.clientWidth;
+  const h = app.screen.height || stageWrapEl.clientHeight;
+  const x = w > RADIAL_PAD_X * 2 ? Math.min(w - RADIAL_PAD_X, Math.max(RADIAL_PAD_X, rawX)) : w / 2;
+  const y = h > RADIAL_PAD_TOP + RADIAL_PAD_BOTTOM
+    ? Math.min(h - RADIAL_PAD_BOTTOM, Math.max(RADIAL_PAD_TOP, rawY))
+    : h / 2;
+  radialMenu.style.left = `${Math.round(x)}px`;
+  radialMenu.style.top = `${Math.round(y)}px`;
+  radialMenu.style.setProperty("--ring-dx", `${Math.round(rawX - x)}px`);
+  radialMenu.style.setProperty("--ring-dy", `${Math.round(rawY - y)}px`);
+  radialMenu.style.setProperty("--ring-size", `${Math.round(Math.min(110, Math.max(44, Math.hypot(e.w, e.h) + 12)))}px`);
+}
 function closeRadialMenu(): void {
   radialTargetId = null;
   radialMenu.hidden = true;
 }
 function openRadialMenu(e: Entity): void {
+  const switched = radialTargetId !== null && radialTargetId !== e.id && !radialMenu.hidden;
   radialTargetId = e.id;
-  radialCenter.textContent = e.type;
-  radialMenu.style.left = `${e.x - (camXSmooth ?? world.camera.x) + e.w / 2}px`;
-  radialMenu.style.top = `${e.y - (camYSmooth ?? world.camera.y) + e.h / 2}px`;
+  radialCenter.textContent = formatRadialLabel(e.type);
+  positionRadialMenu(e, camXSmooth ?? world.camera.x, camYSmooth ?? world.camera.y);
+  if (switched) {
+    radialMenu.hidden = true;
+    void radialMenu.offsetWidth;
+  }
   radialMenu.hidden = false;
 }
 function entityAt(wx: number, wy: number): Entity | undefined {
@@ -487,6 +523,7 @@ document.querySelectorAll<HTMLButtonElement>("#radial-menu [data-action]").forEa
       e.x -= (nw - e.w) / 2;
       e.y -= (nh - e.h);
       e.w = nw; e.h = nh;
+      positionRadialMenu(e, camXSmooth ?? world.camera.x, camYSmooth ?? world.camera.y);
     } else if (action === "front") {
       layerOverride.set(e.id, 5);
     } else if (action === "back") {
@@ -514,10 +551,7 @@ function render(): void {
   if (radialTargetId !== null) {
     const target = world.entities.find((e) => e.id === radialTargetId);
     if (!target) closeRadialMenu();
-    else {
-      radialMenu.style.left = `${target.x - camX + target.w / 2}px`;
-      radialMenu.style.top = `${target.y - camYSmooth + target.h / 2}px`;
-    }
+    else positionRadialMenu(target, camX, camYSmooth);
   }
   // vertical sky gradient via stacked bands
   const bandH = Math.ceil(H / SKY_BANDS);
@@ -1468,6 +1502,7 @@ function connect(): void {
   ws.addEventListener("message", async (ev) => {
     let msg: ServerMsg;
     try { msg = JSON.parse(String(ev.data)) as ServerMsg; } catch { return; }
+    pipeline.onMsg(msg);
     if (voice.onServerMsg(msg)) return;
     if (msg.kind === "world") { await applyWorld(msg); return; }
     if (msg.kind === "mood") { onMood(msg.mood); return; }
@@ -1484,7 +1519,9 @@ function connect(): void {
     if (msg.kind === "say") say(msg.text);
     else if (msg.kind === "stage") {
       log(`${msg.stage}: ${msg.detail}`);
-      if (msg.stage === "rejected") { rejectedAt = performance.now(); say(msg.detail, "failed"); }
+      if (msg.command) builds.stage(msg.command, msg.stage, msg.detail);
+      if (builds.active() > 1) sayWhileBuilding();
+      else if (msg.stage === "rejected") { rejectedAt = performance.now(); say(msg.detail, "failed"); }
       else if (msg.stage === "fixing") {
         // Keep the red "why" on screen long enough to read before the fix status replaces it.
         const wait = Math.max(0, 2200 - (performance.now() - rejectedAt));
@@ -1495,7 +1532,7 @@ function connect(): void {
     else if (msg.kind === "playtest") {
       void ghost.play({ base: loader.list().map((m) => ({ def: m.def, values: m.values })), candidate: msg.mod, replaces: msg.replaces, seed: msg.seed, inputs: msg.inputs, ok: msg.ok, plain: msg.plain });
     }
-    else if (msg.kind === "timing") log(`timing route ${msg.ms.route}ms write ${msg.ms.write}ms compile ${msg.ms.compile}ms verify ${msg.ms.verify}ms total ${msg.ms.total}ms`);
+    else if (msg.kind === "timing") { builds.finish(msg.command); log(`timing route ${msg.ms.route}ms write ${msg.ms.write}ms compile ${msg.ms.compile}ms verify ${msg.ms.verify}ms total ${msg.ms.total}ms`); }
     else if (msg.kind === "tweak") tweak(msg.modId, msg.knob, msg.value, "Tweaked.");
     else if (msg.kind === "removed") { loader.unload(msg.modId); renderMods(); }
     else if (msg.kind === "mod") {
@@ -1507,7 +1544,7 @@ function connect(): void {
         URL.revokeObjectURL(url);
         loader.load(loaded.default);
         registerLook(msg.mod.look);
-        say(`${msg.mod.title} verified and live.`, "done");
+        if (!sayWhileBuilding()) say(`${msg.mod.title} verified and live.`, "done");
         renderMods();
         const artPending = (msg.mod as { artPending?: string }).artPending;
         if (artPending) { if (framesBySubject[artPending]) pendingArt.delete(artPending); else pendingArt.add(artPending); }

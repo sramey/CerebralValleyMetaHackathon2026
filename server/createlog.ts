@@ -53,6 +53,10 @@ export interface BuildEntry {
   timings: BuildTimings;
   verify?: { ok: boolean; errors: string[]; msPerFrame: number };
   fixAttempted: boolean;
+  /** Wonder's tool loop for this build (ADR 0016): model turns and each tool call. */
+  agent?: { turns: number; calls: number; tools: { name: string; ms: number; ok?: boolean }[] };
+  /** Compound command this build belonged to, and how many ran in parallel. */
+  batch?: { size: number; parallel: number };
   sourceFile?: string;
   sourceFiles?: string[];
 }

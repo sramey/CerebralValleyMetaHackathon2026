@@ -1,6 +1,6 @@
 # ADR 0013: Visible verifier: bot playtest, input-replay ghost, agentic fix
 
-- **Status:** Draft
+- **Status:** Accepted (owner, 2026-10-29)
 - **Date:** 2026-10-29
 
 ## Context

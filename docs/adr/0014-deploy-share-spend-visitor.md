@@ -1,6 +1,6 @@
 # ADR 0014: Single-port deploy, per-session worlds, share links, spend guard, visitor mode
 
-- **Status:** Draft
+- **Status:** Accepted (owner, 2026-10-29)
 - **Date:** 2026-10-29
 
 ## Context

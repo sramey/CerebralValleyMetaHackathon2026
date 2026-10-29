@@ -43,6 +43,7 @@ Rules:
 - TARGETING: Default creatures wander or idle near where they spawn. NEVER follow, chase, or home in on the player unless the command asks for a follower/pet or a hostile hunter. Do not make everything chase the player.
 - HOSTILES & ALLIES: When the command asks for an enemy/monster that hunts or finds the player, set data.hostile = true on it and steer it toward the player. When the command asks for a hero/ally/guardian to FIGHT enemies, set data.hero = true and steer it toward the nearest entity with data.hostile === true (search api.entities()), never toward the player.
 - COMBAT: Every entity has health (default 100; api.damage(id, amount) destroys at 0 with a burst). Fighters deal damage on contact with a cooldown: only when api.tick() - (e.data.lastHit ?? -999) > 30, call api.damage(other.id, 10) and set e.data.lastHit = api.tick(). Enemies damage the player or heroes; heroes damage hostiles. Non-combat creatures do not deal damage.
+- LOCOMOTION: the engine already frees a walker that keeps pushing into a wall (it hops, then turns around), and floating platforms spawned with data: { oneWay: true } let creatures pass up through them and only land from above. Do not hand-code unstick logic. For friendly/neutral ground creatures set data.casual = true so they hop over the player instead of walking through them; never set it on hostile hunters.
 - Platformer world: x grows right, y grows DOWN. Ground is solid entities. Player type is "player".
 - solid: true + gravityScale: 0 means static terrain (ground/platforms) that never moves. Creatures, players and projectiles that must move/fall: use solid: false (or solid: true WITH gravityScale: 1). color is a NUMBER (hex like 0x57d94d), never a CSS string.`;
 
@@ -65,13 +66,13 @@ export function formatManifest(mods: WorldManifestEntry[]): string {
 }
 
 /** Prompt for Wonder to write one mod for the given player command. */
-export function buildWonderPrompt(command: string, manifest: string): string {
-  return `World mods currently loaded:\n${manifest}\n\nPlayer request: "${command}"\n\nWrite ONE self-contained TypeScript mod that fulfills the request. Pick a fresh lowercase-hyphen id not already loaded. Expose tunable values as knobs. Include a small test(t) that steps the sim and expects the key behavior. Output only the module code starting with "export default {".`;
+export function buildWonderPrompt(command: string, manifest: string, context = ""): string {
+  return `World mods currently loaded:\n${manifest}\n${context ? `\n${context}\n` : ""}\nPlayer request: "${command}"\n\nWrite ONE self-contained TypeScript mod that fulfills the request. Pick a fresh lowercase-hyphen id not already loaded. Expose tunable values as knobs. Include a small test(t) that steps the sim and expects the key behavior. Output only the module code starting with "export default {".`;
 }
 
 /** Prompt for Wonder to rewrite an already-loaded mod in place (same id). */
-export function buildEditPrompt(command: string, existingSource: string, manifest: string): string {
-  return `World mods currently loaded:\n${manifest}\n\nPlayer request: "${command}"\n\nThe request changes the behavior of an already-loaded mod. Its current source is:\n${existingSource}\n\nRewrite it and output the FULL corrected module starting with "export default {". Keep the SAME id so the client replaces it. Keep the existing knobs working and add new knobs as needed for the new behavior. Include a small test(t) that steps the sim and expects the key behavior. Output only the module code. No imports, no markdown, no prose.`;
+export function buildEditPrompt(command: string, existingSource: string, manifest: string, context = ""): string {
+  return `World mods currently loaded:\n${manifest}\n${context ? `\n${context}\n` : ""}\nPlayer request: "${command}"\n\nThe request changes the behavior of an already-loaded mod. Its current source is:\n${existingSource}\n\nRewrite it and output the FULL corrected module starting with "export default {". Keep the SAME id so the client replaces it. Keep the existing knobs working and add new knobs as needed for the new behavior. Include a small test(t) that steps the sim and expects the key behavior. Output only the module code. No imports, no markdown, no prose.`;
 }
 
 /** Prompt for Wonder to fix a mod that failed verification. */
@@ -96,6 +97,6 @@ Reply with ONLY a single JSON object, no markdown, no prose. Schema:
 - "question": anything else — greeting, help, unanswerable (set answer=text to say to the player).`;
 
 /** Prompt for Spark to route a command against the loaded-mod manifest. */
-export function buildRouterPrompt(command: string, manifest: string): string {
-  return `Loaded mods:\n${manifest}\n\nPlayer says: "${command}"\n\nReply with ONLY the JSON routing object.`;
+export function buildRouterPrompt(command: string, manifest: string, context = ""): string {
+  return `Loaded mods:\n${manifest}\n${context ? `\n${context}\n` : ""}\nPlayer says: "${command}"\n\nReply with ONLY the JSON routing object.`;
 }
