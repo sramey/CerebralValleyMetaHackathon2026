@@ -101,7 +101,7 @@ export function createPipeline(host: HTMLElement): Pipeline {
 
   const graph = root.querySelector<HTMLElement>(".pl-graph")!;
   const laneBox = root.querySelector<HTMLElement>(".pl-lanes")!;
-  // Impact numbers read from the game's own build log, live in the overlay (ADR 0026).
+  // Impact numbers read from the game's own build log, live in the overlay (ADR 0027).
   const statsPanel = createStatsPanel();
   root.insertBefore(statsPanel.element, root.querySelector(".pl-lanes-head"));
   const nodeEls = new Map<NodeId, HTMLElement>();

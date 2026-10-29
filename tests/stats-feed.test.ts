@@ -42,7 +42,7 @@ function fakeRes() {
 
 const req = (method: string, url: string) => ({ method, url }) as unknown as IncomingMessage;
 
-describe("GET /api/stats (ADR 0026)", () => {
+describe("GET /api/stats (ADR 0027)", () => {
   it("returns the aggregate as numbers with the exact StatsFeed shape", () => {
     const feed = feedOf();
     expect(Object.keys(feed).sort()).toEqual(["builds", "lines", "malformed", "mods", "window"]);

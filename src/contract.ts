@@ -207,7 +207,7 @@ export type WorldMod =
 export interface DemoWorld { id: string; title: string; blurb: string }
 
 /**
- * The impact numbers the game shows about itself (ADR 0026): the same aggregate
+ * The impact numbers the game shows about itself (ADR 0027): the same aggregate
  * `npm run stats` publishes, reduced to an allow-list of NUMBERS so it can be served
  * from `GET /api/stats` and printed by `npm run stats -- --json`. Never carries a
  * prompt, a mod title, a mod id, an error body or a file path: the log stays local.

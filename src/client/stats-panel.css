@@ -1,4 +1,4 @@
-/* In-app impact numbers in the pipeline overlay (ADR 0026). One strip, five tiles. */
+/* In-app impact numbers in the pipeline overlay (ADR 0027). One strip, five tiles. */
 .st-panel {
   flex-shrink: 0; display: flex; flex-direction: column; gap: clamp(4px, 0.7vh, 8px);
   padding: clamp(7px, 1vh, 11px) clamp(10px, 1.2vw, 16px); border-radius: 12px;

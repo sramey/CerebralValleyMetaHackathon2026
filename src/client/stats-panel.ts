@@ -1,4 +1,4 @@
-// Impact numbers inside the pipeline overlay (ADR 0026): builds landed, first-try rate,
+// Impact numbers inside the pipeline overlay (ADR 0027): builds landed, first-try rate,
 // auto-fix saves, median time to a playable change, and how many builds the log holds.
 //
 // Every number is fetched from `GET /api/stats`, which aggregates the game's own

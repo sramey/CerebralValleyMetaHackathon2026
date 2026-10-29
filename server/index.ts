@@ -1040,7 +1040,7 @@ function handleMessage(ws: WebSocket, raw: string): void {
 
 // One port: static client + WebSocket (ADR 0014). Works behind an HTTPS proxy as wss.
 // GET /api/stats is answered first: the in-app stats panel reads the build log's
-// aggregate numbers from it (ADR 0026).
+// aggregate numbers from it (ADR 0027).
 const staticHandler = createStaticHandler({ distDir: join(process.cwd(), "dist"), genArtDir: join(process.cwd(), "public", "art", "gen") });
 const statsHandler = createStatsHandler({ logFile: activeLogFile });
 const httpServer = createServer((req, res) => {

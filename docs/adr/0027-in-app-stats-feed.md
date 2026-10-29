@@ -1,4 +1,4 @@
-# 0026: In-app stats feed (`GET /api/stats` + panel in the pipeline view)
+# 0027: In-app stats feed (`GET /api/stats` + panel in the pipeline view)
 
 - **Status:** Draft
 - **Date:** 2026-10-29

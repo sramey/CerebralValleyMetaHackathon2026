@@ -19,7 +19,7 @@ const json = process.argv.includes("--json");
 const dryRun = process.argv.includes("--dry-run");
 
 if (json) {
-  // Same aggregation as GET /api/stats (ADR 0026), numbers only.
+  // Same aggregation as GET /api/stats (ADR 0027), numbers only.
   process.stdout.write(JSON.stringify(readStatsFeed(LOG_FILE), null, 2) + "\n");
   process.exit(0);
 }

@@ -1,4 +1,4 @@
-// Impact numbers the game can show about itself (ADR 0026).
+// Impact numbers the game can show about itself (ADR 0027).
 //
 // `GET /api/stats` answers with the aggregate of logs/builds.jsonl that `npm run stats`
 // publishes, reduced to an allow-list of NUMBERS (see StatsFeed in src/contract.ts).
