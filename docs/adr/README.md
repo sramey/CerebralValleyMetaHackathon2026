@@ -51,3 +51,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0018](0018-unstick-casual-locomotion.md) | One-way floating platforms, engine stuck recovery, casual hop over the player | Accepted |
 | [0017](0017-world-mood-restyle.md) | World mood restyle: Spark mood spec, palette swap, Muse Image edit from original sheets | Draft |
 | [0021](0021-in-app-pipeline-view.md) | In-app live pipeline view replaces the architecture slide | Draft |
+| [0022](0022-code-stream-build-theater.md) | Stream Wonder code live: build theater behind the stage + pipeline pane | Draft |
