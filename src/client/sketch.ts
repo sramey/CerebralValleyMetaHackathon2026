@@ -4,7 +4,8 @@
 // presses Done, and the exact world-space boxes of every stroke travel with the sketch
 // image to the server, which turns them into verified level geometry. This module is the
 // UI half: brushes, strokes, undo/clear/cancel, and the PNG + stroke payload. It never
-// touches the sim beyond reading the camera.
+// touches the sim beyond reading the camera; the frame loop in main.ts freezes the world
+// while `active()` is true (ADR 0028), so the player draws on a still frame.
 import type { ClientMsg, SketchPoint, SketchStroke, SketchTag } from "../contract";
 
 export interface SketchCamera { x: number; y: number }
@@ -137,7 +138,7 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
   const hint = document.createElement("input");
   hint.id = "sketch-hint";
   hint.type = "text";
-  hint.placeholder = "optional: “a stairway up to a tower”";
+  hint.placeholder = "optional: “a tower”";
   hint.autocomplete = "off";
   hint.maxLength = 200;
   palette.appendChild(hint);

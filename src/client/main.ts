@@ -18,6 +18,7 @@ import { createPipeline } from "./pipeline";
 import { createTheater } from "./build-theater";
 import { createHud } from "./hud";
 import { createSketch } from "./sketch";
+import { matchSketchIntent } from "./phrases";
 import { World } from "../sim/world";
 import playerMod from "../mods/player";
 import groundMod from "../mods/ground";
@@ -123,6 +124,12 @@ const sketch = createSketch(stageWrapEl, {
   log,
 });
 $("#sketch-btn").addEventListener("click", () => sketch.open());
+// Test hook: open/close sketch mode without a pointer (live checks, screenshots).
+(window as unknown as Record<string, unknown>).__sketch = {
+  open: () => sketch.open(),
+  close: () => sketch.close(),
+  active: () => sketch.active(),
+};
 const layerOverride = new Map<number, number>();
 function subjectKeyFor(e: Entity): string | undefined {
   const frames = framesFor(framesBySubject, e.type, e.type === "player");
@@ -758,7 +765,10 @@ let last = performance.now();
 let acc = 0;
 let noPlayerTicks = 0;
 function frame(now: number): void {
-  acc += Math.min(100, now - last);
+  // Sketch mode freezes the world (ADR 0028): you draw on a still frame, and the
+  // accumulator is dropped so resuming does not fast-forward the sim.
+  const sketching = sketch.active();
+  acc = sketching ? 0 : acc + Math.min(100, now - last);
   last = now;
   const stepMs = SIM.dt * 1000;
   while (acc >= stepMs) {
@@ -1717,6 +1727,11 @@ connect();
 
 function submitCommand(text: string): void {
   if (!text) return;
+  // "let me draw a level" / "sketch" open the overlay locally (ADR 0028): no AI call,
+  // no build slot. Anything else, including "draw a dragon", goes down the normal path.
+  const sketchIntent = matchSketchIntent(text);
+  if (sketchIntent === "open") { sketch.open(); return; }
+  if (sketchIntent === "close") { sketch.close(); say("Sketch closed — the world is running again."); return; }
   say(`Building: ${text}`, "building");
   if (!handleLocal(text)) {
     if (ws?.readyState === WebSocket.OPEN) send({ kind: "worldState", mods: loader.list().map((m) => ({ id: m.id, values: m.values })) });
