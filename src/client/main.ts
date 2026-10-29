@@ -26,6 +26,8 @@ import { createPipeline } from "./pipeline";
 import { createTheater } from "./build-theater";
 import { createHud } from "./hud";
 import { createSketch } from "./sketch";
+import { CAMERA_LABEL, CAPTURE_LABEL, UPLOAD_LABEL, dialogCssVars, dialogLayout, fitInside, photoFindMessage, photoWorkSize, stageHint, wantsCameraStream } from "./camera-dialog";
+import type { DialogPhase } from "./camera-dialog";
 import { matchSketchIntent } from "./phrases";
 import { World } from "../sim/world";
 import playerMod from "../mods/player";
@@ -1038,25 +1040,33 @@ function loadArtWithRetry(key: string, url: string, scenery = false): void {
 }
 
 // --- camera capture ----------------------------------------------------------
-// "Hold an object up to the camera": capture/upload -> pending capture ->
+// "Hold an object up to the camera": upload or capture -> pending capture ->
 // send {kind:"photoFind"} -> server segment box drawn as green box ->
 // Bring cuts locally (SAM box or click box) -> photoBring/photoBringLocal.
+// Upload is the default path and the dialog never touches a camera on its own
+// (bead jd1): only the "Use camera" button may call getUserMedia. Geometry lives in
+// ./camera-dialog, which the stylesheet and the tests share.
 const cameraBtn = $<HTMLButtonElement>("#camera-btn");
-const cameraModal = $("#camera-modal");
+const cameraModal = $<HTMLDivElement>("#camera-modal");
+const cameraStage = $<HTMLDivElement>("#camera-stage");
 const cameraVideo = $<HTMLVideoElement>("#camera-video");
-const cameraNoCam = $("#camera-nocam");
+const cameraPlaceholder = $<HTMLParagraphElement>("#camera-placeholder");
 const cameraLabel = $<HTMLInputElement>("#camera-label");
 const cameraPixel = document.querySelector<HTMLInputElement>("#camera-pixel");
 const cameraPreview = $<HTMLCanvasElement>("#camera-preview");
 const cameraBg = $<HTMLButtonElement>("#camera-bg");
-const cameraPreviewWrap = $("#camera-preview-wrap");
+const cameraPreviewWrap = $<HTMLDivElement>("#camera-preview-wrap");
 const cameraBoxEl = $("#camera-box");
 const cameraDot = $("#camera-dot");
 const cameraStatus = $("#camera-status");
 const cameraFind = $<HTMLButtonElement>("#camera-find");
 const cameraConfirm = $<HTMLButtonElement>("#camera-confirm");
+const cameraStart = $<HTMLButtonElement>("#camera-start");
+const cameraCapture = $<HTMLButtonElement>("#camera-capture");
+const cameraUploadBtn = $<HTMLButtonElement>("#camera-upload-btn");
 const cameraUpload = $<HTMLInputElement>("#camera-upload");
 let cameraStream: MediaStream | null = null;
+let cameraPhase: DialogPhase = "idle";
 let pendingCapture: { canvas: HTMLCanvasElement; dataUrl: string } | null = null;
 let currentKey: string | null = null;
 let foundBox: SegmentBox | null = null;
@@ -1069,9 +1079,43 @@ let wandMask: MaskInfo | null = null;
 let lastWandPoint: { fx: number; fy: number } | null = null;
 const wandSensEl = document.querySelector<HTMLInputElement>("#wand-sens");
 
+cameraUploadBtn.textContent = UPLOAD_LABEL;
+cameraStart.textContent = CAMERA_LABEL;
+cameraCapture.textContent = CAPTURE_LABEL;
+
+/** Apply the dialog's geometry to the CSS custom properties the stylesheet reads. */
+function syncCameraLayout(): void {
+  for (const [name, value] of Object.entries(dialogCssVars(dialogLayout({ w: innerWidth, h: innerHeight }, cameraPhase)))) {
+    cameraModal.style.setProperty(name, value);
+  }
+}
+/** Show the still at the largest size the reserved stage allows, exactly, so the green box lines up with the pointer. */
+function syncCameraPreviewSize(): void {
+  if (pendingCapture === null) return;
+  const box = cameraStage.getBoundingClientRect();
+  const fit = fitInside({ w: cameraPreview.width, h: cameraPreview.height }, { w: box.width - 2, h: box.height - 2 });
+  cameraPreview.style.width = `${fit.w}px`;
+  cameraPreview.style.height = `${fit.h}px`;
+}
+function setCameraPhase(phase: DialogPhase, note?: string): void {
+  cameraPhase = phase;
+  cameraModal.dataset.phase = phase;
+  cameraVideo.hidden = phase !== "stream";
+  cameraPreviewWrap.hidden = phase !== "preview";
+  cameraPlaceholder.hidden = phase !== "idle";
+  cameraPlaceholder.textContent = note ?? stageHint(phase, cameraStream !== null);
+  cameraUploadBtn.hidden = phase !== "idle";
+  cameraUploadBtn.classList.toggle("primary", phase === "idle");
+  cameraStart.hidden = phase !== "idle" || !navigator.mediaDevices?.getUserMedia;
+  cameraCapture.hidden = cameraStream === null;
+  cameraCapture.classList.toggle("primary", phase === "stream");
+  cameraFind.hidden = phase !== "preview";
+  cameraBg.hidden = phase !== "preview";
+  syncCameraLayout();
+  syncCameraPreviewSize();
+}
 function setCameraStatus(text: string): void {
   cameraStatus.textContent = text;
-  cameraStatus.hidden = text.length === 0;
 }
 function updateCameraConfirm(): void {
   cameraConfirm.disabled = !(
@@ -1122,6 +1166,7 @@ function redrawPreview(): void {
   } else if (wandMask) {
     drawTint(wandMask, 0.45);
   }
+  syncCameraPreviewSize();
 }
 function workImage(src: HTMLCanvasElement, workW: number): { w: number; h: number; data: Uint8ClampedArray } | null {
   const w = Math.min(workW, src.width);
@@ -1240,7 +1285,7 @@ function computeWand(fx: number, fy: number): void {
   wandMask = { mask: eroded, w, h, count: erodedCount };
   count = erodedCount;
   redrawPreview();
-  const tip = cameraStream && !bgCanvas ? " Tip: 'Capture empty background' first gives the cleanest cut." : "";
+  const tip = cameraStream && !bgCanvas ? " Tip: 'Empty background' first gives the cleanest cut." : "";
   if (count < 300) {
     setCameraStatus("That highlighted almost nothing — try the background method: capture the empty scene first." + tip);
   } else {
@@ -1370,32 +1415,40 @@ async function openCameraModal(): Promise<void> {
   bgCanvas = null;
   clearDetection();
   setCameraStatus("");
-  cameraPreviewWrap.hidden = true;
+  cameraLabel.value = "";
   cameraPreview.width = 1; cameraPreview.height = 1;
   cameraPreview.getContext("2d")?.clearRect(0, 0, 1, 1);
-  cameraConfirm.hidden = true;
   cameraConfirm.disabled = true;
-  cameraFind.hidden = true;
-  cameraBg.hidden = true;
-  cameraNoCam.hidden = true;
-  cameraVideo.hidden = false;
   cameraModal.hidden = false;
+  // Upload first (bead jd1): opening the dialog never asks for a camera, so the beat is
+  // testable on a machine with none. "Use camera" is the only door to getUserMedia.
+  setCameraPhase("idle");
+  cameraLabel.focus();
+}
+
+/** The camera path, and only the camera path: pressed by the person, never on open. */
+async function startCamera(): Promise<void> {
+  setCameraStatus("Turning the camera on…");
   try {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error("no camera API");
     cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    cameraVideo.muted = true;
     cameraVideo.srcObject = cameraStream;
+    setCameraPhase("stream");
+    setCameraStatus("");
   } catch {
     stopCamera();
-    cameraVideo.hidden = true;
-    cameraNoCam.hidden = false;
+    setCameraPhase("idle", "No camera on this machine — upload a photo instead.");
+    setCameraStatus("");
   }
 }
+
 function setPendingCapture(source: CanvasImageSource, sw: number, sh: number): void {
   if (sw <= 0 || sh <= 0) return;
-  const scale = Math.min(1, 768 / Math.max(sw, sh));
+  const { w, h } = photoWorkSize({ w: sw, h: sh });
   const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(sw * scale));
-  canvas.height = Math.max(1, Math.round(sh * scale));
+  canvas.width = w;
+  canvas.height = h;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
@@ -1405,15 +1458,12 @@ function setPendingCapture(source: CanvasImageSource, sw: number, sh: number): v
   pendingPhotos.set(currentKey, canvas);
   pendingCapture = { canvas, dataUrl };
   clearDetection();
-  cameraPreviewWrap.hidden = false;
-  cameraConfirm.hidden = false;
   cameraConfirm.disabled = true;
-  cameraFind.hidden = false;
-  cameraBg.hidden = false;
+  setCameraPhase("preview");
   redrawPreview();
   if (bgCanvas) computeDiff();
   if (diffComponents.length === 0) setCameraStatus("Looking for it...");
-  sendPhotoFind();
+  send(photoFindMessage(currentKey, dataUrl, currentPrompt()));
 }
 function cutoutTexture(key: string, src: HTMLCanvasElement, box: SegmentBox): HTMLCanvasElement | null {
   // Map the 1600-space box to canvas pixels, pad 5%, clamp to canvas.
@@ -1507,8 +1557,14 @@ function handleSegment(key: string, rawBox: unknown): void {
   updateCameraConfirm();
 }
 cameraBtn.addEventListener("click", () => { void openCameraModal(); });
+cameraStart.addEventListener("click", () => { if (wantsCameraStream("use-camera")) void startCamera(); }); // the only door to getUserMedia (bead jd1)
 $("#camera-cancel").addEventListener("click", () => closeCameraModal());
 cameraModal.addEventListener("click", (e) => { if (e.target === cameraModal) closeCameraModal(); });
+addEventListener("resize", () => {
+  if (cameraModal.hidden) return;
+  syncCameraLayout();
+  syncCameraPreviewSize();
+});
 $("#camera-capture").addEventListener("click", () => {
   if (cameraVideo.videoWidth > 0) setPendingCapture(cameraVideo, cameraVideo.videoWidth, cameraVideo.videoHeight);
 });
@@ -1541,7 +1597,7 @@ cameraBg.addEventListener("click", () => {
   foundBox = null; clickPoint = null; cameraBoxEl.hidden = true; cameraDot.hidden = true;
   redrawPreview();
   updateCameraConfirm();
-  setCameraStatus("Background remembered. Now hold the object up and Capture again.");
+  setCameraStatus(cameraStream ? "Background remembered. Hold the object up and press Capture again." : "Background remembered — pick the photo with the object in it.");
 });
 wandSensEl?.addEventListener("input", () => {
   if (wandMask && lastWandPoint) computeWand(lastWandPoint.fx, lastWandPoint.fy);
