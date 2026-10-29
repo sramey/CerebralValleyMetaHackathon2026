@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { moodKey, moodPrompt, moodSpecFor, parseMoodSpec, restyledUrl, sheetPath, pool } from "../server/mood";
+import { cleanWebp, moodKey, moodPrompt, moodSpecFor, parseMoodSpec, pool, restyledUrl, sheetPath, softenAnchor } from "../server/mood";
 
 describe("mood (ADR 0017)", () => {
   it("known moods use hand-tuned presets, with aliases", async () => {
@@ -26,6 +28,7 @@ describe("mood (ADR 0017)", () => {
     expect(sheetPath("photo-1")).toBeNull();
     expect(sheetPath("robot--spooky")).toBeNull();
     expect(sheetPath("ninja")).not.toBeNull();
+    expect(sheetPath("chicken")).not.toBeNull();
     expect(sheetPath("definitely-not-there")).toBeNull();
   });
 
@@ -34,6 +37,17 @@ describe("mood (ADR 0017)", () => {
     expect(moodKey("")).toBe("mood");
     expect(moodPrompt("haunted night")).toContain("haunted night");
     expect(moodPrompt("x")).toContain("#FF00FF");
+  });
+
+  it("strips VP8X/XMP metadata from chicken.webp and softens risky anchor words on retry", () => {
+    const raw = readFileSync(join(process.cwd(), "public", "art", "chicken.webp"));
+    expect(raw.toString("ascii", 12, 16)).toBe("VP8X");
+    const cleaned = cleanWebp(raw);
+    expect(cleaned.toString("ascii", 0, 4)).toBe("RIFF");
+    expect(cleaned.toString("ascii", 8, 12)).toBe("WEBP");
+    expect(cleaned.toString("ascii", 12, 16)).toBe("VP8 ");
+    expect(cleaned.length).toBeLessThan(raw.length);
+    expect(softenAnchor("haunted graveyard at night: tattered and creepy fog", "spooky")).not.toMatch(/graveyard|tattered|creepy|haunted/i);
   });
 
   it("pool never runs more than the limit at once", async () => {
