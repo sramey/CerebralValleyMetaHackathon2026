@@ -233,6 +233,44 @@ export type WorldMod =
 
 export interface DemoWorld { id: string; title: string; blurb: string }
 
+/**
+ * The impact numbers the game shows about itself (ADR 0027): the same aggregate
+ * `npm run stats` publishes, reduced to an allow-list of NUMBERS so it can be served
+ * from `GET /api/stats` and printed by `npm run stats -- --json`. Never carries a
+ * prompt, a mod title, a mod id, an error body or a file path: the log stays local.
+ */
+export interface StatsFeed {
+  /** First and last day in the log, and how many days that spans. */
+  window: { first: string | null; last: string | null; days: number };
+  /** JSONL lines aggregated, and how many of them could not be read. */
+  lines: number;
+  malformed: number;
+  builds: {
+    /** Player requests that reached the pipeline (builds + tweaks + say). */
+    total: number;
+    /** Requests where AI actually wrote code (landed + failed). */
+    attempts: number;
+    /** Code written, verified and hot-loaded. */
+    landed: number;
+    /** Still unverified after the single auto-fix round. */
+    failed: number;
+    /** landed / attempts, 0..1, or null when nothing was attempted yet. */
+    landedPct: number | null;
+    /** Landed without needing the auto-fix round. */
+    firstPass: number;
+    /** firstPass / landed, 0..1, or null when nothing landed yet. */
+    firstPassPct: number | null;
+    /** Auto-fix rounds that turned a failure into a landed build. */
+    fixSaves: number;
+    /** Auto-fix rounds attempted. */
+    fixAttempts: number;
+    /** Median end-to-end time for a landed build (route + write + compile + verify). */
+    medianMs: number | null;
+    p90Ms: number | null;
+  };
+  mods: { distinct: number; edits: number };
+}
+
 export type BuildStage = "routing" | "writing" | "compiling" | "verifying" | "rejected" | "fixing" | "done" | "failed";
 
 export type ServerMsg =

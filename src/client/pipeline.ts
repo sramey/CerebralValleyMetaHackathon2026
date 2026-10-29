@@ -4,6 +4,7 @@
 // milliseconds, and parallel builds from a compound command get one lane each.
 import "./pipeline.css";
 import type { ServerMsg } from "../contract";
+import { createStatsPanel } from "./stats-panel";
 
 type NodeId = "voice" | "spark" | "wonder" | "esbuild" | "verifier" | "live" | "image" | "sam";
 type Slot = "route" | "write" | "compile" | "verify";
@@ -100,6 +101,9 @@ export function createPipeline(host: HTMLElement): Pipeline {
 
   const graph = root.querySelector<HTMLElement>(".pl-graph")!;
   const laneBox = root.querySelector<HTMLElement>(".pl-lanes")!;
+  // Impact numbers read from the game's own build log, live in the overlay (ADR 0027).
+  const statsPanel = createStatsPanel();
+  root.insertBefore(statsPanel.element, root.querySelector(".pl-lanes-head"));
   const nodeEls = new Map<NodeId, HTMLElement>();
   for (const n of NODES) {
     const el = document.createElement("div");
@@ -231,7 +235,10 @@ export function createPipeline(host: HTMLElement): Pipeline {
     open = force ?? !open;
     root.hidden = !open;
     btn.classList.toggle("on", open);
-    if (open) paint();
+    if (open) {
+      paint();
+      statsPanel.refresh();
+    }
   }
 
   btn.addEventListener("click", () => toggle());
