@@ -13,8 +13,9 @@ an art sheet, and a spent Meta call — and anything said out loud lands in the 
 Two constraints pull in opposite directions:
 
 - **Latency.** The router already costs ~0.7 s and a build ~8 s; the working bar for this bead
-  is that a normal request pays **under 400 ms extra**. A Spark classification round trip is
-  ~0.5–0.7 s, so "wait for the model, then route" cannot meet that budget on its own.
+  is that a normal request pays **under 400 ms extra**. Measured here, a Spark classification
+  round trip is 0.4–1.3 s (four prompts, minimal reasoning), so "wait for the model, then
+  route" cannot meet that bar on its own.
 - **Coverage.** A word list cannot read nuance ("add someone dead" vs "add a dead tree"), and
   a model cannot be trusted to be fast.
 
