@@ -191,6 +191,11 @@ export function initVoice(deps: VoiceDeps) {
   // Keep a Meta session warm server-side; the server drops an unused one after a few minutes.
   const warm = () => { if (deps.isOpen()) deps.sendJson({ kind: "voiceWarm" }); };
   addEventListener("focus", warm);
+  // The server frees an idle warm session after ~2 min; activity from an engaged player brings it back.
+  let lastWarm = 0;
+  const warmOnActivity = () => { const t = performance.now(); if (t - lastWarm > 20_000) { lastWarm = t; warm(); } };
+  addEventListener("keydown", warmOnActivity);
+  addEventListener("pointerdown", warmOnActivity);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) warm(); });
 
   // Test hooks: drive a turn without a physical key, read measured latencies.

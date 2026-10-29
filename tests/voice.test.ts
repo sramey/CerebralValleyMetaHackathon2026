@@ -227,3 +227,31 @@ describe("voice hub against a mock Meta endpoint", () => {
     expect(err.detail).toMatch(/MODEL_API_KEY/);
   });
 });
+
+describe("voice spend guard", () => {
+  it("a refused start says why and opens no Meta session; session seconds are booked when one ends", async () => {
+    const meta = await mockMeta();
+    const c = fakeClient();
+    let refuse: string | null = "Voice is used up for today.";
+    const booked: number[] = [];
+    const hub = createVoiceHub({
+      modNames: () => [], send: c.send, url: meta.url(), getKey: () => "k",
+      guard: { check: () => refuse, record: (_w, s) => { booked.push(s); } },
+    });
+    hub.handle(c.ws, { kind: "voiceWarm" });
+    hub.handle(c.ws, { kind: "voiceStart" });
+    expect(c.msgs[0]).toMatchObject({ kind: "voiceState", state: "error", detail: "Voice is used up for today." });
+    await new Promise((r) => setTimeout(r, 100));
+    expect(meta.seen.connections).toBe(0);
+
+    refuse = null;
+    hub.handle(c.ws, { kind: "voiceStart" });
+    hub.audio(c.ws, frame() as never);
+    hub.handle(c.ws, { kind: "voiceEnd" });
+    await until(() => c.msgs.some((m) => m.kind === "transcript" && m.final));
+    await until(() => booked.length >= 1);
+    expect(booked[0]).toBeGreaterThan(0);
+    hub.close(c.ws);
+    meta.wss.close();
+  });
+});

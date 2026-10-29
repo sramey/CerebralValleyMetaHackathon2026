@@ -2,10 +2,11 @@
 // compile -> verify -> one auto-fix -> hot-load message. Never crashes on a
 // bad mod or a missing MODEL_API_KEY (answers with say in that case).
 import { readFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { join } from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
 import { SIM } from "../src/contract";
-import type { ClientMsg, KnobDefs, KnobValue, ServerMsg } from "../src/contract";
+import type { ClientMsg, KnobDefs, KnobValue, ServerMsg, WorldMod } from "../src/contract";
 import { chat, hasApiKey, loadEnv, SPARK, WONDER } from "./meta";
 import { compileMod } from "./compile";
 import { verifyMod } from "./verify";
@@ -13,6 +14,10 @@ import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, 
 import { logBuild, saveModSources } from "./createlog";
 import { artCachedUrl, artKeyForType, deriveSubject, generateSubjectArt, isScenerySubject, pickArtType } from "./art";
 import { segmentPhoto } from "./photo";
+import { Budget, readLimits } from "./budget";
+import type { Kind } from "./budget";
+import { isWorldId, snapshotWorld, WorldStore } from "./worlds";
+import { createStaticHandler } from "./static";
 import { createVoiceHub } from "./voice";
 
 loadEnv();
@@ -27,7 +32,20 @@ interface ManifestRec {
   art?: { key: string; url: string; scenery?: boolean };
 }
 
-const manifest = new Map<string, ManifestRec>();
+// Each connection has its own world (ADR 0014): a public server must never mix visitors' mods.
+interface Session { manifest: Map<string, ManifestRec>; ip: string }
+const sessions = new WeakMap<WebSocket, Session>();
+function sess(ws: WebSocket): Session {
+  let s = sessions.get(ws);
+  if (!s) { s = { manifest: new Map(), ip: "unknown" }; sessions.set(ws, s); }
+  return s;
+}
+
+const HOST = process.env.HOST ?? "127.0.0.1";
+const DATA_DIR = join(process.cwd(), process.env.DATA_DIR ?? "data");
+const killSwitchOn = () => /^(1|true|yes|on)$/i.test(process.env.AI_KILL_SWITCH ?? "");
+const budget = new Budget({ ...readLimits(process.env), killSwitch: killSwitchOn, file: join(DATA_DIR, "budget.json") });
+const worlds = new WorldStore(join(DATA_DIR, "worlds"), join(process.cwd(), "worlds"));
 
 interface BuiltinDef { alias: string; file: string; id: string }
 
@@ -65,6 +83,7 @@ interface DeliverTimings { route: number; write: number; compile: number; verify
 
 /** Compile/verify/send/manifest/log one mod source. Returns false on any failure. */
 async function deliverMod(ws: WebSocket, command: string, source: string, routeLabel: string, t0: number, timings: DeliverTimings): Promise<boolean> {
+  const manifest = sess(ws).manifest;
   try {
     stage(ws, { kind: "stage", stage: "compiling", detail: "compiling the mod", command });
     const c0 = performance.now();
@@ -112,8 +131,8 @@ function knobValues(rec: ManifestRec): Record<string, unknown> {
   return out;
 }
 
-function manifestText(): string {
-  return formatManifest([...manifest.values()].map((m) => ({ id: m.id, title: m.title, knobs: knobValues(m) })));
+function manifestText(ws: WebSocket): string {
+  return formatManifest([...sess(ws).manifest.values()].map((m) => ({ id: m.id, title: m.title, knobs: knobValues(m) })));
 }
 
 function photoTitle(prompt: string): string {
@@ -158,6 +177,7 @@ function buildPhotoModSource(key: string, prompt: string, aspect: number): strin
 const pendingFinds = new Map<WebSocket, Map<string, { box: { x: number; y: number; w: number; h: number }; prompt: string }>>();
 
 async function buildPhotoMod(ws: WebSocket, key: string, prompt: string, aspect: number): Promise<void> {
+  const manifest = sess(ws).manifest;
   const t0 = performance.now();
   const safePrompt = typeof prompt === "string" ? prompt : "";
   const command = `photo: ${safePrompt}`;
@@ -220,6 +240,7 @@ async function handlePhoto(ws: WebSocket, msg: Extract<ClientMsg, { kind: "photo
     return;
   }
   try {
+    if (!spend(ws, "sam")) { send(ws, { kind: "segment", key: msg.key, box: null }); return; }
     const box = await segmentPhoto(msg.image, prompt);
     send(ws, { kind: "segment", key: msg.key, box });
     if (!box) {
@@ -246,6 +267,7 @@ async function handlePhotoFind(ws: WebSocket, msg: Extract<ClientMsg, { kind: "p
       send(ws, { kind: "segment", key, box: null });
       return;
     }
+    if (!spend(ws, "sam")) { send(ws, { kind: "segment", key, box: null }); return; }
     const box = await segmentPhoto(msg.image, prompt);
     if (box) {
       let perWs = pendingFinds.get(ws);
@@ -363,15 +385,12 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
   let writeMs = 0;
   let compileMs = 0;
   let verifyMs = 0;
-  const command = text;
+  const command = text.slice(0, 400);
+  const manifest = sess(ws).manifest;
 
   stage(ws, { kind: "stage", stage: "routing", detail: "routing your command", command });
 
-  if (!hasApiKey()) {
-    send(ws, {
-      kind: "say",
-      text: "No MODEL_API_KEY is set, so I can't write mods right now — but I'm online. Add the key and try again!",
-    });
+  if (!spend(ws, "build")) {
     send(ws, { kind: "timing", command, ms: { route: 0, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
     logBuild({ command, route: "new", outcome: "say", timings: { route: 0, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) }, fixAttempted: false });
     return;
@@ -383,7 +402,7 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
     const r0 = performance.now();
     const res = await chat(SPARK, [
       { role: "system", content: ROUTER_SYSTEM },
-      { role: "user", content: buildRouterPrompt(command, manifestText()) },
+      { role: "user", content: buildRouterPrompt(command, manifestText(ws)) },
     ], 1024);
     routeMs = Math.round(performance.now() - r0);
     void res.ms;
@@ -519,7 +538,7 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
     const w0 = performance.now();
     const res = await chat(WONDER, [
       { role: "system", content: WONDER_SYSTEM },
-      { role: "user", content: editRec ? buildEditPrompt(command, editRec.source, manifestText()) : buildWonderPrompt(command, manifestText()) },
+      { role: "user", content: editRec ? buildEditPrompt(command, editRec.source, manifestText(ws)) : buildWonderPrompt(command, manifestText(ws)) },
     ], 4096);
     writeMs = Math.round(performance.now() - w0);
     source = stripFences(res.text);
@@ -586,7 +605,7 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
         const cachedUrl = artCachedUrl(key);
         if (cachedUrl) {
           art = { key, url: cachedUrl, ...(scenery ? { scenery: true } : {}) };
-        } else {
+        } else if (spend(ws, "image")) {
           artPending = key;
           pendingArt = { subject, key, scenery };
         }
@@ -616,7 +635,53 @@ async function handleSingle(ws: WebSocket, text: string): Promise<void> {
 }
 
 // Hold-to-talk (ADR 0012): mic audio arrives as binary frames and is proxied to Muse Voice Transcribe.
-const voiceHub = createVoiceHub({ modNames: () => [...manifest.values()].flatMap((m) => [m.id, m.title]), send });
+const voiceHub = createVoiceHub({
+  modNames: (ws) => [...sess(ws).manifest.values()].flatMap((m) => [m.id, m.title]),
+  send,
+  guard: {
+    check: (ws) => {
+      if (!hasApiKey()) return "Voice isn't connected on this server. Type instead.";
+      const v = budget.check(sess(ws).ip, "voice", 10);
+      return v.ok ? null : v.message;
+    },
+    record: (ws, seconds) => budget.add(sess(ws).ip, "voice", seconds),
+  },
+});
+
+/** Spend one unit of Meta budget, or tell the visitor why not (the game keeps playing). */
+function spend(ws: WebSocket, kind: Kind): boolean {
+  if (!hasApiKey()) {
+    send(ws, { kind: "say", text: "The AI isn't connected on this server, but you can still play and try a demo world." });
+    send(ws, { kind: "visitor", reason: "nokey", demos: worlds.demos() });
+    return false;
+  }
+  const v = budget.take(sess(ws).ip, kind);
+  if (v.ok) return true;
+  send(ws, { kind: "say", text: v.message });
+  if (kind !== "image") send(ws, { kind: "visitor", reason: v.scope === "killswitch" ? "killswitch" : "budget", demos: worlds.demos() });
+  return false;
+}
+
+const BUILTIN_IDS: ReadonlySet<string> = new Set(BUILTINS.map((b) => b.id));
+
+function handleWorldSave(ws: WebSocket, msg: Extract<ClientMsg, { kind: "worldSave" }>): void {
+  const requested = Array.isArray(msg.mods) ? msg.mods.filter((m) => m && typeof m.id === "string") : [];
+  const saved = worlds.save(snapshotWorld(requested, sess(ws).manifest, BUILTIN_IDS));
+  if ("error" in saved) send(ws, { kind: "say", text: saved.error });
+  else send(ws, { kind: "worldSaved", id: saved.id });
+}
+
+function handleWorldLoad(ws: WebSocket, msg: Extract<ClientMsg, { kind: "worldLoad" }>): void {
+  const w = isWorldId(msg.id) ? worlds.get(msg.id) : null;
+  if (!w) { send(ws, { kind: "say", text: "That world link doesn't exist (any more). Start fresh or open a demo world." }); return; }
+  // The session now holds exactly this world, so remixing (edit/undo/tweak) works on it.
+  const manifest = sess(ws).manifest;
+  manifest.clear();
+  for (const m of w.mods) {
+    if (m.builtin !== true) manifest.set(m.id, { id: m.id, title: m.title, source: m.source, compiled: m.compiled, knobs: structuredClone(m.knobs), ...(m.art ? { art: m.art } : {}) });
+  }
+  send(ws, { kind: "world", id: w.id, mods: w.mods as WorldMod[] });
+}
 
 function handleMessage(ws: WebSocket, raw: string): void {
   let msg: ClientMsg;
@@ -631,7 +696,10 @@ function handleMessage(ws: WebSocket, raw: string): void {
     return;
   }
   if (voiceHub.handle(ws, msg)) return;
-  if (msg.kind === "command") {
+  const manifest = sess(ws).manifest;
+  if (msg.kind === "worldSave") handleWorldSave(ws, msg);
+  else if (msg.kind === "worldLoad") handleWorldLoad(ws, msg);
+  else if (msg.kind === "command") {
     handleCommand(ws, msg.text).catch((err) => {
       send(ws, { kind: "say", text: `Command failed: ${err instanceof Error ? err.message : String(err)}` });
     });
@@ -672,10 +740,27 @@ function handleMessage(ws: WebSocket, raw: string): void {
   }
 }
 
-const wss = new WebSocketServer({ port: PORT, host: "127.0.0.1" });
-wss.on("connection", (ws: WebSocket) => {
+// One port: static client + WebSocket (ADR 0014). Works behind an HTTPS proxy as wss.
+const staticHandler = createStaticHandler({ distDir: join(process.cwd(), "dist"), genArtDir: join(process.cwd(), "public", "art", "gen") });
+const httpServer = createServer(staticHandler);
+const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "").split(",").map((o) => o.trim()).filter(Boolean);
+const maxConnPerIp = Number(process.env.MAX_CONN_PER_IP ?? 10);
+const connsByIp = new Map<string, number>();
+const wss = new WebSocketServer({
+  server: httpServer,
+  maxPayload: 6 * 1024 * 1024, // photos arrive as data URLs (capped at 4 MB each)
+  verifyClient: ({ origin }: { origin: string }) => allowedOrigins.length === 0 || allowedOrigins.includes(origin),
+});
+wss.on("connection", (ws: WebSocket, req) => {
+  const fwd = process.env.TRUST_PROXY === "1" ? String(req.headers["x-forwarded-for"] ?? "").split(",")[0].trim() : "";
+  const ip = fwd || req.socket.remoteAddress || "unknown";
+  if ((connsByIp.get(ip) ?? 0) >= maxConnPerIp) { ws.close(1013, "too many connections"); return; }
+  connsByIp.set(ip, (connsByIp.get(ip) ?? 0) + 1);
+  sess(ws).ip = ip;
   send(ws, { kind: "say", text: "hello! Tell me what to build — e.g. 'add a player'." });
+  if (!hasApiKey() || killSwitchOn()) send(ws, { kind: "visitor", reason: killSwitchOn() ? "killswitch" : "nokey", demos: worlds.demos() });
   ws.on("close", () => {
+    connsByIp.set(ip, Math.max(0, (connsByIp.get(ip) ?? 1) - 1));
     pendingFinds.delete(ws);
     voiceHub.close(ws);
   });
@@ -690,6 +775,7 @@ wss.on("connection", (ws: WebSocket) => {
     }
   });
 });
-wss.on("listening", () => {
-  console.log(`meta server listening on ws://127.0.0.1:${PORT}`);
+httpServer.listen(PORT, HOST, () => {
+  console.log(`meta server listening on ws://${HOST}:${PORT} (client + websocket on one port)`);
 });
+for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => { budget.stop(); process.exit(0); });
