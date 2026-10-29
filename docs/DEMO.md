@@ -31,6 +31,18 @@ Total planned: 170 s (2:50). Slack: 10 s.
 
 The harness reported 180 s for beat 3 because the server sent no end marker for the whole compound command. `server/index.ts` now sends one (not re-run live, the build cap was reached). Beats 7 to 9 are not covered by the rehearse set.
 
+## Recording-day prep (bead 1os)
+Run `npm run demo:prep` before every take (add `--dry` to only report, `--skip-art` to skip image calls). It:
+1. prints which `BUDGET_*` lines to raise in `.env` (names and suggested numbers only, never keys) and warns if today's local counters are already used up;
+2. resets `server/learned/` to its committed state (new files go to `output/`) and warns about any rule that caps the player's size, since that changes beat 5;
+3. moves untracked files out of `public/art/gen/` into `output/` (they regenerate on demand, one image each);
+4. pre-warms the spooky mood art for at most 6 sprite sheets (ninja, dragon, slime, chicken, bird, cat, whichever exist), so beat 6's redraw is instant;
+5. preflights: one cheap Meta call, the server and Vite ports, and a microphone hint.
+
+**Freeze the learner while recording:** set `DEMO_FREEZE_LEARNING=1` in `.env` (and restart the server). The learner still reads rules and skills but writes none, so rehearsals and takes cannot change `server/learned/` (a "make me giant" auto-fix once added a size rule during a rehearsal run).
+
+**Voice limit:** with no `BUDGET_SESSION_VOICE_MIN` set the per-visitor voice allowance was 8 seconds, not the intended 8 minutes (fixed in `server/budget.ts`); for recording, still raise it to 30.
+
 ## Notes for the owner
 - **Impact numbers:** the claim "non-coders build games in minutes" needs the non-coder test (WINPLAN item 4) clips and numbers; none are in this draft. Beat 8 is the place to cut to them if you have them (cost: about 10 s of the slack).
 - **Open-weights bonus:** if Muse Spark Open via Baseten is used in the product, say where in beat 2 or 8; this draft does not claim it.
