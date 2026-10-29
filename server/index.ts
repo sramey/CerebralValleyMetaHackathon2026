@@ -40,6 +40,7 @@ import { runSketchBuild } from "./sketch";
 import { clampKnobValue, gateMessage } from "./validate";
 import { screenRequest, lateVerdict } from "./safety";
 import type { PendingVerdict } from "./safety";
+import { cachedExplanation, explainMod } from "./explain";
 
 loadEnv();
 const PORT = Number(process.env.PORT ?? 8787);
@@ -1069,6 +1070,22 @@ function handleWorldLoad(ws: WebSocket, msg: Extract<ClientMsg, { kind: "worldLo
   send(ws, { kind: "world", id: w.id, mods: w.mods as WorldMod[], ...(w.mood ? { mood: w.mood } : {}), ...(restyled ? { restyled } : {}) });
 }
 
+/** "How does this work?" (ADR 0043): explain one loaded mod's code in plain words, from the
+ *  server's own copy of the source. A cached answer is free; a miss spends one explain unit. */
+async function handleExplain(ws: WebSocket, msg: Extract<ClientMsg, { kind: "explain" }>): Promise<void> {
+  await adoptingOf.get(ws);
+  const manifest = sess(ws).manifest;
+  if (!manifest.has(msg.modId)) await adoptBuiltins(manifest, [msg.modId]);
+  const rec = manifest.get(msg.modId);
+  if (!rec) { send(ws, { kind: "say", text: "I don't have that object's code in this world — build it first, then click it." }); return; }
+  const hit = cachedExplanation(rec.source);
+  if (!hit && !spend(ws, "explain")) return;
+  const result = hit ? { ok: true as const, explanation: hit } : await explainMod({ source: rec.source, title: rec.title });
+  if (!result.ok) { send(ws, { kind: "say", text: "That explanation didn't come through — click it again." }); return; }
+  const e = result.explanation;
+  send(ws, { kind: "explainResult", modId: rec.id, title: rec.title, text: e.text, lines: e.lines, cached: e.cached, ms: e.ms });
+}
+
 async function handleFeedback(ws: WebSocket, msg: Extract<ClientMsg, { kind: "feedback" }>): Promise<void> {
   await adoptingOf.get(ws);
   const manifest = sess(ws).manifest;
@@ -1154,6 +1171,11 @@ function dispatchClientMsg(ws: WebSocket, msg: ClientMsg): void {
     if (row) { s.tester = { n: row.tester, sid }; appendTester(row); }
   }
   else if (msg.kind === "timelineRestore") handleTimelineRestore(ws, Number(msg.n));
+  else if (msg.kind === "explain") {
+    handleExplain(ws, msg).catch((err) => {
+      send(ws, { kind: "say", text: `Explanation failed: ${err instanceof Error ? err.message : String(err)}` });
+    });
+  }
   else if (msg.kind === "command") {
     sess(ws).lastCommand = { text: msg.text, at: Date.now() };
     handleCommand(ws, msg.text).catch((err) => {

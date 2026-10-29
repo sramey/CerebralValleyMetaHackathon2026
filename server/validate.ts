@@ -39,6 +39,7 @@ export const REPLY = {
   photo: "That photo didn't come through — try taking it again.",
   sketch: "That sketch didn't come through — try drawing it again.",
   command: "That command is too long — try a shorter one.",
+  explain: "I couldn't tell which object you clicked — click it again.",
 } as const;
 
 export type Validation = { ok: true; msg: ClientMsg } | { ok: false; reply: string };
@@ -294,6 +295,11 @@ export function validateClientMsg(value: unknown): Validation {
     case "timelineRestore": {
       const n = value.n;
       return Number.isInteger(n) && (n as number) >= 0 ? accept({ kind: "timelineRestore", n: n as number }) : reject(REPLY.bad);
+    }
+    case "explain": {
+      // "How does this work?": only the mod id travels; the server explains its own copy of the source.
+      const id = label(value.modId, MAX_KEY);
+      return id ? accept({ kind: "explain", modId: id }) : reject(REPLY.explain);
     }
     default:
       return reject(REPLY.unknown);
