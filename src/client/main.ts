@@ -670,10 +670,19 @@ document.querySelectorAll<HTMLButtonElement>("#radial-menu [data-action]").forEa
     } else if (action === "back") {
       layerOverride.set(e.id, -1);
     } else if (action === "remove") {
+      const owner = e.owner;
       world.despawn(e.id);
       layerOverride.delete(e.id);
       scaleOverride.delete(e.id);
       closeRadialMenu();
+      if (owner && owner !== "player" && owner !== "ground") {
+        const remaining = world.entities.filter((en) => en.owner === owner);
+        if (remaining.length === 0 && loader.list().some((mod) => mod.id === owner)) {
+          loader.unload(owner);
+          renderMods();
+          sendWorldState();
+        }
+      }
     } else if (action === "thumbs-up" || action === "thumbs-down") {
       const modTitle = loader.list().find((m) => m.id === e.owner)?.title ?? formatRadialLabel(e.type);
       feedback.open({ modId: e.owner, title: modTitle, entityType: e.type, vote: action === "thumbs-up" ? "up" : "down" });

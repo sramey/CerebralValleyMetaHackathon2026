@@ -315,4 +315,17 @@ describe("sim", () => {
     expect(r.ok).toBe(true);
     expect(r.errors).toEqual([]);
   });
+
+  it("despawning an entity invalidates its coordinates and marks it dead (bead dbj)", () => {
+    const w = new World(9);
+    const cat = w.spawn({ type: "cat", x: 100, y: 200, w: 32, h: 32 }, "cat-mod");
+    expect(cat.x).toBe(100);
+    expect(w.entities).toHaveLength(1);
+
+    w.despawn(cat.id);
+    expect(w.entities).toHaveLength(0);
+    expect((cat as any).dead).toBe(true);
+    expect(cat.x).toBeUndefined();
+    expect(cat.y).toBeUndefined();
+  });
 });

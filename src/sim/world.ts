@@ -86,6 +86,14 @@ export class World {
 
   removeByOwner(owner: string): void {
     this.handlers.delete(owner);
+    for (const e of this.entities) {
+      if (e.owner === owner) {
+        (e as any).dead = true;
+        (e as any).despawned = true;
+        (e as any).x = undefined;
+        (e as any).y = undefined;
+      }
+    }
     this.entities = this.entities.filter((e) => e.owner !== owner);
     for (const [id, w] of this.hud) if (w.owner === owner) this.hud.delete(id);
   }
@@ -123,7 +131,14 @@ export class World {
   }
 
   despawn(id: number): void {
-    this.entities = this.entities.filter((e) => e.id !== id);
+    const e = this.entities.find((en) => en.id === id);
+    if (e) {
+      (e as any).dead = true;
+      (e as any).despawned = true;
+      (e as any).x = undefined;
+      (e as any).y = undefined;
+    }
+    this.entities = this.entities.filter((en) => en.id !== id);
   }
 
   damage(id: number, amount: number): void {
