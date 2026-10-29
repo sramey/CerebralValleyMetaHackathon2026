@@ -39,6 +39,14 @@ export type ShapeName = "circle" | "ring" | "triangle" | "spikes" | "pill" | "di
 /** How the client draws entities of these types: a code-drawn shape, or an engine effect (no outline, no sprite). */
 export interface Look { visual: "shape" | "effect"; shape?: ShapeName; types: string[] }
 
+/** A whole-world mood (ADR 0017): palette for the code-drawn world plus a style anchor that drives every sprite restyle. */
+export interface MoodSpec {
+  name: string; anchor: string;
+  skyTop: number; skyBottom: number; ridgeFar: number; ridgeNear: number; moon: number; star: number; grass: number; soil: number;
+  tint: number; grade: number; dim: number; fog: number; vignette: number;
+  ambient: "none" | "fog" | "snow" | "embers" | "sparks";
+}
+
 export interface Particle {
   x: number; y: number; vx: number; vy: number;
   life: number; maxLife: number; color: number; size: number;
@@ -110,7 +118,9 @@ export type ClientMsg =
   | { kind: "voiceEnd"; cancel?: boolean }
   // Share links (ADR 0014). The server only ever saves mods it verified itself; the client just says which are loaded.
   | { kind: "worldSave"; mods: { id: string; values: KnobValues }[] }
-  | { kind: "worldLoad"; id: string };
+  | { kind: "worldLoad"; id: string }
+  // Mood restyle (ADR 0017): the client lists the sprite sheets it has; the server edits each toward the mood anchor.
+  | { kind: "restyle"; mood: string; keys: string[] };
 
 /** One mod in a saved world: a built-in the client bundles, or a verified AI mod with its source. */
 export type WorldMod =
@@ -125,6 +135,8 @@ export type ServerMsg =
   | { kind: "stage"; stage: BuildStage; detail: string; command?: string }
   | { kind: "mod"; mod: { id: string; title: string; source: string; compiled: string; knobs: KnobDefs; art?: { key: string; url: string; scenery?: boolean }; artPending?: string; look?: Look } }
   | { kind: "art"; modId: string; art: { key: string; url: string; scenery?: boolean } }
+  | { kind: "mood"; mood: MoodSpec | null }
+  | { kind: "restyled"; mood: string; key: string; url: string | null }
   | { kind: "tweak"; modId: string; knob: string; value: KnobValue }
   | { kind: "removed"; modId: string }
   | { kind: "say"; text: string }

@@ -3,7 +3,7 @@
 // particles becomes a real explosion (flash, fireball ramp, sparks, smoke, shockwave, light screen shake).
 // Effect entities never get the dark outline.
 import { Container, Graphics, Sprite, Texture } from "pixi.js";
-import type { Entity, Particle } from "../contract";
+import type { Entity, MoodSpec, Particle } from "../contract";
 import type { World } from "../sim/world";
 
 const FIRE_RAMP = [0xfff6c8, 0xffd34d, 0xff8a1f, 0xd8321f, 0x4a3030];
@@ -29,6 +29,18 @@ function puffTexture(): Texture {
   return Texture.from(c);
 }
 
+function vignetteTexture(): Texture {
+  const c = document.createElement("canvas");
+  c.width = c.height = 256;
+  const ctx = c.getContext("2d")!;
+  const g = ctx.createRadialGradient(128, 128, 70, 128, 128, 182);
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,1)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 256, 256);
+  return Texture.from(c);
+}
+
 interface Spark { vx: number; vy: number; hot: number }
 interface Puff { dx: number; dy: number; vy: number; r: number; delay: number; smoke: boolean }
 interface Blast { x: number; y: number; age: number; size: number; sparks: Spark[]; puffs: Puff[] }
@@ -42,6 +54,8 @@ export class Fx {
   private layer = new Container();
   private g = new Graphics();
   private tex = puffTexture();
+  private vig = new Sprite(vignetteTexture());
+  private mood: MoodSpec | null = null;
   private pool: Sprite[] = [];
   private used = 0;
   private seen = new WeakSet<Particle>();
@@ -61,8 +75,13 @@ export class Fx {
   constructor(stage: Container) {
     this.layer.zIndex = 10;
     this.g.zIndex = 11;
-    stage.addChild(this.layer, this.g);
+    this.vig.zIndex = 12;
+    this.vig.visible = false;
+    stage.addChild(this.layer, this.g, this.vig);
   }
+
+  /** The world's mood: a color wash, vignette and ambient drift on top of everything (render-only). */
+  setMood(m: MoodSpec | null): void { this.mood = m; }
 
   private puff(x: number, y: number, r: number, color: number, alpha: number, add = false): void {
     if (this.used >= MAX_PUFFS) return;
@@ -92,6 +111,7 @@ export class Fx {
     this.camY = camY;
     this.g.clear();
 
+    this.ambience(W, H);
     this.detectBursts(world);
     const drops = this.entities(world, W, H, isEffect);
     this.drawMist(drops, world, W, H);
@@ -104,6 +124,35 @@ export class Fx {
     this.shakeX = amp ? (Math.sin(this.clock * 83) + Math.sin(this.clock * 51)) * 0.5 * amp : 0;
     this.shakeY = amp ? (Math.cos(this.clock * 71) + Math.sin(this.clock * 97)) * 0.5 * amp : 0;
     this.lastMs = performance.now() - t0;
+  }
+
+  /** Mood overlay: wash, vignette, and slow ambient motion (fog banks, snow, embers, neon sparks). */
+  private ambience(W: number, H: number): void {
+    const m = this.mood;
+    this.vig.visible = !!m && m.vignette > 0;
+    if (!m) return;
+    const g = this.g;
+    if (m.grade > 0) g.rect(0, 0, W, H).fill({ color: m.tint, alpha: m.grade * 0.22 });
+    this.vig.width = W; this.vig.height = H;
+    this.vig.alpha = m.vignette;
+    const t = this.clock;
+    if (m.fog > 0 || m.ambient === "fog") {
+      const n = Math.min(10, 4 + Math.round(m.fog * 8));
+      for (let i = 0; i < n; i++) {
+        const px = ((i * (W / (n - 1)) + t * (10 + (i % 3) * 5)) % (W + 400)) - 200;
+        this.puff(px, H * (0.66 + 0.2 * ((i * 37) % 10) / 10) + Math.sin(t * 0.4 + i) * 10, 150 + (i % 3) * 40, m.ambient === "fog" ? 0xb9a9d6 : 0xdce6ee, 0.1 + 0.12 * m.fog);
+      }
+    }
+    if (m.ambient === "snow" || m.ambient === "embers" || m.ambient === "sparks") {
+      const snow = m.ambient === "snow";
+      const col = snow ? 0xffffff : m.ambient === "embers" ? 0xffa040 : m.star;
+      for (let i = 0; i < 70; i++) {
+        const sp = 18 + (i % 5) * 9;
+        const x = ((i * 97.3 + Math.sin(t * 0.7 + i) * 18) % W + W) % W;
+        const y = snow ? (t * sp + i * 53) % (H + 20) : H - ((t * sp * 1.4 + i * 53) % (H + 20));
+        g.rect(x, y - 10, snow ? 2.4 : 2, snow ? 2.4 : 2).fill({ color: col, alpha: snow ? 0.85 : 0.7 });
+      }
+    }
   }
 
   /** Rain streaks and fog puffs. Returns how many rain drops are on screen. */

@@ -1,0 +1,44 @@
+import { describe, expect, it } from "vitest";
+import { moodKey, moodPrompt, moodSpecFor, parseMoodSpec, restyledUrl, sheetPath, pool } from "../server/mood";
+
+describe("mood (ADR 0017)", () => {
+  it("known moods use hand-tuned presets, with aliases", async () => {
+    expect((await moodSpecFor("spooky")).name).toBe("spooky");
+    expect((await moodSpecFor("really scary")).name).toBe("spooky");
+    expect((await moodSpecFor("snowy")).ambient).toBe("snow");
+    expect((await moodSpecFor("cyberpunk")).name).toBe("neon");
+  });
+
+  it("validates Spark's palette JSON and clamps bad values", () => {
+    const spec = parseMoodSpec('{"anchor":"sunny desert at golden hour, warm oranges","skyTop":"#ff8800","skyBottom":"ffd9a0","grade":9,"dim":0,"ambient":"lava","fog":0.3}', "Desert Sunset!");
+    expect(spec?.name).toBe("desert-sunset");
+    expect(spec?.skyTop).toBe(0xff8800);
+    expect(spec?.skyBottom).toBe(0xffd9a0);
+    expect(spec?.grade).toBe(0.6);
+    expect(spec?.dim).toBe(0.5);
+    expect(spec?.ambient).toBe("none");
+    expect(parseMoodSpec("not json", "x")).toBeNull();
+    expect(parseMoodSpec('{"anchor":"x"}', "x")).toBeNull();
+  });
+
+  it("only edits sheets we own, never photos, traversal or already-restyled files", () => {
+    expect(sheetPath("../.env")).toBeNull();
+    expect(sheetPath("photo-1")).toBeNull();
+    expect(sheetPath("robot--spooky")).toBeNull();
+    expect(sheetPath("ninja")).not.toBeNull();
+    expect(sheetPath("definitely-not-there")).toBeNull();
+  });
+
+  it("builds a stable url and an anchored prompt", () => {
+    expect(restyledUrl("robot", "Spooky!")).toBe("/art/gen/robot--spooky.webp");
+    expect(moodKey("")).toBe("mood");
+    expect(moodPrompt("haunted night")).toContain("haunted night");
+    expect(moodPrompt("x")).toContain("#FF00FF");
+  });
+
+  it("pool never runs more than the limit at once", async () => {
+    let live = 0, peak = 0;
+    await pool([1, 2, 3, 4, 5, 6, 7], 3, async () => { live++; peak = Math.max(peak, live); await new Promise((r) => setTimeout(r, 5)); live--; });
+    expect(peak).toBe(3);
+  });
+});
