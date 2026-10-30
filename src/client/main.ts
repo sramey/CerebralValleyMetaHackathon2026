@@ -473,12 +473,6 @@ let mood: MoodSpec | null = null;
 let moodModCount = 0; // mods loaded when the mood was applied; more later means the mood is no longer the latest change
 const origFrames = new Map<string, Texture[]>(); // sheets as they were before the mood, restored on undo
 const morph = new Map<string, number>(); // sprite key -> digitize-until (ms)
-let restyleLeft = 0;
-let restyleOk = 0;
-function noteRestyled(ok: boolean): void {
-  if (ok) restyleOk++;
-  if (--restyleLeft === 0 && mood) say(`It's ${mood.name} now: ${restyleOk} sprites restyled.`, "done");
-}
 
 function mixC(a: number, b: number, t: number): number {
   const m = (s: number) => Math.round(((a >> s) & 255) * (1 - t) + ((b >> s) & 255) * t);
@@ -542,13 +536,14 @@ function onMood(m: MoodSpec | null): void {
     const used = new Set<string>();
     for (const e of world.entities) { const k = subjectKeyFor(e); if (k) used.add(k); }
     const keys = [...used].filter((k) => !k.startsWith("photo") && !origFrames.has(k) && (framesBySubject[k]?.length ?? 0) > 0);
-    restyleLeft = keys.length; restyleOk = 0;
-    if (keys.length > 0) { say(`Making it ${m.name}: restyling ${keys.length} sprites…`, "building"); send({ kind: "restyle", mood: m.name, keys }); }
-    else say(`It's ${m.name} now.`, "done");
+    // The palette is already on screen, so the card says done now (bead inh). The sheet redraws
+    // arrive later and show on their own (the digitize morph); a card line held open for them
+    // would still read "restyling" long after, and could overwrite a newer status.
+    say(`It's ${m.name} now.`, "done");
+    if (keys.length > 0) send({ kind: "restyle", mood: m.name, keys });
   });
 }
 async function onRestyled(msg: Extract<ServerMsg, { kind: "restyled" }>): Promise<void> {
-  if (mood && mood.name === msg.mood) noteRestyled(msg.url !== null);
   if (!msg.url || !mood || mood.name !== msg.mood) return;
   const frames = await loadSpriteSheet(msg.url);
   if (frames.length < 1 || !mood || mood.name !== msg.mood) return;
