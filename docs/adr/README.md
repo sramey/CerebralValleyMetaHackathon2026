@@ -96,3 +96,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0066](0066-genre-change-set-scene.md) | Genre change: `api.setScene` hides terrain and scenery, sets a backdrop and player skin, and undo restores it all | Accepted |
 | [0067](0067-themed-parallax-backdrops.md) | Themed parallax backdrops: "change the background to medieval" is a background-scoped mood carrying code-drawn scenery motifs | Accepted |
 | [0068](0068-open-weights-build-reviewer.md) | Open-weights build reviewer: Muse Spark Open on Baseten reviews each finished build, hot-swaps a fix only if it passes the verify gates, and learns a rule | Accepted |
+| [0069](0069-what-it-has-learned-area.md) | "What it has learned": an in-game area (`GET /api/brain`) for the reviewer scorecard, each fix with its diff and the rule it taught, and the rules and skills library | Proposed |

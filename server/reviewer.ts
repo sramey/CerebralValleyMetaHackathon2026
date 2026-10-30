@@ -8,6 +8,7 @@ import type { BuildReceipt, KnobDefs, Look, ModDefinition, ServerMsg } from "../
 import { compileMod } from "./compile";
 import { logReview } from "./createlog";
 import { learnRuleFromReview } from "./learn";
+import { diffHunks } from "./line-diff";
 import { forceModId } from "./modid";
 import { playtestMod, type PlaytestWorldMod } from "./playtest";
 import { openChat, openConfig, type OpenConfig } from "./router-model";
@@ -204,7 +205,14 @@ export async function reviewBuild(input: BuildReviewInput): Promise<BuildReviewO
     console.log(`[reviewer] compile gate failed on patch: ${compiled.errors.join("; ")}`);
   }
 
-  // 8. Update receipt and log
+  // 8. Learn a rule from each accepted issue (step 10 used to), then update receipt and log
+  const taught: string[] = [];
+  if (accepted) {
+    for (const issue of parsed.issues) {
+      const rule = learnRuleFromReview(input.mod.id, issue, input.command, "wonder");
+      if (rule) taught.push(rule.rule);
+    }
+  }
   if (input.mod.receipt) {
     input.mod.receipt.review = {
       model: modelSlug,
@@ -222,6 +230,8 @@ export async function reviewBuild(input: BuildReviewInput): Promise<BuildReviewO
     issues: parsed.issues,
     accepted,
     ms: callMs,
+    diff: diffHunks(input.mod.source, cleanPatched),
+    rules: accepted ? taught : undefined,
   });
 
   if (!accepted) {
@@ -252,11 +262,6 @@ export async function reviewBuild(input: BuildReviewInput): Promise<BuildReviewO
       kind: "say",
       text: `Reviewed by Muse Spark Open (open weights): fixed ${fixedNote}`,
     });
-  }
-
-  // 10. Learn rule from accepted fix
-  for (const issue of parsed.issues) {
-    learnRuleFromReview(input.mod.id, issue, input.command, "wonder");
   }
 
   return { verdict: "fix", issues: parsed.issues, accepted: true, ms: callMs };

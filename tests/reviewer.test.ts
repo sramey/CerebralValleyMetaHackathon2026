@@ -346,6 +346,10 @@ describe("gate protection", () => {
     const logContent = readFileSync(logPath, "utf8");
     expect(logContent).toContain('"kind":"review"');
     expect(logContent).toContain('"accepted":true');
+    // ADR 0069: the row carries the changed lines and the rule the fix taught.
+    const row = JSON.parse(logContent.trim().split(/\r?\n/).filter((l) => l.includes('"kind":"review"')).pop()!);
+    expect(row.diff.some((h: { del: string[]; add: string[] }) => h.del.join().includes("max: 200") && h.add.join().includes("max: 300"))).toBe(true);
+    expect(row.rules[0]).toContain("increase slime speed knob default");
   });
 
   it("caps at one review per build", async () => {

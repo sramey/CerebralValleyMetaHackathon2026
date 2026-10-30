@@ -31,6 +31,7 @@ import type { Recent } from "./context";
 import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, formatManifest, ROUTER_SYSTEM, WONDER_SYSTEM } from "./prompt";
 import { activeLogFile, logBuild, logMood, saveModSources } from "./createlog";
 import { createStatsHandler } from "./stats-feed";
+import { createBrainHandler } from "./brain";
 import { genreWarnings } from "./genre";
 import { MAX_ART_PER_BUILD, artCachedUrl, artKeyForType, clearCachedArt, deriveSubject, generateSubjectArt, isFlyingRequest, isScenerySubject, pickArtType, pickSkin, purgeLegacyArt, subjectArtPrompt, IMAGE_MODEL } from "./art";
 import { aiReceipt, plainReceipt } from "./receipt";
@@ -1517,8 +1518,9 @@ function dispatchClientMsg(ws: WebSocket, msg: ClientMsg): void {
 // aggregate numbers from it (ADR 0027).
 const staticHandler = createStaticHandler({ distDir: join(process.cwd(), "dist"), genArtDir: join(process.cwd(), "public", "art", "gen") });
 const statsHandler = createStatsHandler({ logFile: activeLogFile });
+const brainHandler = createBrainHandler({ logFile: activeLogFile });
 const httpServer = createServer((req, res) => {
-  if (!statsHandler(req, res)) staticHandler(req, res);
+  if (!statsHandler(req, res) && !brainHandler(req, res)) staticHandler(req, res);
 });
 const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "").split(",").map((o) => o.trim()).filter(Boolean);
 const maxConnPerIp = Number(process.env.MAX_CONN_PER_IP ?? 10);

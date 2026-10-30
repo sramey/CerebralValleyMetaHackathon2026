@@ -30,6 +30,12 @@ export interface LogRow {
   /** Learn lines: the event kind (rule, autofix-rule, skill, ...). */
   event?: string;
   rule?: string;
+  /** Review lines (ADR 0068, 0069): the open-weights verdict, issues, patch hunks and rules it taught. */
+  verdict?: string;
+  issues?: string[];
+  accepted?: boolean;
+  diff?: unknown;
+  rules?: string[];
   sourceFile?: string;
   sourceFiles?: string[];
 }

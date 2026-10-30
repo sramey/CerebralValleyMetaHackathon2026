@@ -34,6 +34,7 @@ import { inputFromKeys, isGameKeyEvent, isTypingTarget } from "./keys";
 import { createGhost } from "./ghost";
 import { mountTimeline } from "./timeline";
 import { createPipeline } from "./pipeline";
+import { createBrain } from "./brain";
 import { createTheater } from "./build-theater";
 import { createHud } from "./hud";
 import { createSpeech } from "./speech";
@@ -77,6 +78,7 @@ loader.isolateFaults((mod, message) => {
 });
 const ghost = createGhost(document.getElementById("stage-wrap")!);
 const pipeline = createPipeline(document.getElementById("stage-wrap")!);
+const brain = createBrain(document.getElementById("stage-wrap")!);
 const theater = createTheater(document.getElementById("stage-wrap")!, (v) => pipeline.setCode(v.lines, v.partial, v.active), (m) => { pipeline.onMsg(m); theater.onMsg(m); });
 // Declarative mod HUD overlay (ADR 0019): renders world.hud each frame.
 const hud = createHud(document.getElementById("stage-wrap")!);
@@ -239,6 +241,7 @@ const sketch = createSketch(stageWrapEl, {
   log,
 });
 $("#sketch-btn").addEventListener("click", () => sketch.open());
+$("#brain-btn").addEventListener("click", () => brain.toggle());
 // Test hook: open/close sketch mode without a pointer (live checks, screenshots).
 (window as unknown as Record<string, unknown>).__sketch = {
   open: () => sketch.open(),
@@ -2075,6 +2078,7 @@ function connect(): void {
     let msg: ServerMsg;
     try { msg = JSON.parse(String(ev.data)) as ServerMsg; } catch { return; }
     pipeline.onMsg(msg);
+    brain.onMsg(msg);
     theater.onMsg(msg);
     sketch.onServerMsg(msg);
     if (voice.onServerMsg(msg)) return;
