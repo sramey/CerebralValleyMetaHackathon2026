@@ -91,9 +91,9 @@ export function artUrlForKey(key: string): string {
   return `/art/gen/${key}.webp`;
 }
 
-export function artCachedUrl(keyRaw: string): string | null {
+export function artCachedUrl(keyRaw: string, variant?: string): string | null {
   try {
-    const key = artKeyForType(keyRaw);
+    const key = artKeyForType(keyRaw, variant);
     if (!key) {
       clearCachedArt(keyRaw);
       return null;
@@ -153,7 +153,9 @@ export function spritePrompt(cleanSubject: string, form: { held: boolean; scener
  */
 export async function generateSubjectArt(subject: string, keyRaw: string, scenery = false, flying = false): Promise<string | null> {
   try {
-    const key = artKeyForType(keyRaw);
+    // A flying subject gets its own sheet ("cat-fly"), so a cached walking cat can never
+    // stand in for a flying one (ADR 0053).
+    const key = artKeyForType(keyRaw, flying && !scenery ? "fly" : undefined);
     if (!key) {
       clearCachedArt(keyRaw);
       return null;
@@ -264,12 +266,14 @@ export function deriveSubject(command: string, fallbackType: string): string {
  * (e.g. "snow-ground", "brick-wall", "boss-bullet", "christmas-light", "christmas-star")
  * NEVER produce a sprite key.
  */
-export function artKeyForType(type: string): string {
+export function artKeyForType(type: string, variant?: string): string {
   const lower = type.toLowerCase().trim();
   if (!lower || isSkippedType(lower)) return "";
   const parts = lower.split("-").filter(Boolean);
   const base = parts.length > 1 ? (parts[parts.length - 1] ?? lower) : lower;
   const key = sanitizeArtKey(base || lower);
   if (!key || isSkippedType(key)) return "";
-  return key;
+  // A pose variant (e.g. "fly") gets its own sheet, so a cached walking cat never stands in
+  // for a flying one (ADR 0053).
+  return variant ? sanitizeArtKey(`${key}-${variant}`) : key;
 }

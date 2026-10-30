@@ -981,7 +981,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     // ships with artPending and the art streams in asynchronously.
     let art: { key: string; url: string; scenery?: boolean } | undefined;
     let artPending: string | undefined;
-    let pendingArt: { subject: string; key: string; scenery: boolean; flying: boolean } | undefined;
+    let pendingArt: { subject: string; type: string; key: string; scenery: boolean; flying: boolean } | undefined;
     const artType = pickArtType(source);
     // Spark's visual kind (from the router call) decides the art path; word lists only cover a router miss (ADR 0015).
     const fb = route.visual ? undefined : fallbackVisual(`${command} ${artType ?? ""}`);
@@ -989,17 +989,17 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     const look = artType ? lookFor(visual, route.shape ?? fb?.shape, [artType.toLowerCase()]) : undefined;
     if (artType && !look) {
       const subject = deriveSubject(command, artType);
-      const key = artKeyForType(artType);
+      const scenery = visual === "prop" || isHeldItemType(subject) || isHeldItemType(artType) || entityKind(artType) === "prop" || (visual !== "creature" && (isScenerySubject(subject) || isScenerySubject(artType)));
+      // A flying request gets airborne poses, not the walk cycle (ADR 0053).
+      const flying = isFlyingRequest(`${command} ${subject}`, artType) && !scenery;
+      const key = artKeyForType(artType, flying ? "fly" : undefined);
       if (key) {
-        const scenery = visual === "prop" || isHeldItemType(subject) || isHeldItemType(artType) || entityKind(artType) === "prop" || (visual !== "creature" && (isScenerySubject(subject) || isScenerySubject(artType)));
-        // A flying request gets airborne poses, not the walk cycle (ADR 0053).
-        const flying = isFlyingRequest(`${command} ${subject}`, artType);
-        const cachedUrl = artCachedUrl(key);
+        const cachedUrl = artCachedUrl(artType, flying ? "fly" : undefined);
         if (cachedUrl) {
           art = { key, url: cachedUrl, ...(scenery ? { scenery: true } : {}) };
         } else if (spend(ws, "image")) {
           artPending = key;
-          pendingArt = { subject, key, scenery, flying };
+          pendingArt = { subject, type: artType, key, scenery, flying };
         }
       }
     }
@@ -1012,8 +1012,8 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     stage(ws, { kind: "stage", stage: "done", detail: `loaded ${def.id} (${SIM.healthFrames} frames OK)`, command });
     send(ws, { kind: "mod", mod: { id: def.id, title: def.title, source, compiled: first.js, knobs: rec.knobs, ...(art ? { art } : {}), ...(artPending ? { artPending } : {}), ...(look ? { look } : {}) } });
     if (pendingArt) {
-      const { subject, key, scenery, flying } = pendingArt;
-      generateSubjectArt(subject, key, scenery, flying).then(url => { if (url) { rec.art = { key, url, ...(scenery ? { scenery: true } : {}) }; try { send(ws, { kind: "art", modId: def.id, art: { key, url, ...(scenery ? { scenery: true } : {}) } }); } catch {} } }).catch(() => {});
+      const { subject, type, key, scenery, flying } = pendingArt;
+      generateSubjectArt(subject, type, scenery, flying).then(url => { if (url) { rec.art = { key, url, ...(scenery ? { scenery: true } : {}) }; try { send(ws, { kind: "art", modId: def.id, art: { key, url, ...(scenery ? { scenery: true } : {}) } }); } catch {} } }).catch(() => {});
       send(ws, { kind: "say", text: `Drawing ${subject}...` });
     }
     const files = saveModSources(sources, def.id);

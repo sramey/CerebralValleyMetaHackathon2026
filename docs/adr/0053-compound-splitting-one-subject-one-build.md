@@ -29,7 +29,9 @@
      (`src/sim/bounce.ts`, hooked into the Y collision). A dropped coin bounces, decays and
      settles instead of freezing — mods no longer hand-roll it.
   4. Sprite art for a flying request (`server/art.ts` `isFlyingRequest`) asks Muse Image for
-     airborne poses (hover, glide, fly, dive) instead of the walk/run cycle.
+     airborne poses (hover, glide, fly, dive) instead of the walk/run cycle, and a flying
+     subject gets its own sheet key (`cat-fly`), so a cached walking sheet can never stand
+     in for it.
 - **Consequences:**
   - A compound command no longer spends a Spark call to decide how to split; it routes and
     builds each part as before (still one budget unit per part).

@@ -4,7 +4,7 @@
 // Muse Image is asked for airborne poses instead of a walk cycle.
 import { describe, expect, it } from "vitest";
 import { buildWonderPrompt, WONDER_SYSTEM } from "../server/prompt";
-import { isFlyingRequest, spritePrompt } from "../server/art";
+import { isFlyingRequest, artKeyForType, spritePrompt } from "../server/art";
 
 describe("Wonder guidance for the cohesive build (ADR 0053)", () => {
   it("tells Wonder the request may be one subject with many behaviors", () => {
@@ -52,6 +52,12 @@ describe("flying sprite pose (ADR 0053)", () => {
     expect(flying).not.toContain("running");
     expect(flying).toMatch(/off the ground/);
     expect(walking).toContain("running");
+  });
+
+  it("gives a flying sheet its own cache key so a walking cat is never reused", () => {
+    expect(artKeyForType("superhero-cat")).toBe("cat");
+    expect(artKeyForType("superhero-cat", "fly")).toBe("cat-fly");
+    expect(artKeyForType("ground", "fly")).toBe("");
   });
 
   it("never overrides held-item or scenery art with a flying pose", () => {
