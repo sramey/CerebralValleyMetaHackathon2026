@@ -1112,11 +1112,8 @@ function handleLocal(text: string): boolean {
   const serverUp = ws?.readyState === WebSocket.OPEN || ws?.readyState === WebSocket.CONNECTING;
   const localAsk = localRelativeAsk(t, serverUp);
   if (localAsk === "jump") { tweak("player", "jump", 880, "Jump raised."); return true; }
-  if (localAsk === "speed") {
-    if (loader.has("enemies")) tweak("enemies", "speed", 140, "Walkers sped up.");
-    else tweak("player", "speed", 380, "Player sped up.");
-    return true;
-  }
+  // A local ask is about the player by construction, so it never speeds the walkers.
+  if (localAsk === "speed") { tweak("player", "speed", 380, "Player sped up."); return true; }
   return false;
 }
 function tweak(modId: string, knob: string, value: KnobValue, message: string): void {
