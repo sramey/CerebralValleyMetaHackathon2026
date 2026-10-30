@@ -1125,6 +1125,13 @@ export function isPropType(input: string | EntityLike): boolean {
   return entityKind(input) === "prop";
 }
 
+const FLYING_TYPE_RE = /\b(?:bird|bat|dragon|fairy|angel|bee|butterfly|moth|drone|ufo|rocket|spaceship|space-ship|jet|plane|blimp|zeppelin|helicopter|hawk|eagle|owl|crow|raven|pigeon|phoenix|griffin|wyvern|wisp|flyer)\b/i;
+
+/** True when an entity type represents an airborne / flying creature rather than a ground walker. */
+export function isFlyerType(type: string): boolean {
+  return FLYING_TYPE_RE.test(type.replace(/[-_]+/g, " "));
+}
+
 /**
  * True when the subject or entity type is a weapon, tool, or held item (e.g. gun, sword, bow, wand, shield).
  * Held items must always generate static isolated item art (scenery: true), never a character holding the item.

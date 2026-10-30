@@ -99,3 +99,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0069](0069-what-it-has-learned-area.md) | "What it has learned": an in-game area (`GET /api/brain`) for the reviewer scorecard, each fix with its diff and the rule it taught, and the rules and skills library | Proposed |
 | [0070](0070-world-survives-reload.md) | The current world survives a reload and a server restart: one autosaved slot per browser, scrubbed files, one-click "New world" | Proposed |
 | [0071](0071-hostile-identity-stomp-pets-and-facing.md) | The engine owns stomping, pet friendly fire (a companion never hurts the player), no sinking into solids and steady facing | Proposed |
+| [0072](0072-walker-hostiles-grounding-and-art-persistence.md) | Creature sheets slice into 4 whole frames on one baseline; wave walkers are grounded unless flyers are asked for; editing a mod keeps its art unless the art is asked to change | Proposed |

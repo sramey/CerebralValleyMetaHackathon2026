@@ -218,7 +218,8 @@ Never commit keys. `.env` is gitignored.
 - **Rehearsed:** the eight demo commands ran 20 times each against the live server, with pass rates and timings in [docs/process/rehearsal-20x.md](docs/process/rehearsal-20x.md).
 - **Open-weights reviewer:** Muse Spark Open reviews finished builds in the background and swaps in verified fixes ([ADR 0068](docs/adr/0068-open-weights-build-reviewer.md)).
 - **What it has learned:** the gold **🧠 What it has learned** button at the top right of the game opens a live scorecard of the reviewer, each fix with its code diff and the rule it taught, plus the rules and skills library; works without the open-weights key ([ADR 0069](docs/adr/0069-what-it-has-learned-area.md)).
-- Tests: 900+ passing (`npm test`, green in a fresh clone with no keys), typecheck clean, production build green.
+- **Playtest fixes (2026-10-30):** after a first-time player's session, drawn enemies now patrol, chase, take bullets and die to a stomp; pets never hurt the player ([ADR 0071](docs/adr/0071-hostile-identity-stomp-pets-and-facing.md)); creature sheets slice into 4 whole frames at one scale, wave walkers stay on the ground, and "make it shoot fire" keeps the creature's art ([ADR 0072](docs/adr/0072-walker-hostiles-grounding-and-art-persistence.md)); the world survives a reload or restart ([ADR 0070](docs/adr/0070-world-survives-reload.md)).
+- Tests: 1000+ passing (`npm test`, green in a fresh clone with no keys), typecheck clean, production build green.
 
 **Art pipeline: first proof (2026-10-27)**
 
