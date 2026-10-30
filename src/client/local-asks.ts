@@ -25,3 +25,17 @@ export function localRelativeAsk(text: string, serverUp: boolean): LocalAsk | nu
   if (serverUp && OTHER_SUBJECT.test(t)) return null;
   return kind;
 }
+
+const MOOD_NOUN = /\b(?:mood|theme|style|look|atmosphere|vibe)\b/;
+const REMOVE_VERB = /\b(?:remove|clear|drop|cancel|get rid of|turn off|switch off|take off|undo)\b/;
+
+/**
+ * "Remove the mood" is the mood's undo, not "remove the last mod" (bead b0i). Only while a mood is on, and only when the
+ * text names the mood: the word mood/theme/style/look, or the active mood's own name ("remove the spooky").
+ */
+export function isMoodUndoAsk(text: string, moodName?: string): boolean {
+  if (!moodName) return false;
+  const t = text.toLowerCase();
+  if (!REMOVE_VERB.test(t)) return false;
+  return MOOD_NOUN.test(t) || t.includes(moodName.toLowerCase());
+}

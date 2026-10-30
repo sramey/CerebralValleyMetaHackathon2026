@@ -34,3 +34,17 @@ describe("local relative asks", () => {
     expect(localRelativeAsk("make the dragon bigger", true)).toBeNull();
   });
 });
+
+import { isMoodUndoAsk } from "../src/client/local-asks";
+
+describe("mood undo asks (bead b0i)", () => {
+  it("'remove the mood' and friends undo the mood, not the last mod", () => {
+    for (const t of ["remove the mood", "clear the theme", "get rid of the spooky look", "turn off the style", "remove the spooky", "undo the mood"]) expect(isMoodUndoAsk(t, "spooky"), t).toBe(true);
+  });
+  it("needs a mood on, and a text that names it", () => {
+    expect(isMoodUndoAsk("remove the mood", undefined)).toBe(false);
+    expect(isMoodUndoAsk("remove the slime", "spooky")).toBe(false);
+    expect(isMoodUndoAsk("undo", "spooky")).toBe(false); // bare undo has its own rule
+    expect(isMoodUndoAsk("make it spooky", "spooky")).toBe(false);
+  });
+});
