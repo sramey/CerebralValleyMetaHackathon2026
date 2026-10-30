@@ -91,6 +91,10 @@ const BUILTINS: BuiltinDef[] = [
   { alias: "chicken", file: "chicken.ts", id: "chicken" },
   { alias: "basketball", file: "basketball.ts", id: "basketball" },
   { alias: "hoop", file: "basketball.ts", id: "basketball" },
+  { alias: "swarm", file: "swarm.ts", id: "swarm" },
+  { alias: "swarms", file: "swarm.ts", id: "swarm" },
+  { alias: "wave", file: "swarm.ts", id: "swarm" },
+  { alias: "waves", file: "swarm.ts", id: "swarm" },
 ];
 
 // "starter world" alias: player then ground, delivered sequentially.

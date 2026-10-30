@@ -13,6 +13,7 @@ import movingPlatformMod from "../mods/platform-moving";
 import fireArrowMod from "../mods/fire-arrow";
 import chickenMod from "../mods/chicken";
 import parallaxMod from "../mods/parallax";
+import swarmMod from "../mods/swarm";
 import { gunMod } from "../client/items";
 import { Sound } from "../client/sound";
 import { Fx } from "../client/fx";
@@ -58,6 +59,7 @@ const BUILTINS: Record<string, ModDefinition> = {
   "fire-arrow": fireArrowMod,
   chicken: chickenMod,
   parallax: parallaxMod,
+  swarm: swarmMod,
   gun: gunMod,
 };
 

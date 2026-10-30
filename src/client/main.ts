@@ -40,6 +40,7 @@ import movingPlatformMod from "../mods/platform-moving";
 import fireArrowMod from "../mods/fire-arrow";
 import parallaxMod from "../mods/parallax";
 import basketballMod from "../mods/basketball";
+import swarmMod from "../mods/swarm";
 import { resolveItemMod, gunMod } from "./items";
 import { parseUrlFlags, shareIssueMessage, urlWithoutWorld } from "./url-flags";
 import type { ShareIssue } from "./url-flags";
@@ -1017,6 +1018,7 @@ function handleLocal(text: string): boolean {
   if (n === "fire arrow" || n === "fire arrows" || n === "arrow" || n === "arrows" || n === "shoot fire arrows") { loadLocal(fireArrowMod); return true; }
   if (n === "parallax" || n === "parallax background" || n === "parallax forest" || n === "parallax vista") { loadLocal(parallaxMod); return true; }
   if (n === "chicken") { loadLocal(chickenMod); return true; }
+  if (n === "swarm" || n === "swarms" || n === "wave" || n === "waves") { loadLocal(swarmMod); return true; }
   if (t.includes("jump higher")) { tweak("player", "jump", 880, "Jump raised."); return true; }
   if (t.includes("faster")) {
     if (loader.has("enemies")) tweak("enemies", "speed", 140, "Walkers sped up.");
