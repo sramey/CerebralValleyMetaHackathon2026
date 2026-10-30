@@ -7,7 +7,7 @@
 import { Container, Graphics, Sprite, Texture } from "pixi.js";
 import type { Entity } from "../contract";
 
-export const SETPIECE_PATTERN = /(volcano|volcanic|castle|fortress|palace|citadel|keep|waterfall|cascade|pyramid|ship|galleon|vessel|tower|spire|lighthouse|windmill|mountain|temple|monument|ruins|cathedral|pagoda|colosseum)/i;
+export const SETPIECE_PATTERN = /(volcano|volcanic|castle|fortress|palace|citadel|keep|waterfall|cascade|pyramid|ship|galleon|vessel|tower|spire|lighthouse|windmill|mountain|temple|monument|ruins|cathedral|pagoda|colosseum|campfire|bonfire)/i;
 
 /** True if the subject name represents a landmark or large architectural/geographic set-piece. */
 export function isSetPieceSubject(text: string): boolean {
@@ -56,14 +56,15 @@ export interface SetPieceBounds {
  * - Scaled to fit landmark proportions and texture aspect ratio
  */
 export function computeSetPieceLayout(
-  e: { x: number; y: number; w: number; h: number },
+  e: { type?: string; x: number; y: number; w: number; h: number },
   textureW = 0,
   textureH = 0,
   groundY = 400,
 ): SetPieceBounds {
-  // Height: respect entity height, but set-pieces should be at least 150 px high to read as landmarks
-  const targetH = Math.max(e.h, 150);
-  let targetW = Math.max(e.w, 180);
+  const isSmall = typeof e.type === "string" && /\b(campfire|bonfire|monument)\b/i.test(e.type);
+  // Height: respect entity height, but landmark set-pieces should be at least 150 px high
+  const targetH = isSmall ? Math.max(e.h, 28) : Math.max(e.h, 150);
+  let targetW = isSmall ? Math.max(e.w, 36) : Math.max(e.w, 180);
 
   if (textureW > 0 && textureH > 0) {
     const aspect = textureW / textureH;
@@ -198,6 +199,23 @@ export function drawSetPiecePlaceholder(
     const gateW = w * 0.16;
     const gateH = wallH * 0.55;
     g.roundRect(cx - gateW * 0.5, bottom - gateH, gateW, gateH + 2, gateW * 0.5).fill(0x1a1612);
+    return;
+  }
+
+  if (t.includes("campfire") || t.includes("bonfire")) {
+    const wood = 0x5c3a21;
+    const fireY = bottom;
+    // Criss-cross wooden logs
+    g.moveTo(cx - 16, fireY).lineTo(cx + 16, fireY - 10).stroke({ width: 5, color: wood, cap: "round" });
+    g.moveTo(cx + 16, fireY).lineTo(cx - 16, fireY - 10).stroke({ width: 5, color: scaleRgb(wood, 0.8), cap: "round" });
+    g.moveTo(cx - 12, fireY).lineTo(cx + 12, fireY).stroke({ width: 6, color: scaleRgb(wood, 1.2), cap: "round" });
+    // Fiery heat glow
+    g.ellipse(cx, fireY - 6, 22, 10).fill({ color: 0xff4500, alpha: 0.35 });
+    // Layered flame tongues
+    g.poly([cx - 10, fireY - 2, cx - 4, fireY - 22, cx, fireY - 4]).fill(0xff5500);
+    g.poly([cx + 10, fireY - 2, cx + 4, fireY - 24, cx, fireY - 4]).fill(0xff7700);
+    g.poly([cx - 6, fireY - 2, cx, fireY - 28, cx + 6, fireY - 2]).fill(0xffbb00);
+    g.poly([cx - 3, fireY - 2, cx, fireY - 20, cx + 3, fireY - 2]).fill(0xfff277);
     return;
   }
 

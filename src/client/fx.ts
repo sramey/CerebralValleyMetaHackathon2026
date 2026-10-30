@@ -391,11 +391,19 @@ export class Fx {
       b.age += dt;
       const a = b.age, k = a / BLAST_LIFE;
       const x = b.x - this.camX, y = b.y - this.camY;
-      // Punchy flash bloom (bright white-hot core expanding and vanishing in 0.18s)
-      if (a < 0.18) {
-        const fq = a / 0.18;
-        this.puff(x, y, (45 + a * 600) * b.size, 0xffffff, (1 - fq) * 1.0, true);
-        this.puff(x, y, (28 + a * 350) * b.size, 0xffd044, (1 - fq) * 0.9, true);
+      const isLegacy = typeof window !== "undefined" && Boolean((window as any).__LEGACY_RENDER__);
+      if (isLegacy) {
+        if (a < 0.4) {
+          const q = a / 0.4;
+          g.circle(x, y, (14 + q * 70) * b.size).stroke({ width: Math.max(1, 5 * (1 - q)), color: 0xffe9b0, alpha: (1 - q) * 0.7 });
+        }
+      } else {
+        // Punchy flash bloom (bright white-hot core expanding and vanishing in 0.18s)
+        if (a < 0.18) {
+          const fq = a / 0.18;
+          this.puff(x, y, (45 + a * 600) * b.size, 0xffffff, (1 - fq) * 1.0, true);
+          this.puff(x, y, (28 + a * 350) * b.size, 0xffd044, (1 - fq) * 0.9, true);
+        }
       }
       for (const p of b.puffs) {
         const pa = a - p.delay;

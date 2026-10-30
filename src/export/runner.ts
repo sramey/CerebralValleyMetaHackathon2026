@@ -74,6 +74,7 @@ async function boot(): Promise<void> {
   const soundBtn = document.getElementById("sound-btn") as HTMLButtonElement | null;
 
   const world = new World(1337);
+  (window as any).__world = world;
   const loader = new ModLoader(world);
   // A mod that crashes mid-game is taken out and the rest keeps running (ADR 0056).
   loader.isolateFaults((mod, message) => console.warn(`mod ${mod.id} crashed and was unloaded:`, message));
@@ -326,14 +327,16 @@ async function boot(): Promise<void> {
     gfx.rect(x, y - 9, (e.w * health) / 100, 4).fill(color);
   }
 
+  const isLegacy = typeof window !== "undefined" && Boolean((window as any).__LEGACY_RENDER__);
+
   function drawEntityRaw(e: Entity, camX: number, camY: number): void {
     if (isParallaxOrSkyEntity(e)) return;
-    if (isSetPiece(e)) return;
+    if (!isLegacy && isSetPiece(e)) return;
     const x = e.x - camX;
     const y = e.y - camY;
     const W = app.screen.width;
     const H = app.screen.height;
-    if (isDebrisOrHazard(e)) { drawDebris(gfx, e, x, y, world.tickCount); return; }
+    if (!isLegacy && isDebrisOrHazard(e)) { drawDebris(gfx, e, x, y, world.tickCount); return; }
     if (x + e.w < -40 || x > W + 40 || y + e.h < -40 || y > H + 40) return;
     const t = e.type;
     const look = kindOf(t);
@@ -498,7 +501,7 @@ async function boot(): Promise<void> {
     }
     drawParallaxEntities(bgGfx, world.entities, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1], grade);
     drawHorizonMist(bgGfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
-    setPieceLayer.render(world.entities, camX, camYSmooth, framesBySubject);
+    if (!isLegacy) setPieceLayer.render(world.entities, camX, camYSmooth, framesBySubject);
 
     order.length = 0;
     for (let i = 0; i < world.entities.length; i++) order.push(world.entities[i]);
@@ -515,16 +518,20 @@ async function boot(): Promise<void> {
     if (!shadowsDrawn) drawContactShadows(gfx, world.entities, camX, camYSmooth, W, H, isEffectType, celestialPos(W).x);
 
     for (const p of world.particles) {
-      drawDebrisParticle(gfx, p, camX, camYSmooth);
+      if (isLegacy) {
+        gfx.rect(p.x - camX, p.y - camYSmooth, p.size, p.size).fill({ color: p.color, alpha: Math.max(0, 1 - p.life / p.maxLife) });
+      } else {
+        drawDebrisParticle(gfx, p, camX, camYSmooth);
+      }
     }
 
-    const primaries = computePrimaries(world.entities, framesBySubject, (type) => Boolean(kindOf(type)) || isSetPieceSubject(type));
+    const primaries = computePrimaries(world.entities, framesBySubject, (type) => Boolean(kindOf(type)) || (!isLegacy && isSetPieceSubject(type)));
     const seen = new Set<number>();
     const spriteDraw: { e: Entity; frame: Texture; subjectKey: string | undefined }[] = [];
 
     for (const e of world.entities) {
       if (isParallaxOrSkyEntity(e)) continue;
-      if (isSetPiece(e)) continue;
+      if (!isLegacy && isSetPiece(e)) continue;
       const frames = framesFor(framesBySubject, e.type, e.type === "player");
       if (frames.length < 1 || !primaries.has(e.id) || kindOf(e.type)) continue;
       seen.add(e.id);

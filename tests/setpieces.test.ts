@@ -26,6 +26,7 @@ describe("setpieces override and classification (bead metabuild-ideation-bex)", 
     expect(isSetPieceSubject("watchtower")).toBe(true);
     expect(isSetPieceSubject("lighthouse")).toBe(true);
     expect(isSetPieceSubject("mountain")).toBe(true);
+    expect(isSetPieceSubject("campfire")).toBe(true);
 
     // Negative cases: small items, characters, projectiles
     expect(isSetPieceSubject("ninja")).toBe(false);
@@ -53,6 +54,9 @@ describe("setpieces override and classification (bead metabuild-ideation-bex)", 
     const waterfall = { type: "waterfall", x: 300, y: 100, w: 120, h: 300 };
     expect(isSetPiece(waterfall)).toBe(true);
 
+    const campfire = { type: "campfire", x: 300, y: 366, w: 48, h: 34 };
+    expect(isSetPiece(campfire)).toBe(true);
+
     // A large tree is recognized as a setpiece
     const giantTree = { type: "tree", x: 100, y: 200, w: 100, h: 200 };
     expect(isSetPiece(giantTree)).toBe(true);
@@ -76,6 +80,9 @@ describe("setpieces override and classification (bead metabuild-ideation-bex)", 
 
     const castle = { type: "castle", data: { visual: "shape" } };
     expect(shouldOverrideShapeWithArt(castle)).toBe(true);
+
+    const campfire = { type: "campfire", data: { visual: "shape" } };
+    expect(shouldOverrideShapeWithArt(campfire)).toBe(true);
 
     // Geometric primitives that should stay shapes
     const ball = { type: "ball", data: { visual: "shape" } };
