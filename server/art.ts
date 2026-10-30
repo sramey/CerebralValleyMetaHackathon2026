@@ -17,6 +17,22 @@ const IMAGE_URL = "https://api.meta.ai/v1/images/generations";
 /** In-memory cache: sanitized key -> public URL. */
 const artCache = new Map<string, string>();
 
+/**
+ * Directory that holds generated sheets on disk, served at /art/gen/<key>.webp.
+ * `ART_GEN_DIR` overrides it so a test run can point the cache at a throwaway folder and
+ * never read the checkout's `public/art/gen/`, where a live session leaves real sheets
+ * that would make an art test skip generation (bead cvu). Production keeps the default.
+ */
+export function artGenDir(): string {
+  const override = (process.env.ART_GEN_DIR ?? "").trim();
+  return override || join(process.cwd(), "public", "art", "gen");
+}
+
+/** Path of a cached sheet on disk. Every cache read, write and delete goes through this. */
+export function artFilePath(key: string): string {
+  return join(artGenDir(), `${key}.webp`);
+}
+
 export function sanitizeArtKey(raw: string): string {
   const s = raw
     .toLowerCase()
@@ -44,7 +60,7 @@ export function clearCachedArt(keyRaw: string): boolean {
     const key = sanitizeArtKey(keyRaw);
     if (!key) return false;
     const hadMem = artCache.delete(key);
-    const file = join(process.cwd(), "public", "art", "gen", `${key}.webp`);
+    const file = artFilePath(key);
     if (existsSync(file)) {
       unlinkSync(file);
       return true;
@@ -100,7 +116,7 @@ export function artCachedUrl(keyRaw: string, variant?: string): string | null {
     }
     const cached = artCache.get(key);
     if (cached) return cached;
-    const file = join(process.cwd(), "public", "art", "gen", `${key}.webp`);
+    const file = artFilePath(key);
     if (existsSync(file)) {
       const url = artUrlForKey(key);
       artCache.set(key, url);
@@ -165,7 +181,7 @@ export async function generateSubjectArt(subject: string, keyRaw: string, scener
     const cached = artCache.get(key);
     if (cached) return cached;
     const url = artUrlForKey(key);
-    const file = join(process.cwd(), "public", "art", "gen", `${key}.webp`);
+    const file = artFilePath(key);
     // Disk cache: still attach the URL without regenerating.
     if (existsSync(file)) {
       artCache.set(key, url);
