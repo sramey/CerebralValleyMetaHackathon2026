@@ -5,7 +5,7 @@
 // /art/gen/<key>.webp.
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { artPlanFor, canUseSpriteSheet, detectMoodCommand, extractSpawnedEntities, isHeldItemType } from "../src/ontology";
+import { artPlanFor, canUseSpriteSheet, detectMoodCommand, entityKind, extractSpawnedEntities, isHeldItemType } from "../src/ontology";
 import { loadEnv } from "./meta";
 import { logArt } from "./createlog";
 import { loadRules } from "./learn";
@@ -114,6 +114,16 @@ export function artCachedUrl(keyRaw: string, variant?: string): string | null {
       clearCachedArt(keyRaw);
       return null;
     }
+    return artCachedUrlByKey(key);
+  } catch {
+    return null;
+  }
+}
+
+/** The cached public URL for an already-computed art key, or null. */
+export function artCachedUrlByKey(key: string): string | null {
+  try {
+    if (!key) return null;
     const cached = artCache.get(key);
     if (cached) return cached;
     const file = artFilePath(key);
@@ -242,25 +252,70 @@ export async function generateSubjectArt(subject: string, keyRaw: string, scener
 }
 
 /**
- * Scan a mod source for spawned entity types (api.spawn({ type: "..." }) and
- * any other type: "..." literal), in first-seen order. Returns the FIRST type
- * that is a drawable creature or prop (never terrain, static solid geometry,
- * effects, projectiles, or shapes), or null when nothing needs art.
+ * Every drawable creature or prop type a mod source spawns, in first-seen order.
+ * Terrain and static solid geometry, effects, projectiles and shapes are never
+ * included, and neither is the player's own sheet (the ontology decides, ADR 0031).
  */
-export function pickArtType(source: string): string | null {
-  const spawned = extractSpawnedEntities(source);
-  for (const s of spawned) {
+export function artTypesForSource(source: string): string[] {
+  const types: string[] = [];
+  for (const s of extractSpawnedEntities(source)) {
     if (s.solid && s.gravityScale === 0) continue;
     if (s.kind !== "creature" && s.kind !== "prop") continue;
     if (isSkippedType(s.type)) continue;
     if (!artKeyForType(s.type)) continue;
-    return s.type;
+    types.push(s.type);
   }
-  return null;
+  return types;
 }
 
-/** Most generated sprite sheets one build may order: the player's skin plus one creature (ADR 0066). The owner sets this number. */
-export const MAX_ART_PER_BUILD = 2;
+/**
+ * The first type a mod spawns that needs art, or null when nothing does.
+ * Kept for callers that only need one (the look/receipt); a build now orders art
+ * for every type (planArtOrders).
+ */
+export function pickArtType(source: string): string | null {
+  return artTypesForSource(source)[0] ?? null;
+}
+
+/** One sprite sheet a build wants: which subject, under which cache key. */
+export interface ArtOrder {
+  /** Entity type exactly as the mod spawns it. */
+  type: string;
+  /** Human subject phrase for the sheet prompt. */
+  subject: string;
+  /** Art cache key (also the dedupe key; a flier's is "<base>-fly"). */
+  key: string;
+  /** Scenery/held-item art instead of animated character poses. */
+  scenery: boolean;
+  /** Airborne poses instead of the walk/run cycle (ADR 0053). */
+  flying: boolean;
+}
+
+/**
+ * Every sheet a build should order, deduped by art key (so "dragon" and
+ * "fire-dragon" share one). `visual` is the router's hint for the whole command;
+ * the ontology still wins per type (a chest is scenery even in a creature build).
+ */
+export function planArtOrders(source: string, command: string, visual?: string): ArtOrder[] {
+  const orders: ArtOrder[] = [];
+  const seen = new Set<string>();
+  for (const type of artTypesForSource(source)) {
+    const subject = deriveSubjectForType(command, type);
+    const scenery =
+      visual === "prop" ||
+      isHeldItemType(subject) ||
+      isHeldItemType(type) ||
+      entityKind(type) === "prop" ||
+      (visual !== "creature" && (isScenerySubject(subject) || isScenerySubject(type)));
+    // A flying request gets airborne poses, not the walk cycle (ADR 0053).
+    const flying = isFlyingRequest(`${command} ${subject}`, type) && !scenery;
+    const key = artKeyForType(type, flying ? "fly" : undefined);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    orders.push({ type, subject, key, scenery, flying });
+  }
+  return orders;
+}
 
 /** The skin a mod asks for with api.setScene({ playerSkin: "spaceship" }), or null. */
 export function pickSkin(source: string): string | null {
@@ -302,6 +357,30 @@ export function deriveSubject(command: string, fallbackType: string): string {
     return fallbackClean;
   }
   return s;
+}
+
+const escapeWord = (w: string): string => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * The subject phrase for one spawned type: the command clause that names it
+ * ("add a dragon, a knight and a treasure chest" -> "treasure chest" for the
+ * chest), else the type itself. Never borrows another clause's subject, so a
+ * multi-part build gets one honest prompt per thing.
+ */
+export function deriveSubjectForType(command: string, type: string): string {
+  const words = type.toLowerCase().replace(/[-_]+/g, " ").split(/\s+/).filter(Boolean);
+  if (words.length > 0 && command.trim()) {
+    const clauses = command.split(/\s*[,;]\s*|\s+and\s+/i).map((c) => c.trim()).filter(Boolean);
+    for (const clause of clauses) {
+      const lower = clause.toLowerCase();
+      const named = words.every((w) => new RegExp(`(?:^|[^a-z0-9])${escapeWord(w)}(?:s|es)?(?:$|[^a-z0-9])`).test(lower));
+      if (!named) continue;
+      const subject = deriveSubject(clause, type);
+      if (subject) return subject;
+    }
+  }
+  const fallback = type.replace(/[-_]+/g, " ").trim();
+  return fallback || type;
 }
 
 /**

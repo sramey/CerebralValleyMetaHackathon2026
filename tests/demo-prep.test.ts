@@ -11,8 +11,11 @@ const dirs: string[] = [];
 afterEach(() => { delete process.env.DEMO_FREEZE_LEARNING; setLearnedDir(null); for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
 
 describe("demo:prep helpers", () => {
-  it("lists env lines to raise, by name, only for limits below the recording need", () => {
-    const lines = budgetAdvice({ session: DEFAULT_SESSION, global: DEFAULT_GLOBAL });
+  it("asks for no env lines when the defaults are unlimited, and only for limits below the recording need", () => {
+    // Unlimited defaults (bead 852) already cover a recording session.
+    expect(budgetAdvice({ session: DEFAULT_SESSION, global: DEFAULT_GLOBAL })).toEqual([]);
+    const tight = { session: { build: 20, image: 24, sam: 6, voice: 8 * 60, explain: 40 }, global: { ...DEFAULT_GLOBAL } };
+    const lines = budgetAdvice(tight);
     expect(lines).toContain("BUDGET_SESSION_VOICE_MIN=30");
     expect(lines).toContain("BUDGET_SESSION_BUILDS=60");
     expect(budgetAdvice({ session: RECORDING_SESSION, global: RECORDING_GLOBAL })).toEqual([]);
@@ -23,9 +26,10 @@ describe("demo:prep helpers", () => {
     const f = join(d, "budget.json");
     const used = { build: 1, image: 0, sam: 0, voice: 480 * 60 };
     writeFileSync(f, JSON.stringify({ day: "2026-10-29", global: used, sessions: { "::1": used, "10.0.0.5": { build: 99, image: 99, sam: 99, voice: 99999 } } }));
-    expect(exhaustedToday(f, DEFAULT_SESSION, "2026-10-29")).toEqual(["voice"]);
-    expect(exhaustedToday(f, DEFAULT_SESSION, "2026-10-30")).toEqual([]);
-    expect(exhaustedToday(join(d, "missing.json"), DEFAULT_SESSION)).toEqual([]);
+    expect(exhaustedToday(f, RECORDING_SESSION, "2026-10-29")).toEqual(["voice"]);
+    expect(exhaustedToday(f, DEFAULT_SESSION, "2026-10-29")).toEqual([]); // unlimited default: nothing is exhausted
+    expect(exhaustedToday(f, RECORDING_SESSION, "2026-10-30")).toEqual([]);
+    expect(exhaustedToday(join(d, "missing.json"), RECORDING_SESSION)).toEqual([]);
   });
 
   it("flags player-size cap rules and ignores unrelated ones", () => {

@@ -6,7 +6,7 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
 import { SIM } from "../src/contract";
-import { detectBackdropCommand, detectMoodCommand, entityKind, extractSpawnedEntities, isHeldItemType, isPlayerAbilityCommand, isPlayerCommand } from "../src/ontology";
+import { detectBackdropCommand, detectMoodCommand, extractSpawnedEntities, isPlayerAbilityCommand, isPlayerCommand } from "../src/ontology";
 import { moodKey, moodSpecFor, pool, restyleSheet, sheetPath } from "./mood";
 import { fallbackVisual, lookFor, parseShape, parseVisual } from "./visual";
 import type { Visual } from "./visual";
@@ -33,7 +33,8 @@ import { activeLogFile, logBuild, logMood, saveModSources } from "./createlog";
 import { createStatsHandler } from "./stats-feed";
 import { createBrainHandler } from "./brain";
 import { genreWarnings } from "./genre";
-import { MAX_ART_PER_BUILD, artCachedUrl, artKeyForType, clearCachedArt, deriveSubject, generateSubjectArt, isFlyingRequest, isScenerySubject, pickArtType, pickSkin, purgeLegacyArt, subjectArtPrompt, IMAGE_MODEL } from "./art";
+import { artCachedUrl, artCachedUrlByKey, artKeyForType, clearCachedArt, generateSubjectArt, pickArtType, pickSkin, planArtOrders, purgeLegacyArt, subjectArtPrompt, IMAGE_MODEL } from "./art";
+import { drawPendingArt, planBuildArt } from "./art-orders";
 import { aiReceipt, plainReceipt } from "./receipt";
 import { learnFromFix, learnRuleFromFeedback, learnSkillFromFeedback } from "./learn";
 import { segmentPhoto } from "./photo";
@@ -1113,34 +1114,23 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
 
   if (first.ok) {
     const def = first.res.def!;
-    // Art on demand: cached art attaches immediately; otherwise the mod
-    // ships with artPending and the art streams in asynchronously.
-    let art: { key: string; url: string; scenery?: boolean } | undefined;
-    let artPending: string | undefined;
-    let pendingArt: { subject: string; type: string; key: string; scenery: boolean; flying: boolean } | undefined;
-    let artsOrdered = 0;
+    // Art on demand: cached art attaches immediately; otherwise the mod ships with
+    // artPending and each sheet streams in asynchronously. A build can introduce several
+    // new subjects at once ("a dragon, a knight and a treasure chest"), so every drawable
+    // creature or prop type gets its own order: deduped by art key, cached sheets reused,
+    // all generated in parallel. Each order still spends one image first (kill switch + env caps).
     const artType = pickArtType(source);
     // Spark's visual kind (from the router call) decides the art path; word lists only cover a router miss (ADR 0015).
     const fb = route.visual ? undefined : fallbackVisual(`${command} ${artType ?? ""}`);
     const visual: Visual | undefined = route.visual ?? fb?.visual;
     const look = artType ? lookFor(visual, route.shape ?? fb?.shape, [artType.toLowerCase()]) : undefined;
-    if (artType && !look) {
-      const subject = deriveSubject(command, artType);
-      const scenery = visual === "prop" || isHeldItemType(subject) || isHeldItemType(artType) || entityKind(artType) === "prop" || (visual !== "creature" && (isScenerySubject(subject) || isScenerySubject(artType)));
-      // A flying request gets airborne poses, not the walk cycle (ADR 0053).
-      const flying = isFlyingRequest(`${command} ${subject}`, artType) && !scenery;
-      const key = artKeyForType(artType, flying ? "fly" : undefined);
-      if (key) {
-        const cachedUrl = artCachedUrl(artType, flying ? "fly" : undefined);
-        if (cachedUrl) {
-          art = { key, url: cachedUrl, ...(scenery ? { scenery: true } : {}) };
-        } else if (artsOrdered < MAX_ART_PER_BUILD && spend(ws, "image")) {
-          artsOrdered++;
-          artPending = key;
-          pendingArt = { subject, type: artType, key, scenery, flying };
-        }
-      }
-    }
+    const artPlan = artType && !look
+      ? planBuildArt(planArtOrders(source, command, route.visual), { cached: artCachedUrlByKey, spend: () => spend(ws, "image") })
+      : { extra: [], pending: [] };
+    const art = artPlan.art;
+    const artPending = artPlan.artPending;
+    const extraArt = artPlan.extra;
+    const pendingArts = artPlan.pending;
     // A genre change re-skins the player (ADR 0066): its own sheet, cached or ordered like any other art.
     let skinArt: { key: string; url: string } | undefined;
     let skinPending: string | undefined;
@@ -1149,14 +1139,14 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
       const key = artKeyForType(skin, "skin");
       const cachedUrl = artCachedUrl(skin, "skin");
       if (cachedUrl) skinArt = { key, url: cachedUrl };
-      else if (artsOrdered < MAX_ART_PER_BUILD && spend(ws, "image")) { artsOrdered++; skinPending = key; }
+      else if (spend(ws, "image")) skinPending = key;
     }
     const rec: ManifestRec = { id: def.id, title: def.title, source, compiled: first.js, knobs: def.knobs ?? {}, ...(art ? { art } : {}), ...(skinArt ? { skinArt } : {}), ...(look ? { look } : {}) };
     // The receipt (ADR 0065): the whole chain behind this mod, kept with it for "How was this made?".
     const receiptArt: ReceiptArt | undefined = look
       ? { model: "code", subject: artType ?? def.title, state: "code-drawn" }
-      : pendingArt
-        ? { model: IMAGE_MODEL, subject: pendingArt.subject, prompt: subjectArtPrompt(pendingArt.subject, pendingArt.key, pendingArt.scenery, pendingArt.flying), state: "drawing" }
+      : pendingArts[0]
+        ? { model: IMAGE_MODEL, subject: pendingArts[0].subject, prompt: subjectArtPrompt(pendingArts[0].subject, pendingArts[0].key, pendingArts[0].scenery, pendingArts[0].flying), state: "drawing" }
         : art
           ? { model: IMAGE_MODEL, subject: artType ?? def.title, url: art.url, state: "cached" }
           : undefined;
@@ -1176,6 +1166,9 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     const notes = genreWarnings(command, source);
     stage(ws, { kind: "stage", stage: "done", detail: `loaded ${def.id} (${SIM.healthFrames} frames OK)${notes.length ? ` — note: ${notes.join("; ")}` : ""}`, command });
     send(ws, { kind: "mod", mod: { id: def.id, title: def.title, source, compiled: first.js, knobs: rec.knobs, ...(art ? { art } : {}), ...(artPending ? { artPending } : {}), ...(skinArt ? { skinArt } : {}), ...(skinPending ? { skinPending } : {}), ...(look ? { look } : {}) } });
+    // The other cached sheets ride the same async path: the client keys art by subject,
+    // so several `art` messages for one mod all land (a build can add several new things).
+    for (const cachedArt of extraArt) { try { send(ws, { kind: "art", modId: def.id, art: cachedArt }); } catch {} }
     if (skinPending && skin) {
       const skinKey = skinPending;
       generateSubjectArt(skin.replace(/-/g, " "), skin, false, false, true).then((url) => {
@@ -1185,14 +1178,18 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
       }).catch(() => {});
       send(ws, { kind: "say", text: `Drawing your ${skin.replace(/-/g, " ")}...` });
     }
-    if (pendingArt) {
-      const { subject, type, key, scenery, flying } = pendingArt;
-      const a0 = performance.now();
-      generateSubjectArt(subject, type, scenery, flying).then(url => {
+    if (pendingArts.length > 0) {
+      const receiptOrder = pendingArts[0];
+      // Every sheet is drawn in parallel; each one lands as its own `art` message (ADR 0008).
+      drawPendingArt(pendingArts, (order) => generateSubjectArt(order.subject, order.type, order.scenery, order.flying), (order, url, ms) => {
         const ra = rec.receipt?.art;
-        if (ra) Object.assign(ra, url ? { state: "drawn", url, ms: Math.round(performance.now() - a0) } : { state: "none" });
-        if (url) { rec.art = { key, url, ...(scenery ? { scenery: true } : {}) }; try { send(ws, { kind: "art", modId: def.id, art: { key, url, ...(scenery ? { scenery: true } : {}) } }); } catch {} } }).catch(() => {});
-      send(ws, { kind: "say", text: `Drawing ${subject}...` });
+        if (ra && order === receiptOrder) Object.assign(ra, url ? { state: "drawn", url, ms } : { state: "none" });
+        if (!url) return;
+        const drawn = { key: order.key, url, ...(order.scenery ? { scenery: true } : {}) };
+        if (!rec.art) rec.art = drawn;
+        try { send(ws, { kind: "art", modId: def.id, art: drawn }); } catch {}
+      });
+      send(ws, { kind: "say", text: `Drawing ${pendingArts.map((o) => o.subject).join(", ")}...` });
     }
     queueBuildReview({ ws, command, mod: rec, playtest: { ok: true, msPerFrame: first.res.msPerFrame }, worldMods: () => worldMods(ws), send });
     const files = saveModSources(sources, def.id);

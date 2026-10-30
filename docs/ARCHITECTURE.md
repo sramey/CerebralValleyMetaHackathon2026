@@ -180,14 +180,15 @@ cannot change what ships. `server/learn.ts`,
 ## 5. The spend guard
 
 The game is public and every AI call costs money, so each Meta call is counted *before* it
-happens, per visitor (IP) and globally, per UTC day, with a kill switch. Defaults per
-session: 20 builds, 24 images, 6 SAM calls, 8 minutes of voice; globally 400, 300, 100 and
-120 minutes (`DEFAULT_SESSION` and `DEFAULT_GLOBAL` in `server/budget.ts`; override with the
-`BUDGET_*` environment variables, listed in `.env.example`). A refusal is a friendly
-sentence in the orb, never an error: the game keeps playing in **visitor mode** with the
-curated demo worlds in `worlds/`. Counts persist in `data/budget.json`. Deployment is a
-single port serving the built client, art, `/healthz` and the WebSocket
-(`server/static.ts`). [ADR 0014](adr/0014-deploy-share-spend-visitor.md).
+happens, per visitor (IP) and globally, per UTC day, with a kill switch. There is no public
+page and every player brings their own key, so the defaults are **unlimited** (owner
+2026-10-30): a host can still set any `BUDGET_*` environment variable to cap a visitor or the
+whole server, and `AI_KILL_SWITCH` still stops every call at once
+(`DEFAULT_SESSION` and `DEFAULT_GLOBAL` in `server/budget.ts`; the knobs are listed in
+`.env.example`). A refusal is a friendly sentence in the orb, never an error: the game keeps
+playing in **visitor mode** with the curated demo worlds in `worlds/`. Counts persist in
+`data/budget.json`. Deployment is a single port serving the built client, art, `/healthz` and
+the WebSocket (`server/static.ts`). [ADR 0014](adr/0014-deploy-share-spend-visitor.md).
 
 ## Where to look next
 
