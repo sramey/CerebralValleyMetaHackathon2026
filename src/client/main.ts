@@ -17,6 +17,7 @@ import { Feel } from "./feel";
 import { Sound, buildSfx } from "./sound";
 import { createTester } from "./tester";
 import { createOnboarding, createSoundButton, plainBuildMessage } from "./onboard";
+import { createMoodCard } from "./mood-card";
 import { Portal } from "./portal";
 import { localRelativeAsk } from "./local-asks";
 import { visualHeight } from "../sim/sockets";
@@ -487,6 +488,13 @@ let moodModCount = 0; // mods loaded when the mood was applied; more later means
 const origFrames = new Map<string, Texture[]>(); // sheets as they were before the mood, restored on undo
 const morph = new Map<string, number>(); // sprite key -> digitize-until (ms)
 
+/**
+ * The card that says which mood is on. It follows the palette update itself (`applyMood` calls
+ * `set`), so an undo, a redo or a reload updates it in the same step as the world's colours, with no
+ * call site to forget (bug bv4).
+ */
+const moodCard = createMoodCard(() => { send({ kind: "undo", modId: "mood" }); revertMood(); say("Back to normal.", "done"); });
+
 function mixC(a: number, b: number, t: number): number {
   const m = (s: number) => Math.round(((a >> s) & 255) * (1 - t) + ((b >> s) & 255) * t);
   return (m(16) << 16) | (m(8) << 8) | m(0);
@@ -513,6 +521,7 @@ function restoreSheets(): void {
 }
 function applyMood(m: MoodSpec | null): void {
   mood = m;
+  moodCard.set(m); // the chip reads the mood through this one update, not through its callers (bug bv4)
   if (m) {
     pal.grass = m.grass; pal.soil = m.soil; pal.ridgeFar = m.ridgeFar; pal.ridgeNear = m.ridgeNear; pal.moon = m.moon; pal.star = m.star;
     setSky(m.skyTop, m.skyBottom);
@@ -542,14 +551,20 @@ function syncBackdrop(): void {
     applyMood(null); // back to the starter sky
   }
 }
-function revertMood(): void {
+/**
+ * Put the world back to no mood (ADR 0017). `local` is false when the server already said so with
+ * its own `mood: null` frame: that frame also makes the server record the world on the timeline
+ * strip. A mood the player undoes here is not echoed by the server (bug bv4), so the strip gets the
+ * loss of the mood straight away instead of waiting for the next action to record a step.
+ */
+function revertMood(local = true): void {
   restoreSheets();
   applyMood(null);
-  renderMods();
+  if (local) timelineView.localStep({ kind: "undo", label: "Back to normal", mods: loader.list().map((m) => ({ id: m.id, title: m.title })) });
 }
 /** Server designed a mood: repaint the code-drawn world now, then ask for each AI sheet to be edited toward it. */
 function onMood(m: MoodSpec | null): void {
-  if (!m) { revertMood(); say("Back to normal.", "done"); return; }
+  if (!m) { revertMood(false); say("Back to normal.", "done"); return; }
   if (mood && mood.name === m.name) return; // duplicate of the mood already on
   tester.mood(m.name);
   restoreSheets();
@@ -1025,21 +1040,8 @@ function syncInput(): void {
 // --- mod cards -----------------------------------------------------------------
 function renderMods(): void {
   modsEl.innerHTML = "";
+  moodCard.mount(modsEl); // the card keeps its own text; this only re-homes it (bug bv4)
   const mods = loader.list();
-  if (mood) {
-    const li = document.createElement("li");
-    const head = document.createElement("div");
-    head.className = "title";
-    const name = document.createElement("span");
-    name.textContent = `Mood: ${mood.name}`;
-    const undo = document.createElement("button");
-    undo.className = "undo";
-    undo.textContent = "Undo";
-    undo.addEventListener("click", () => { send({ kind: "undo", modId: "mood" }); revertMood(); say("Back to normal.", "done"); });
-    head.append(name, undo);
-    li.appendChild(head);
-    modsEl.appendChild(li);
-  }
   if (mods.length === 0) {
     const li = document.createElement("li");
     li.textContent = "Empty world. The orb is waiting.";
@@ -1930,6 +1932,9 @@ async function importMod(compiled: string): Promise<ModDefinition> {
 /** Replace the running world with a saved one: built-ins from the bundle, AI mods from their verified compiled source. */
 async function applyWorld(msg: Extract<ServerMsg, { kind: "world" }>): Promise<void> {
   restoreSheets();
+  // A whole new world supersedes any step this client guessed locally (bug bv4); the server's own
+  // timeline frame (a restore) or a fresh session (a link) is the truth from here.
+  timelineView.clearLocal();
   applyMood(msg.mood ?? null);
   for (const m of loader.list()) loader.unload(m.id);
   let loaded = 0;
