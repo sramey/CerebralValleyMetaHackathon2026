@@ -327,28 +327,55 @@ export class Fx {
     this.splashes = this.splashes.filter((s) => s.age < SPLASH_LIFE);
   }
 
-  /** A batch of fresh sim particles at one spot is a burst: dress it as an explosion. */
+  /** A batch of fresh sim particles clustered at one spot is a burst: dress it as an explosion. */
   private detectBursts(world: World): void {
-    let n = 0, sx = 0, sy = 0;
+    const fresh: Particle[] = [];
     for (const p of world.particles) {
       if (this.seen.has(p)) continue;
       this.seen.add(p);
-      n++; sx += p.x; sy += p.y;
+      fresh.push(p);
     }
-    if (n < 6) return;
-    const size = Math.min(2.4, 0.8 + n / 18);
-    const sparks: Spark[] = [];
-    for (let i = 0; i < Math.min(40, n * 2); i++) {
-      const a = Math.random() * Math.PI * 2;
-      const sp = (140 + Math.random() * 260) * size * 0.7;
-      sparks.push({ vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60, hot: Math.random() });
+    if (fresh.length < 6) return;
+
+    // Cluster fresh particles that originate near the same point (< 48 px)
+    const clusters: { count: number; sx: number; sy: number }[] = [];
+    for (const p of fresh) {
+      let matched = false;
+      for (const c of clusters) {
+        const cx = c.sx / c.count;
+        const cy = c.sy / c.count;
+        const distSq = (p.x - cx) * (p.x - cx) + (p.y - cy) * (p.y - cy);
+        if (distSq < 48 * 48) {
+          c.count++;
+          c.sx += p.x;
+          c.sy += p.y;
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        clusters.push({ count: 1, sx: p.x, sy: p.y });
+      }
     }
-    const puffs: Puff[] = [];
-    for (let i = 0; i < 5; i++) puffs.push({ dx: (Math.random() - 0.5) * 30 * size, dy: (Math.random() - 0.5) * 24 * size, vy: -20 - Math.random() * 30, r: (22 + Math.random() * 14) * size, delay: 0, smoke: false });
-    for (let i = 0; i < 4; i++) puffs.push({ dx: (Math.random() - 0.5) * 40 * size, dy: (Math.random() - 0.5) * 20 * size, vy: -28 - Math.random() * 30, r: (20 + Math.random() * 12) * size, delay: 0.12, smoke: true });
-    this.blasts.push({ x: sx / n, y: sy / n, age: 0, size, sparks, puffs });
-    if (this.blasts.length > 12) this.blasts.shift();
-    this.shake = Math.max(this.shake, 3 + 3 * size);
+
+    // Only clusters with at least 6 particles at that specific spot trigger an explosion blast
+    for (const c of clusters) {
+      if (c.count < 6) continue;
+      const n = c.count;
+      const size = Math.min(2.4, 0.8 + n / 18);
+      const sparks: Spark[] = [];
+      for (let i = 0; i < Math.min(40, n * 2); i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = (140 + Math.random() * 260) * size * 0.7;
+        sparks.push({ vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60, hot: Math.random() });
+      }
+      const puffs: Puff[] = [];
+      for (let i = 0; i < 5; i++) puffs.push({ dx: (Math.random() - 0.5) * 30 * size, dy: (Math.random() - 0.5) * 24 * size, vy: -20 - Math.random() * 30, r: (22 + Math.random() * 14) * size, delay: 0, smoke: false });
+      for (let i = 0; i < 4; i++) puffs.push({ dx: (Math.random() - 0.5) * 40 * size, dy: (Math.random() - 0.5) * 20 * size, vy: -28 - Math.random() * 30, r: (20 + Math.random() * 12) * size, delay: 0.12, smoke: true });
+      this.blasts.push({ x: c.sx / n, y: c.sy / n, age: 0, size, sparks, puffs });
+      if (this.blasts.length > 12) this.blasts.shift();
+      this.shake = Math.max(this.shake, 3 + 3 * size);
+    }
   }
 
   private drawBlasts(dt: number): void {

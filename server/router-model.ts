@@ -43,11 +43,13 @@ export async function openChat(cfg: OpenConfig, messages: ChatMessage[], maxToke
   return { text, ms };
 }
 
-/** Route a command: open weights first when enabled, hosted Spark on any failure. */
-export async function routerChat(messages: ChatMessage[], maxTokens = 1024): Promise<Routed> {
+/** Route a command: open weights first when enabled, hosted Spark on any failure.
+ *  `signal` (a cancelled build, ADR 0060) is carried by the hosted call; an already-cancelled
+ *  build must not spend an open-weights call either, so that path is skipped. */
+export async function routerChat(messages: ChatMessage[], maxTokens = 1024, signal?: AbortSignal): Promise<Routed> {
   const cfg = openConfig();
   let fellBack = false;
-  if (cfg) {
+  if (cfg && !signal?.aborted) {
     try {
       const r = await openChat(cfg, messages, maxTokens);
       return { ...r, model: cfg.model.split("/").pop() ?? cfg.model, open: true, fellBack: false };
@@ -56,6 +58,6 @@ export async function routerChat(messages: ChatMessage[], maxTokens = 1024): Pro
       console.log(`[route] open weights failed, using hosted Spark: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
-  const r = await chat(SPARK, messages, maxTokens);
+  const r = await chat(SPARK, messages, maxTokens, "minimal", signal);
   return { ...r, model: SPARK, open: false, fellBack };
 }

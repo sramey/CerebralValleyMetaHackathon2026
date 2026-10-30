@@ -87,4 +87,9 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0057](0057-engine-rules-gear-shots-ground-broad-phase.md) | Engine rules for gear, shots and the ground slab; a broad phase for collision | Draft |
 | [0058](0058-faster-builds-fewer-sequential-model-turns.md) | Faster builds: relative tweaks, split beside the router, prefetched world snapshot | Draft |
 | [0059](0059-living-creations-events-speech-orders-and-route-rules.md) | Living creations: mod events, speech bubbles, voice orders to any creature, route rules as a named pipeline | Draft |
+| [0060](0060-cancel-a-running-build.md) | Cancel a running build: an x on its chip aborts that one build and drops its result | Draft |
+| [0061](0061-gear-sockets-on-the-drawn-body.md) | Gear sockets on the drawn body: hand/back/head/feet/belt for any character, clamped nudges, a dragon can wear a hat | Draft |
+| [0062](0062-aware-sprite-generation-orientation-and-actions.md) | Aware sprite generation: 2D side-scrolling platformer orientation facing right and 4 sequential action poses | Draft |
+| [0063](0063-fallen-creatures-go-back-on-the-ground.md) | Fallen creatures go back on the ground: a creature 900 px below the main slab is stood beside the player | Draft |
+| [0064](0064-friendly-fire-protection-and-clustered-burst-explosions.md) | Friendly fire protection and spatially clustered burst explosions | Draft |
 | [0065](0065-how-was-this-made-receipt.md) | "How was this made?": a receipt for every creation, from words to verified playable mod | Draft |

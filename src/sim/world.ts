@@ -8,6 +8,7 @@ import { landingVelocity } from "./bounce";
 import { collectPickups } from "./collect";
 import { canInteract, interactLabel, isOrderable, orderAck, ORDER_TICKS, steerByOrder } from "./interact";
 import { touches } from "./reach";
+import { mountGear, wearerOf } from "./sockets";
 
 type TickHandler = (dt: number) => void;
 type EventListener = (ev: ModEvent) => void;
@@ -47,6 +48,9 @@ export class World {
   private prevAction = false;
   private rng: () => number;
   private grid = new SolidGrid();
+
+  /** Set by the client: does this entity have drawn art? Unset (headless) means yes (ADR 0061). */
+  hasArt?: (e: Entity) => boolean;
 
   constructor(seed = 1337) {
     this.rng = createRng(seed);
@@ -406,6 +410,30 @@ export class World {
     }
   }
 
+  /**
+   * There is no kill floor, and a hopper is airborne at the slab's end, so the ledge guard never
+   * sees it: a creature that falls far below the main ground slab would be gone for good (bead 5yy).
+   * It goes back on the slab near the player, standing, keeping its own velocity so the mod's
+   * steering is untouched. Mods and their entities are not changed anywhere else.
+   */
+  private rescueFallen(solids: Entity[], player: Entity | undefined): void {
+    let slab: Entity | undefined;
+    for (const s of solids) if (isGroundSlab(s) && (!slab || s.w > slab.w)) slab = s;
+    if (!slab) return;
+    const floor = slab.y + RESCUE_DEPTH;
+    for (const e of this.entities) {
+      if (e.y <= floor || e.type === "player" || e.solid || e.gravityScale <= 0 || e.dead) continue;
+      if ((e.kind ?? entityKind(e)) !== "creature" || e.data.tetherTo !== undefined || traitsOf(e.type).scenery) continue;
+      // Stand beside the player on the side that faces the slab's middle, inside the slab's ends.
+      const mid = slab.x + slab.w / 2;
+      const want = player ? player.x + (player.x < mid ? 1 : -1) * RESCUE_BESIDE : mid;
+      e.x = Math.max(slab.x + RESCUE_MARGIN, Math.min(slab.x + slab.w - RESCUE_MARGIN - e.w, want));
+      e.y = slab.y - e.h;
+      e.vy = 0;
+      e.onGround = true;
+    }
+  }
+
   step(): void {
     const dt = SIM.dt;
     this.tickCount++;
@@ -518,6 +546,7 @@ export class World {
       }
       refile(e);
     }
+    this.rescueFallen(solids, player);
     for (const p of this.particles) {
       p.life += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 300 * dt;
     }
@@ -525,33 +554,19 @@ export class World {
     // Post-step 1: Rigid player equipment / weapon mounting (bead qwc). An item flagged held
     // always mounts; one that is merely named like gear mounts unless it says it is not the
     // player's (a pickup still lying in the level, another creature's weapon) (ADR 0057).
-    if (player) {
-      for (const e of this.entities) {
-        if (e === player) continue;
-        const isHeld = e.data.heldByPlayer === true || e.data.equipped === true || e.data.attachedTo === "player";
-        const t = traitsOf(e.type);
-        if (isHeld || (t.equipment && !notPlayersGear(e))) {
-          e.facing = player.facing;
-          const socket = e.data.socket || t.socket;
-          if (socket === "back") {
-            const ox = typeof e.data.offsetX === "number" ? e.data.offsetX : 8;
-            const oy = typeof e.data.offsetY === "number" ? e.data.offsetY : 6;
-            e.x = player.facing >= 0 ? player.x - e.w + ox : player.x + player.w - ox;
-            e.y = player.y + oy;
-          } else if (socket === "head") {
-            e.x = player.x + (player.w - e.w) / 2;
-            e.y = player.y - e.h + 2;
-          } else {
-            // Hand socket: held in front at chest/waist height (player.h * 0.45)
-            const ox = typeof e.data.offsetX === "number" ? e.data.offsetX : 4;
-            const oy = typeof e.data.offsetY === "number" ? e.data.offsetY : Math.round(player.h * 0.45);
-            e.x = player.facing >= 0 ? player.x + player.w - ox : player.x - e.w + ox;
-            e.y = player.y + oy;
-          }
-          e.vx = player.vx;
-          e.vy = player.vy;
-        }
+    // Sockets sit on the drawn body (ADR 0061): src/sim/sockets.ts. Gear may also be attached to
+    // any entity (data.attachedTo = id or creature type), so a dragon can wear a hat.
+    for (const e of this.entities) {
+      if (e === player) continue;
+      const a = e.data.attachedTo;
+      if (a !== undefined && a !== "player" && (typeof a === "number" || typeof a === "string")) {
+        const wearer = wearerOf(e, this.entities, player);
+        if (wearer && e.data.pickup !== true) mountGear(e, wearer, undefined, this.hasArt?.(wearer) ?? true);
+        continue;
       }
+      if (!player) continue;
+      const isHeld = e.data.heldByPlayer === true || e.data.equipped === true || a === "player";
+      if (isHeld || (traitsOf(e.type).equipment && !notPlayersGear(e))) mountGear(e, player, undefined, this.hasArt?.(player) ?? true);
     }
 
     // Post-step 2: Universal projectile collision & enemy combat (bead 578). A projectile a mod
@@ -630,7 +645,7 @@ function retire(e: Entity): void {
 }
 
 /** What an entity's type name alone says about it. Cached per type: the step asks every tick. */
-interface TypeTraits { scenery: boolean; equipment: boolean; socket: "back" | "head" | "hand"; projectile: boolean; tether: boolean; enemyName: boolean }
+interface TypeTraits { scenery: boolean; equipment: boolean; projectile: boolean; tether: boolean; enemyName: boolean }
 const traitCache = new Map<string, TypeTraits>();
 function traitsOf(type: string): TypeTraits {
   let t = traitCache.get(type);
@@ -638,7 +653,6 @@ function traitsOf(type: string): TypeTraits {
     t = {
       scenery: /^(cloud|sky|day-sky|night-sky|background|parallax)/i.test(type),
       equipment: /^(gun|blaster|sword|jetpack|backpack|shield|weapon|bow|wand|dagger|spear|axe|hat|crown|helmet|cape)$/i.test(type),
-      socket: /^(jetpack|backpack|cape)$/i.test(type) ? "back" : /^(hat|crown|helmet)$/i.test(type) ? "head" : "hand",
       projectile: /^(bullet|projectile|laser|arrow|fireball|plasma|shot)$/i.test(type),
       tether: /hook|grappl|tether/i.test(type),
       enemyName: /^(enemy|walker|turtle|boss|monster|zombie|goblin|slime|spider|bat|skeleton|demon|orc)$/i.test(type),
@@ -667,6 +681,11 @@ function hurtsOnContact(e: Entity): boolean {
 function isGroundSlab(s: Entity): boolean {
   return s.type === "ground";
 }
+
+/** How far below the ground slab's top a creature must be before it is put back (px), and where it lands. */
+const RESCUE_DEPTH = 900;
+const RESCUE_BESIDE = 220;
+const RESCUE_MARGIN = 80;
 
 const PAD = 32;
 function padded(e: Box): Box {

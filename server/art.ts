@@ -17,6 +17,22 @@ const IMAGE_URL = "https://api.meta.ai/v1/images/generations";
 /** In-memory cache: sanitized key -> public URL. */
 const artCache = new Map<string, string>();
 
+/**
+ * Directory that holds generated sheets on disk, served at /art/gen/<key>.webp.
+ * `ART_GEN_DIR` overrides it so a test run can point the cache at a throwaway folder and
+ * never read the checkout's `public/art/gen/`, where a live session leaves real sheets
+ * that would make an art test skip generation (bead cvu). Production keeps the default.
+ */
+export function artGenDir(): string {
+  const override = (process.env.ART_GEN_DIR ?? "").trim();
+  return override || join(process.cwd(), "public", "art", "gen");
+}
+
+/** Path of a cached sheet on disk. Every cache read, write and delete goes through this. */
+export function artFilePath(key: string): string {
+  return join(artGenDir(), `${key}.webp`);
+}
+
 export function sanitizeArtKey(raw: string): string {
   const s = raw
     .toLowerCase()
@@ -44,7 +60,7 @@ export function clearCachedArt(keyRaw: string): boolean {
     const key = sanitizeArtKey(keyRaw);
     if (!key) return false;
     const hadMem = artCache.delete(key);
-    const file = join(process.cwd(), "public", "art", "gen", `${key}.webp`);
+    const file = artFilePath(key);
     if (existsSync(file)) {
       unlinkSync(file);
       return true;
@@ -100,7 +116,7 @@ export function artCachedUrl(keyRaw: string, variant?: string): string | null {
     }
     const cached = artCache.get(key);
     if (cached) return cached;
-    const file = join(process.cwd(), "public", "art", "gen", `${key}.webp`);
+    const file = artFilePath(key);
     if (existsSync(file)) {
       const url = artUrlForKey(key);
       artCache.set(key, url);
@@ -139,14 +155,17 @@ export function spritePrompt(cleanSubject: string, form: { held: boolean; scener
     return `Pixel art game scenery sprite sheet containing ONLY ${cleanSubject}: exactly 4 variants of that single object in one row, nothing else in the image, no landscape, no ground, no sky, no other objects or props. Each variant is the same object with a slightly different shape or size. NOT a character, no face, no eyes, no mouth, no arms, no legs, no animation poses. Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, variants far apart with wide empty magenta gaps between them, bottoms aligned on the same baseline, variants must NOT touch or overlap each other`;
   }
   if (form.flying) {
-    return `Pixel art game sprite sheet of ${cleanSubject} in flight, side view, AIRBORNE: ` +
-      `4 poses in a row: hovering, gliding, flying, diving. The ${cleanSubject} is off the ground in every pose — ` +
+    return `Pixel art game sprite sheet of ${cleanSubject} in flight for a 2D side-scrolling platformer, side view strictly facing right, AIRBORNE: ` +
+      `exactly 4 airborne flight action poses in 1 single horizontal row from left to right: hovering idle facing right, gliding forward facing right, flying forward facing right, diving facing right. ` +
+      `Orientation: all poses MUST face right in side profile — NEVER face backwards or away from the camera (no rear view), NEVER front-facing, no top-down angles, NEVER multiple rows or a 2D grid. ` +
+      `The ${cleanSubject} is off the ground in every pose — ` +
       `feet and paws lifted, wings or arms spread, cape or tail streaming behind it, nothing underneath to stand on, no ground line, no shadow, no landscape, no sky. ` +
       `Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
   }
-  return `Pixel art game sprite sheet of ${cleanSubject}, side view, 4 poses in a row: ` +
-    `idle, running, running, jumping. Flat solid magenta background (#FF00FF), ` +
-    `chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
+  return `Pixel art game sprite sheet of ${cleanSubject} for a 2D side-scrolling platformer, side view strictly facing right: ` +
+    `exactly 4 action poses in 1 single horizontal row from left to right: idle standing facing right, running forward stride facing right, running forward stride facing right, jumping mid-air leap pose facing right. ` +
+    `Orientation: every pose MUST face right in side profile — NEVER face backwards or away from the camera (no rear view, no back of character facing away), NEVER front-facing (no RPG turnaround), no top-down angles, NEVER multiple rows or a 2D grid. ` +
+    `Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
 }
 
 /** The sheet prompt generateSubjectArt sends for this subject; the receipt (ADR 0065) shows the same string. */
@@ -174,7 +193,7 @@ export async function generateSubjectArt(subject: string, keyRaw: string, scener
     const cached = artCache.get(key);
     if (cached) return cached;
     const url = artUrlForKey(key);
-    const file = join(process.cwd(), "public", "art", "gen", `${key}.webp`);
+    const file = artFilePath(key);
     // Disk cache: still attach the URL without regenerating.
     if (existsSync(file)) {
       artCache.set(key, url);

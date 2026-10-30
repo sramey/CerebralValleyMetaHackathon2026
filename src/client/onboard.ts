@@ -39,6 +39,7 @@ export function plainBuildMessage(stage: "rejected" | "failed", detail: string):
       ? `That version didn't pass the check: ${d} Fixing it now…`
       : "That version didn't pass the check, so it was thrown away. Fixing it now…";
   }
+  if (/^cancell?ed?\b/i.test(d)) return "Cancelled. Your game is unchanged — say something else whenever you like.";
   if (/budget|limit|quota|\b429\b|rate|busy/i.test(d)) return "The builder is busy right now. Wait a few seconds and try again.";
   if (/timed? ?out|network|fetch|socket|econn|connect|offline/i.test(d)) return "I lost touch with the builder. Make sure the server is running, then try again.";
   return `I couldn't build that one this time, and your game is unchanged. Try saying it another way, like “${FIRST_IDEA}”.`;

@@ -76,3 +76,18 @@ Renumbered from 0054 (taken by the bounded sketch build). On main the compound s
 Spark with a deterministic guard (ADR 0053), entered through `mightBeCompound`; the router now
 starts beside that Spark split, and a compound of mood + build still runs in order. For a real
 compound the early router call is one Spark call that goes unused.
+
+## Note (10-30, bug cps)
+
+A pronoun ask ("make them faster") now resolves to the mod touched last even when the router
+aimed it at `player`; only "me/my/I" still means the player. The rule lives in
+`server/route-rules.ts` (ADR 0059), not in the relative-tweak block of `handleSingle`.
+
+## Note (10-30, bead 1e6)
+
+A NAMED noun ("make the slimes faster") that matches a loaded mod now outranks a router target of
+`player` too, in the same rule; "me/my character" still means the player. If that mod has no knob
+for the ask, the route becomes an edit of the named mod, never a tweak of the player.
+
+Bead 5w1 (10-30): the client's local "faster"/"jump higher" shortcut (`src/client/local-asks.ts`) now answers
+only explicit player asks or, offline, anything else; a named thing or pronoun goes to the server.

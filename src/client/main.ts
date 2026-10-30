@@ -17,13 +17,15 @@ import { Sound, buildSfx } from "./sound";
 import { createTester } from "./tester";
 import { createOnboarding, createSoundButton, plainBuildMessage } from "./onboard";
 import { Portal } from "./portal";
+import { localRelativeAsk } from "./local-asks";
+import { visualHeight } from "../sim/sockets";
 import { drawCliff, drawHoop, drawShape, drawTetherGear, isCliff, isTetherGear, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
 import { celestialPos, computeDesiredCamY, depthFog, drawContactShadows, drawDistantMountains, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
 import { drawScenery } from "./scenery";
 import { drawFluffyCloud, drawParallaxEntities, isParallaxOrSkyEntity, isSkyOrBackgroundEntity } from "./parallax";
 import { ModLoader } from "../sim/loader";
 import { isHoop } from "../sim/hoop";
-import { inputFromKeys } from "./keys";
+import { inputFromKeys, isGameKeyEvent, isTypingTarget } from "./keys";
 import { createGhost } from "./ghost";
 import { mountTimeline } from "./timeline";
 import { createPipeline } from "./pipeline";
@@ -117,7 +119,8 @@ orbState.after(modelChip);
 function routedBy(msg: Extract<ServerMsg, { kind: "routed" }>): void {
   modelChip.textContent = `routed by ${msg.model}${msg.open ? " (open weights)" : ""}${msg.fellBack ? " (open timed out)" : ""} · ${msg.ms} ms`;
 }
-const builds = createBuilds(orbSay.parentElement ?? document.body, () => {});
+// A running chip's x stops that one build (ADR 0060); the server answers with a failed stage.
+const builds = createBuilds(orbSay.parentElement ?? document.body, () => {}, (command) => send({ kind: "cancel", command }));
 const feedback = initFeedback({
   send: (msg) => send(msg),
   sendWorldState: () => send({ kind: "worldState", mods: loader.list().map((m) => ({ id: m.id, values: m.values })) }),
@@ -480,12 +483,6 @@ let mood: MoodSpec | null = null;
 let moodModCount = 0; // mods loaded when the mood was applied; more later means the mood is no longer the latest change
 const origFrames = new Map<string, Texture[]>(); // sheets as they were before the mood, restored on undo
 const morph = new Map<string, number>(); // sprite key -> digitize-until (ms)
-let restyleLeft = 0;
-let restyleOk = 0;
-function noteRestyled(ok: boolean): void {
-  if (ok) restyleOk++;
-  if (--restyleLeft === 0 && mood) say(`It's ${mood.name} now: ${restyleOk} sprites restyled.`, "done");
-}
 
 function mixC(a: number, b: number, t: number): number {
   const m = (s: number) => Math.round(((a >> s) & 255) * (1 - t) + ((b >> s) & 255) * t);
@@ -549,13 +546,14 @@ function onMood(m: MoodSpec | null): void {
     const used = new Set<string>();
     for (const e of world.entities) { const k = subjectKeyFor(e); if (k) used.add(k); }
     const keys = [...used].filter((k) => !k.startsWith("photo") && !origFrames.has(k) && (framesBySubject[k]?.length ?? 0) > 0);
-    restyleLeft = keys.length; restyleOk = 0;
-    if (keys.length > 0) { say(`Making it ${m.name}: restyling ${keys.length} sprites…`, "building"); send({ kind: "restyle", mood: m.name, keys }); }
-    else say(`It's ${m.name} now.`, "done");
+    // The palette is already on screen, so the card says done now (bead inh). The sheet redraws
+    // arrive later and show on their own (the digitize morph); a card line held open for them
+    // would still read "restyling" long after, and could overwrite a newer status.
+    say(`It's ${m.name} now.`, "done");
+    if (keys.length > 0) send({ kind: "restyle", mood: m.name, keys });
   });
 }
 async function onRestyled(msg: Extract<ServerMsg, { kind: "restyled" }>): Promise<void> {
-  if (mood && mood.name === msg.mood) noteRestyled(msg.url !== null);
   if (!msg.url || !mood || mood.name !== msg.mood) return;
   const frames = await loadSpriteSheet(msg.url);
   if (frames.length < 1 || !mood || mood.name !== msg.mood) return;
@@ -621,12 +619,13 @@ function formatRadialLabel(type: string): string {
 }
 const scaleOverride = new Map<number, number>();
 
+function hasDrawnArt(e: Entity): boolean {
+  return framesFor(framesBySubject, e.type, e.type === "player").length >= 1 && !kindOf(e.type);
+}
+world.hasArt = hasDrawnArt; // gear sockets measure the body the eye sees (ADR 0061)
+
 function visualHeightOf(e: Entity): number {
-  const frames = framesFor(framesBySubject, e.type, e.type === "player");
-  if (frames.length >= 1 && !kindOf(e.type)) {
-    return e.type === "player" ? 56 * (e.h / 34) : Math.min(630, Math.max(34, e.h * 1.5));
-  }
-  return e.h;
+  return visualHeight(e, hasDrawnArt(e));
 }
 
 function positionRadialMenu(e: Entity, camX: number, camY: number): void {
@@ -679,7 +678,8 @@ function entityAt(wx: number, wy: number): Entity | undefined {
 }
 let canvasDown: { x: number; y: number } | null = null;
 // Pointer aim (ADR 0050): screen position + camera = world position, read into InputState each frame.
-const pointer: { sx: number; sy: number; down: boolean; seen: boolean } = { sx: 0, sy: 0, down: false, seen: false };
+// clickAim: a click-fire is aimed (it may point behind the player) for its whole short B press.
+const pointer: { sx: number; sy: number; down: boolean; seen: boolean; clickAim: boolean } = { sx: 0, sy: 0, down: false, seen: false, clickAim: false };
 function trackPointer(ev: PointerEvent, down?: boolean): void {
   const rect = app.canvas.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return;
@@ -707,8 +707,8 @@ app.canvas.addEventListener("pointerup", (ev) => {
     closeRadialMenu();
     // A click on empty space (or terrain) fires a live grappling hook at the pointer (bead 40c, ADR 0050).
     if (ev.button === 0 && loader.list().some((m) => /grappl|hook|tether/i.test(m.id))) {
-      keys.add("KeyB"); syncInput();
-      setTimeout(() => { keys.delete("KeyB"); syncInput(); }, 90);
+      pointer.clickAim = true; keys.add("KeyB"); syncInput();
+      setTimeout(() => { pointer.clickAim = false; keys.delete("KeyB"); syncInput(); }, 90);
     }
   }
 });
@@ -950,7 +950,7 @@ function stepAndRender(now: number): void {
   if (pointer.seen) {
     world.input.pointerX = pointer.sx + (camXSmooth ?? world.camera.x);
     world.input.pointerY = pointer.sy + (camYSmooth ?? world.camera.y);
-    world.input.pointerDown = pointer.down;
+    world.input.pointerDown = pointer.down || pointer.clickAim;
   } else { delete world.input.pointerX; delete world.input.pointerY; delete world.input.pointerDown; }
   while (acc >= stepMs) {
     world.step(); acc -= stepMs;
@@ -977,7 +977,9 @@ requestAnimationFrame(frame);
 // --- input -------------------------------------------------------------------
 const keys = new Set<string>();
 addEventListener("keydown", (e) => {
-  if (e.target === inputEl || e.target === orbInputEl || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+  // Typing a command is not a game command (bead wgt): a text box keeps every key it gets,
+  // including M (mute), B/X/J/F (fire), brackets (volume) and P (pipeline).
+  if (!isGameKeyEvent(e)) return;
   if (e.code === "KeyM" && !e.repeat) { log(sound.toggleMute() ? "sound muted (M)" : "sound on (M)"); syncSoundButton(); return; }
   if (["KeyA", "KeyD", "KeyW", "Space", "ArrowLeft", "ArrowRight", "ArrowUp"].includes(e.code)) onboarding.event("move");
   if (e.code === "BracketLeft" || e.code === "BracketRight") sound.setVolume(sound.volume + (e.code === "BracketRight" ? 0.1 : -0.1));
@@ -985,7 +987,12 @@ addEventListener("keydown", (e) => {
   syncInput();
   if (["ArrowUp", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
 });
+// A keyup always clears its code, whatever the target: losing a release can only stop an action.
 addEventListener("keyup", (e) => { keys.delete(e.code); syncInput(); });
+// A text field taking focus (or the window losing it mid-hold) drops every held game key, so a
+// key pressed in the game never keeps the player running while the person types a command.
+addEventListener("focusin", (e) => { if (isTypingTarget(e.target) && keys.size > 0) { keys.clear(); syncInput(); } });
+addEventListener("blur", () => { if (keys.size > 0) { keys.clear(); syncInput(); } });
 function syncInput(): void {
   // One pure mapping for every key (src/client/keys.ts, ADR 0046): B is an action key, so
   // "pick it up and shoot with B" works without a special case per prompt.
@@ -1115,12 +1122,13 @@ function handleLocal(text: string): boolean {
   if (n === "parallax" || n === "parallax background" || n === "parallax forest" || n === "parallax vista") { loadLocal(parallaxMod); return true; }
   if (n === "chicken") { loadLocal(chickenMod); return true; }
   if (n === "swarm" || n === "swarms" || n === "wave" || n === "waves") { loadLocal(swarmMod); return true; }
-  if (t.includes("jump higher")) { tweak("player", "jump", 880, "Jump raised."); return true; }
-  if (t.includes("faster")) {
-    if (loader.has("enemies")) tweak("enemies", "speed", 140, "Walkers sped up.");
-    else tweak("player", "speed", 380, "Player sped up.");
-    return true;
-  }
+  // Only an ask about the player is answered here; pronouns and named things ("make the slimes
+  // faster") go to the server, whose route rules pick the mod (bugs cps, 5w1).
+  const serverUp = ws?.readyState === WebSocket.OPEN || ws?.readyState === WebSocket.CONNECTING;
+  const localAsk = localRelativeAsk(t, serverUp);
+  if (localAsk === "jump") { tweak("player", "jump", 880, "Jump raised."); return true; }
+  // A local ask is about the player by construction, so it never speeds the walkers.
+  if (localAsk === "speed") { tweak("player", "speed", 380, "Player sped up."); return true; }
   return false;
 }
 function tweak(modId: string, knob: string, value: KnobValue, message: string): void {

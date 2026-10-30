@@ -1,14 +1,44 @@
-/* Per-build chips under the orb while a compound command builds in parallel (ADR 0016). */
-.builds { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+/* Per-build chips under the orb while a compound command builds in parallel (ADR 0016).
+   Two to four builds share one row ("three at once" has to read on camera): equal
+   widths, wrapping when the rail is too narrow, and a compact pip trail per chip so
+   progress stays legible. The row spans the rail (340 px, 304 px inside its padding
+   at 1280x720 and 1920x1080 alike), so three cards get ~97 px each. */
+.builds { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; margin-top: 6px; width: 100%; }
 .builds:empty { display: none; }
 .builds-chip {
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px;
-  padding: 4px 8px; border-left: 3px solid #6aa7ff; border-radius: 3px;
-  background: rgba(255, 255, 255, 0.06); font-size: 12px; line-height: 1.3;
-  transition: border-color 0.2s, opacity 0.4s;
+  flex: 1 1 calc(50% - 3px); /* two per row by default; the row always ends flush */
+  min-width: 68px; min-height: 36px;
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 4px 6px; border-left: 3px solid #6aa7ff; border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06); font-size: 11px; line-height: 1.25;
+  overflow: hidden; transition: border-color 0.2s, opacity 0.4s;
 }
+/* Three concurrent builds are the demo case: exactly one row (3 cards + 2 gaps = 100%). */
+.builds[data-count="3"] .builds-chip { flex-basis: calc(33.333% - 4px); }
 .builds-chip[data-phase="landed"] { border-left-color: #5fd07a; opacity: 0.85; }
 .builds-chip[data-phase="failed"] { border-left-color: #ff6a6a; opacity: 0.85; }
-.builds-name { font-weight: 600; }
-.builds-trail { opacity: 0.7; font-variant-numeric: tabular-nums; }
-.builds-chip[data-phase="running"] .builds-trail::after { content: " …"; }
+.builds-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.builds-trail {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 2px 5px;
+  min-width: 0; font-size: 10px; color: #c9c2ae;
+}
+.builds-dots { display: inline-flex; flex: none; gap: 2px; }
+.builds-dot { width: 4px; height: 4px; border-radius: 50%; background: rgba(255, 255, 255, 0.38); }
+.builds-dot.now { background: #6aa7ff; box-shadow: 0 0 4px rgba(106, 167, 255, 0.8); }
+.builds-stage { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.builds-chip[data-phase="landed"] .builds-dot { background: #5fd07a; }
+.builds-chip[data-phase="failed"] .builds-dot.now { background: #ff6a6a; box-shadow: 0 0 4px rgba(255, 106, 106, 0.8); }
+.builds-chip[data-phase="running"] .builds-dot.now { animation: builds-pulse 1s ease-in-out infinite; }
+@keyframes builds-pulse { 50% { transform: scale(1.6); } }
+@media (prefers-reduced-motion: reduce) { .builds-chip[data-phase="running"] .builds-dot.now { animation: none; } }
+/* The x that stops a build still running (ADR 0060): small, top-right of its chip, clearly a button. */
+.builds-chip { position: relative; }
+.builds-cancel {
+  position: absolute; top: 2px; right: 2px; padding: 0 4px; border: 0; border-radius: 3px; cursor: pointer;
+  background: rgba(255, 255, 255, 0.1); color: inherit;
+  font: inherit; font-size: 12px; line-height: 1.1;
+}
+.builds-cancel:hover { background: rgba(255, 106, 106, 0.45); }
+.builds-cancel:disabled { opacity: 0.45; cursor: default; background: transparent; }
+.builds-chip[data-phase="running"] .builds-name { padding-right: 14px; }
+.builds-chip[data-cancelling="1"] { opacity: 0.6; }

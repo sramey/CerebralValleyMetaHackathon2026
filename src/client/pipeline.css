@@ -49,6 +49,8 @@
   content: ""; position: absolute; left: 50%; top: calc(-1 * clamp(8px, 1.6vh, 22px)); height: clamp(8px, 1.6vh, 22px); width: 2px;
   background: repeating-linear-gradient(180deg, rgba(255, 201, 77, .6) 0 3px, transparent 3px 6px);
 }
+/* Ran this session: stays lit (steady, no pulse) after the live flash fades. */
+.pl-node.ran { border-color: rgba(255, 201, 77, .7); box-shadow: 0 0 0 1px rgba(255, 201, 77, .3), 0 0 22px rgba(255, 201, 77, .18), 0 8px 26px rgba(0, 0, 0, .4); }
 .pl-node.on {
   border-color: #ffc94d; transform: translateY(-3px);
   box-shadow: 0 0 0 1px rgba(255, 201, 77, .5), 0 0 34px rgba(255, 201, 77, .32), 0 10px 30px rgba(0, 0, 0, .5);

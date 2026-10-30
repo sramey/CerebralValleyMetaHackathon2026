@@ -36,11 +36,43 @@ describe("mood (ADR 0017)", () => {
     expect(sheetPath("definitely-not-there")).toBeNull();
   });
 
-  it("builds a stable url and an anchored prompt", () => {
+  it("builds a stable url and an anchored prompt aware of subject, orientation and actions", () => {
     expect(restyledUrl("robot", "Spooky!")).toBe("/art/gen/robot--spooky.webp");
     expect(moodKey("")).toBe("mood");
     expect(moodPrompt("haunted night")).toContain("haunted night");
     expect(moodPrompt("x")).toContain("#FF00FF");
+
+    // Aware of character subject, side-scrolling orientation, and 4 sequential action poses
+    const ninjaPrompt = moodPrompt("spooky night", "ninja");
+    expect(ninjaPrompt).toContain("ninja");
+    expect(ninjaPrompt).toContain("2D side-scrolling platformer");
+    expect(ninjaPrompt).toContain("facing right");
+    expect(ninjaPrompt).toContain("NEVER face backwards or away from camera");
+    expect(ninjaPrompt).toContain("NEVER multiple rows");
+    expect(ninjaPrompt).toContain("idle standing");
+    expect(ninjaPrompt).toContain("running forward");
+    expect(ninjaPrompt).toContain("jumping mid-air");
+
+    // Aware of flying creatures: airborne poses
+    const flierPrompt = moodPrompt("spooky night", "dragon-fly");
+    expect(flierPrompt).toContain("dragon");
+    expect(flierPrompt).toContain("AIRBORNE");
+    expect(flierPrompt).toContain("hovering");
+    expect(flierPrompt).toContain("gliding");
+    expect(flierPrompt).toContain("diving");
+    expect(flierPrompt).toContain("facing right");
+    expect(flierPrompt).toContain("NEVER face backwards");
+
+    // Aware of held items: pointing right, no body
+    const gunPrompt = moodPrompt("neon glow", "gun");
+    expect(gunPrompt).toContain("held item icon sheet");
+    expect(gunPrompt).toContain("pointing right");
+    expect(gunPrompt).toContain("NO character");
+
+    // Aware of scenery: static objects
+    const chestPrompt = moodPrompt("snowy frost", "chest");
+    expect(chestPrompt).toContain("scenery sprite sheet");
+    expect(chestPrompt).toContain("static variants");
   });
 
   it("strips VP8X/XMP metadata from chicken.webp and softens risky anchor words on retry", () => {

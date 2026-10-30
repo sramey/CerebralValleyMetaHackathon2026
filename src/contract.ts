@@ -319,6 +319,11 @@ export type ClientMsg =
   /** Anonymous family-test metrics (ADR 0034), sent only when the page has ?tester=N. Never carries what anyone typed or said. */
   | { kind: "tester"; n: number; ev: "open" | "typed" | "voice" | "landed" | "rejected" | "failed" | "mood" | "close"; cid?: number; mood?: string }
   | { kind: "undo"; modId: string }
+  /** Stop a build that is still running (ADR 0060). `command` is the chip's own text - the
+   *  same key the server stamps on its stage and timing messages - so one lane of a compound
+   *  command stops while its siblings keep building. The server aborts that build's model
+   *  calls and answers with stage "failed" / detail "cancelled"; nothing it wrote lands. */
+  | { kind: "cancel"; command: string }
   | { kind: "knob"; modId: string; knob: string; value: KnobValue }
   | { kind: "photo"; key: string; image: string; prompt: string }
   | { kind: "photoFind"; key: string; image: string; prompt: string }

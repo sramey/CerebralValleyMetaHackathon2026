@@ -5,7 +5,8 @@
 #   scripts/wt.sh list                 show worktrees
 # Slot N gets server port 8790+N and Vite port 5180+N, so leases run live side by side.
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# The main checkout, even when this script runs from a worktree (worktrees must not nest).
+ROOT="$(git -C "$(dirname "$0")" worktree list --porcelain | sed -n '1s/^worktree //p')"
 WT="$(dirname "$ROOT")/metabuild-wt"
 cmd="${1:-list}"; task="${2:-}"; slot="${3:-}"
 

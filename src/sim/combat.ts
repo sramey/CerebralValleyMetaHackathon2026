@@ -30,6 +30,30 @@ const NON_TARGET_TYPES = new Set([
 const HOSTILE_NAME_RE = /^(enemy|walker|turtle|boss|monster|zombie|goblin|creature|slime|spider|bat|skeleton|ghost|drone|robot|demon|orc|beast|minion|bug|critter|dragon|alien)/i;
 
 /**
+ * True when an entity is explicitly or nominally a friendly / ally / companion,
+ * never harmed by player projectiles or friendly fire.
+ */
+export function isFriendly(e: Entity): boolean {
+  if (e.type === "player") return true;
+  if (e.data.friendly === true || e.data.hostile === false || e.data.casual === true || e.data.hero === true) return true;
+  if (e.data.pet === true || e.data.companion === true || e.data.ally === true || e.data.fromPlayer === true) return true;
+  const tLow = e.type.toLowerCase();
+  if (/^(chicken|pet|companion|ally|friend|friendly|hero|npc|buddy|pal|dog|cat|bird|puppy|kitten)\b/i.test(tLow)) return true;
+  return false;
+}
+
+/**
+ * True when an entity is a hostile enemy target that player attacks and weapons should damage.
+ */
+export function isHostileEnemy(e: Entity): boolean {
+  if (isFriendly(e)) return false;
+  if (e.data.hostile === true || e.data.enemy === true) return true;
+  const tLow = e.type.toLowerCase();
+  if (HOSTILE_NAME_RE.test(tLow)) return true;
+  return false;
+}
+
+/**
  * Determines whether candidate `target` is a valid creature/hostile target for `projectile`.
  */
 export function isDamageableTarget(
@@ -46,31 +70,30 @@ export function isDamageableTarget(
   if (NON_TARGET_TYPES.has(tLow)) return false;
   if (/^(cloud|sky|day-sky|night-sky|background|parallax|raindrop)/i.test(tLow)) return false;
 
+  // Non-combat kinds: pickups, collectibles, gear, held items, solid terrain
+  if (target.data.collectible === true || target.data.pickup === true) return false;
+  if (target.data.heldByPlayer === true || target.data.equipped === true) return false;
+  const tagged = target.data.hostile === true || target.data.enemy === true || target.data.creature === true;
+  if (target.solid && !tagged) return false; // untagged solids are terrain; a tagged solid boss still takes hits
+
   const isPlayerProj = projectile.data.fromPlayer === true || projectile.type.includes("player");
 
   if (isPlayerProj) {
-    if (target.type === "player") return false;
-    if (target.data.heldByPlayer === true) return false;
-    if (target.data.fromPlayer === true) return false;
+    // Player projectile cannot harm player or friendlies - ONLY enemies!
+    if (isFriendly(target)) return false;
+    if (isHostileEnemy(target)) return true;
   } else {
-    // Projectile from enemy: can hit player
+    // Projectile from enemy: can hit player or friendlies/heroes, never other hostiles
     if (target.type === "player") return true;
     if (target.data.fromPlayer === true) return false;
-    if (isEnemyFire(projectile)) return target.data.hero === true;
+    if (isHostileEnemy(target)) return false;
+    if (isEnemyFire(projectile)) return isFriendly(target);
   }
 
-  // Explicit hostile or creature tags
-  if (target.data.hostile === true || target.data.enemy === true || target.data.creature === true) return true;
-
-  // Name matches known hostile creatures
-  if (HOSTILE_NAME_RE.test(tLow)) return true;
-
-  // Has health, not solid terrain, not a projectile/item
-  if (target.health > 0 && !target.solid && !target.data.heldByPlayer) {
-    return true;
-  }
-
-  return false;
+  // Anything else that is a creature by tag or has health is fair game, so a Wonder-built
+  // "pirate" or "snowman" whose name is not in HOSTILE_NAME_RE can still be shot.
+  if (tagged) return true;
+  return target.health > 0 && !target.solid;
 }
 
 /**

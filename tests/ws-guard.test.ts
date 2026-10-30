@@ -24,6 +24,7 @@ const PNG = `data:image/png;base64,${"A".repeat(320)}`;
 const BBOX = { x: 10, y: 20, w: 120, h: 16 };
 const KNOWN_KINDS = new Set([
   "command", "undo", "knob", "photo", "photoFind", "photoBring", "photoBringLocal",
+  "cancel",
   "worldState", "voiceWarm", "voiceStart", "voiceEnd", "worldSave", "worldLoad", "worldExport",
   "restyle", "feedback", "sketch", "tester", "timelineRestore", "explain", "receipt", "paperLevel",
 ]);
@@ -34,6 +35,7 @@ const STROKE = { color: "#3fd06a", tag: "terrain" as const, points: [{ x: 1, y: 
 const VALID: { [K in ClientMsg["kind"]]: Extract<ClientMsg, { kind: K }> } = {
   command: { kind: "command", text: "add a player" },
   undo: { kind: "undo", modId: "player" },
+  cancel: { kind: "cancel", command: "add a dragon" },
   knob: { kind: "knob", modId: "player", knob: "size", value: 64 },
   photo: { kind: "photo", key: "photo-1", image: PNG, prompt: "my mug" },
   photoFind: { kind: "photoFind", key: "photo-2", image: PNG, prompt: "the mug" },

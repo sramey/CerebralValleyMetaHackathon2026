@@ -9,9 +9,12 @@ const STEP = 4; // px per march step; solids are at least ~10 px thick so none i
 export function aimFrom(from: Entity, input: Readonly<InputState>): { x: number; y: number } {
   const cx = from.x + from.w / 2, cy = from.y + from.h / 2;
   let dx: number, dy: number;
-  if (typeof input.pointerX === "number" && typeof input.pointerY === "number") {
-    dx = input.pointerX - cx;
-    dy = input.pointerY - cy;
+  const hasPointer = typeof input.pointerX === "number" && typeof input.pointerY === "number";
+  // A key press (B) with the mouse parked behind the player fires the way they face; a click aims anywhere.
+  const behind = hasPointer && !input.pointerDown && (input.pointerX! - cx) * from.facing < 0;
+  if (hasPointer && !behind) {
+    dx = input.pointerX! - cx;
+    dy = input.pointerY! - cy;
   } else {
     dx = from.facing;
     dy = input.jump ? -1 : -0.35;
