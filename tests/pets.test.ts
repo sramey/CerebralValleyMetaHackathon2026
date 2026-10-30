@@ -134,6 +134,24 @@ describe("pets never sink through solids", () => {
   });
 });
 
+describe("the prompts teach the same rules the engine enforces", () => {
+  it("Wonder is told how to build a pet and that stomping is already the engine's", async () => {
+    const { WONDER_SYSTEM } = await import("../server/prompt");
+    expect(WONDER_SYSTEM).toContain("PETS & COMPANIONS");
+    expect(WONDER_SYSTEM).toContain("data.pet = true");
+    expect(WONDER_SYSTEM).toContain("STOMPING");
+    expect(WONDER_SYSTEM).toContain("Do not write a stomp check");
+    // The pet rule has to say plainly that a companion is never a hostile.
+    expect(WONDER_SYSTEM).toMatch(/PETS & COMPANIONS[^\n]*never data\.hostile/i);
+  });
+
+  it("the open-weights reviewer can flag a pet that hurts its owner", async () => {
+    const { REVIEWER_SYSTEM } = await import("../server/reviewer-prompt");
+    expect(REVIEWER_SYSTEM).toContain("PETS:");
+    expect(REVIEWER_SYSTEM).toContain("data.pet = true");
+  });
+});
+
 describe("pets do not spin in place", () => {
   it("a big walker parked on a narrow perch holds still instead of flipping every frame", () => {
     const w = new World(41);

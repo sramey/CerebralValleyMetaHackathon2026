@@ -11,6 +11,7 @@ const CHECKLIST = [
   'PLACEMENT: spawns underground or far below the world (y + h > 400 with ground at y = 400, or y > 440) or inside solid geometry; ground-standing things should use y = 400 - h. The world scrolls sideways, so a negative or large x is NOT off-screen.',
   'ITEMS: a gun, sword, tool, pickup or collectible with no way to use or collect it (no use handler or onPointer, no collectible/pickup data, no socket), or a pickup that never disappears when taken.',
   'HOSTILES: a hostile or boss with no health, or one the player has no way to damage; a hazard that can never hurt anything.',
+  'PETS: a pet, companion, follower or mount marked data.hostile = true, or one that damages the player or an ally on contact. A companion the player owns is data.pet = true and never hostile; the engine already stops a pet from hurting its owner, so the mod must not add its own damage to the player.',
   'MATH: NaN or undefined reaching an entity (division by zero, a zero-length direction vector that never advances, a missing property), or an || fallback that replaces a knob value of 0 when that knob allows 0 (its min is 0 or less).',
   'TEST: test() must exercise the main mechanic (step the sim and check the effect, e.g. the thing spawned, moved, was despawned, the HUD changed); a test that only checks something exists is too weak when the mechanic has an obvious failure.',
 ];
