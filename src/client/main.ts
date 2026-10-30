@@ -14,7 +14,7 @@ import { Sound, buildSfx } from "./sound";
 import { createTester } from "./tester";
 import { createOnboarding, createSoundButton, plainBuildMessage } from "./onboard";
 import { Portal } from "./portal";
-import { drawCliff, drawHoop, drawShape, isCliff, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
+import { drawCliff, drawHoop, drawShape, drawTetherGear, isCliff, isTetherGear, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
 import { celestialPos, computeDesiredCamY, depthFog, drawContactShadows, drawDistantMountains, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
 import { drawScenery } from "./scenery";
 import { drawFluffyCloud, drawParallaxEntities, isParallaxOrSkyEntity, isSkyOrBackgroundEntity } from "./parallax";
@@ -391,6 +391,12 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   const y = e.y - camY;
   const W = app.screen.width;
   const H = app.screen.height;
+  if (isTetherGear(e)) { // grappling hook + rope: always code-drawn, never a character sprite (ADR 0050)
+    const tt = e.data?.tetherTo;
+    const target = tt === undefined ? undefined : tt === "player" ? world.entities.find((o) => o.type === "player") : world.entities.find((o) => o.id === Number(tt));
+    drawTetherGear(gfx, e, x, y, target, camX, camY);
+    return;
+  }
   if (x + e.w < -40 || x > W + 40 || y + e.h < -40 || y > H + 40) return; // off-screen cull
   const t = e.type;
   if (morph.size > 0 && isMorphing(e)) { drawDigitize(e, x, y); return; } // a restyled sheet is about to swap in (ADR 0017)
@@ -622,7 +628,20 @@ function entityAt(wx: number, wy: number): Entity | undefined {
   return candidates[0]?.e;
 }
 let canvasDown: { x: number; y: number } | null = null;
-app.canvas.addEventListener("pointerdown", (ev) => { canvasDown = { x: ev.clientX, y: ev.clientY }; });
+// Pointer aim (ADR 0050): screen position + camera = world position, read into InputState each frame.
+const pointer: { sx: number; sy: number; down: boolean; seen: boolean } = { sx: 0, sy: 0, down: false, seen: false };
+function trackPointer(ev: PointerEvent, down?: boolean): void {
+  const rect = app.canvas.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
+  pointer.sx = (ev.clientX - rect.left) * (app.screen.width / rect.width);
+  pointer.sy = (ev.clientY - rect.top) * (app.screen.height / rect.height);
+  pointer.seen = true;
+  if (down !== undefined) pointer.down = down;
+}
+app.canvas.addEventListener("pointermove", (ev) => trackPointer(ev));
+app.canvas.addEventListener("pointerleave", () => { pointer.seen = false; pointer.down = false; });
+app.canvas.addEventListener("pointerdown", (ev) => { trackPointer(ev, true); canvasDown = { x: ev.clientX, y: ev.clientY }; });
+addEventListener("pointerup", () => { pointer.down = false; });
 app.canvas.addEventListener("pointerup", (ev) => {
   if (!canvasDown) return;
   const moved = Math.hypot(ev.clientX - canvasDown.x, ev.clientY - canvasDown.y);
@@ -782,7 +801,7 @@ function render(): void {
     for (const e of world.entities) {
       if (isParallaxOrSkyEntity(e)) continue;
       const frames = framesFor(framesBySubject, e.type, e.type === "player");
-      if (frames.length < 1 || kindOf(e.type)) continue;
+      if (frames.length < 1 || kindOf(e.type) || isTetherGear(e)) continue;
       const subject = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0] ?? e.type;
       const gk = `${e.owner}|${subject}`;
       const area = e.w * e.h;
@@ -854,6 +873,11 @@ function frame(now: number): void {
   acc = sketching ? 0 : acc + Math.min(100, now - last);
   last = now;
   const stepMs = SIM.dt * 1000;
+  if (pointer.seen) {
+    world.input.pointerX = pointer.sx + (camXSmooth ?? world.camera.x);
+    world.input.pointerY = pointer.sy + (camYSmooth ?? world.camera.y);
+    world.input.pointerDown = pointer.down;
+  } else { delete world.input.pointerX; delete world.input.pointerY; delete world.input.pointerDown; }
   while (acc >= stepMs) {
     world.step(); acc -= stepMs;
     for (const [id, mult] of scaleOverride) {

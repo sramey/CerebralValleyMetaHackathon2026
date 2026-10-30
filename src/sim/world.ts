@@ -236,6 +236,7 @@ export class World {
       // Static solids (gravityScale 0) never move. A solid with gravity still
       // gets physics: it collides with other solids, it just also blocks them.
       if (e.solid && e.gravityScale === 0) continue;
+      if (e.data.tetherTo !== undefined) { e.x += e.vx * dt; e.y += e.vy * dt; continue; } // grappling gear flies free; the mod latches it by raycast (ADR 0050)
       if (typeof e.data.parallax === "number" || /^(cloud|sky|day-sky|night-sky|background|parallax)/i.test(e.type)) {
         e.x += e.vx * dt;
         e.y += e.vy * dt;
@@ -335,7 +336,7 @@ export class World {
     }
 
     // Post-step 2: Universal projectile collision & enemy combat (bead 578)
-    const projectiles = this.entities.filter((e) => e.data.visual === "projectile" || entityKind(e) === "projectile" || /^(bullet|projectile|laser|arrow|fireball|plasma|shot)$/i.test(e.type));
+    const projectiles = this.entities.filter((e) => e.data.tetherTo === undefined && !/hook|grappl|tether/i.test(e.type) && (e.data.visual === "projectile" || entityKind(e) === "projectile" || /^(bullet|projectile|laser|arrow|fireball|plasma|shot)$/i.test(e.type))); // grappling gear latches instead (ADR 0050)
     for (const proj of projectiles) {
       if ((proj as any).dead) continue;
       const damage = typeof proj.data.damage === "number" ? proj.data.damage : 25;

@@ -2,6 +2,7 @@ import type { KnobDefs, KnobValues, ModApi, ModDefinition, TestApi } from "../co
 import { emptyInput } from "../contract";
 import { checkProjectileHitAndDamage } from "./combat";
 import { touches } from "./reach";
+import { aimFrom, raycastSolid, winchToward } from "./tether";
 import { World } from "./world";
 
 export interface LoadedMod { id: string; title: string; knobDefs: KnobDefs; values: KnobValues; def: ModDefinition }
@@ -33,6 +34,9 @@ export class ModLoader {
       hud: (id) => w.hud.get(id),
       hudList: () => w.hudList(),
       damageHit: (proj, opts) => checkProjectileHitAndDamage(this.apiFor(owner), proj, opts),
+      raycast: (x, y, dx, dy, max, ignore) => raycastSolid(w.entities, x, y, dx, dy, max, ignore),
+      winch: (e, ax, ay, speed) => winchToward(e, ax, ay, speed),
+      aim: (from) => aimFrom(from, w.input),
     };
   }
 
@@ -98,6 +102,9 @@ export function runModTest(def: ModDefinition): { ok: boolean; errors: string[] 
           hud: (hid) => world.hud.get(hid),
           hudList: () => world.hudList(),
           damageHit: (proj, opts) => checkProjectileHitAndDamage(t.api, proj, opts),
+          raycast: (x, y, dx, dy, max, ignore) => raycastSolid(world.entities, x, y, dx, dy, max, ignore),
+          winch: (e, ax, ay, speed) => winchToward(e, ax, ay, speed),
+          aim: (from) => aimFrom(from, world.input),
         },
         step: (n, input) => {
           const prev = world.input;
