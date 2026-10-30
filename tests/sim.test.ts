@@ -11,6 +11,7 @@ import coinsMod from "../src/mods/coins";
 import movingPlatformMod from "../src/mods/platform-moving";
 import fireArrowMod from "../src/mods/fire-arrow";
 import gunMod from "../src/mods/gun";
+import swarmMod from "../src/mods/swarm";
 
 function run(seed: number, steps: number) {
   const w = new World(seed);
@@ -55,7 +56,7 @@ describe("sim", () => {
     l.unload("player");
     expect(w.entities).toHaveLength(0);
   });
-  it.each([playerMod, groundMod, enemyMod, rainMod, coinsMod, movingPlatformMod, fireArrowMod, gunMod])(
+  it.each([playerMod, groundMod, enemyMod, rainMod, coinsMod, movingPlatformMod, fireArrowMod, gunMod, swarmMod])(
     "sample mod $id passes its test()",
     (mod) => {
       const r = runModTest(mod);

@@ -13,6 +13,7 @@ import movingPlatformMod from "../mods/platform-moving";
 import fireArrowMod from "../mods/fire-arrow";
 import chickenMod from "../mods/chicken";
 import parallaxMod from "../mods/parallax";
+import swarmMod from "../mods/swarm";
 import { gunMod } from "../client/items";
 import { Sound } from "../client/sound";
 import { Fx } from "../client/fx";
@@ -58,6 +59,7 @@ const BUILTINS: Record<string, ModDefinition> = {
   "fire-arrow": fireArrowMod,
   chicken: chickenMod,
   parallax: parallaxMod,
+  swarm: swarmMod,
   gun: gunMod,
 };
 
@@ -71,6 +73,8 @@ async function boot(): Promise<void> {
 
   const world = new World(1337);
   const loader = new ModLoader(world);
+  // A mod that crashes mid-game is taken out and the rest keeps running (ADR 0056).
+  loader.isolateFaults((mod, message) => console.warn(`mod ${mod.id} crashed and was unloaded:`, message));
 
   const app = new Application();
   await app.init({
@@ -567,7 +571,17 @@ async function boot(): Promise<void> {
   let acc = 0;
   let noPlayerTicks = 0;
 
+  let frameFaultShown = false;
   function frame(now: number): void {
+    try {
+      stepAndRender(now);
+    } catch (err) {
+      if (!frameFaultShown) { frameFaultShown = true; console.error("frame failed:", err); }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function stepAndRender(now: number): void {
     acc += Math.min(100, now - last);
     last = now;
     const stepMs = SIM.dt * 1000;
@@ -582,7 +596,6 @@ async function boot(): Promise<void> {
       }
     }
     render();
-    requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
 

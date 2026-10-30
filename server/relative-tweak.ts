@@ -1,5 +1,5 @@
 // Relative knob requests ("make them faster", "jump higher", "fewer chickens") are
-// knob tweaks, not rewrites (ADR 0054). The router tends to answer "edit" for them,
+// knob tweaks, not rewrites (ADR 0058). The router tends to answer "edit" for them,
 // which costs a full Wonder build (~18 s median) for what a knob does in under 2 s.
 // This is a narrow, deterministic matcher: it only fires when the whole command is
 // a relative adjustment and the target mod has a numeric knob for it.

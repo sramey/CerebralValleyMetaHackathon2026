@@ -40,7 +40,14 @@ export interface Entity {
   health: number;
   /** Owning mod id, or "engine" for built-ins. Set by the loader. */
   owner: string;
+  /** Free-form, wire-safe mod data. A few keys are engine contracts: `collectible`
+   *  (true | points | a HUD id) makes the engine collect this entity into one shared
+   *  score HUD on player touch (ADR 0055), and `bounce` sets landing restitution
+   *  (ADR 0053). */
   data: Record<string, number | string | boolean>;
+  /** Set by the engine when the entity is despawned or destroyed; a mod holding a stale reference can check it. */
+  dead?: boolean;
+  despawned?: boolean;
 }
 
 /** Procedural shapes the client draws in code, so primitives never go to Muse Image (ADR 0015). */
@@ -123,6 +130,62 @@ export interface HudWidget extends HudDef {
   remaining?: number;
 }
 
+export interface WaveSpawnOptions {
+  type?: string;
+  flyerType?: string;
+  screenWidth?: number;
+  screenHeight?: number;
+  groundY?: number;
+  color?: number;
+  flyerColor?: number;
+  health?: number;
+  damage?: number;
+  speed?: number;
+  w?: number;
+  h?: number;
+  kind?: EntityKind;
+  side?: "left" | "right" | "top";
+  data?: Record<string, number | string | boolean>;
+}
+
+export interface SwarmSeparationOptions {
+  radius?: number;
+  strength?: number;
+}
+
+export interface WaveControllerOptions {
+  baseWaveSize?: number;
+  killsPerLevel?: number;
+  baseSpeed?: number;
+  speedScaling?: number;
+  waveSizeScaling?: number;
+  spawnInterval?: number;
+  maxConcurrent?: number;
+  groundY?: number;
+  screenWidth?: number;
+  screenHeight?: number;
+  enemyType?: string;
+  flyerType?: string;
+  separationRadius?: number;
+  separationStrength?: number;
+  autoTick?: boolean;
+}
+
+export interface WaveController {
+  readonly level: number;
+  readonly kills: number;
+  readonly totalKills: number;
+  readonly killsRequired: number;
+  readonly currentSpeed: number;
+  readonly currentWaveSize: number;
+  getLevel(): number;
+  getKills(): number;
+  recordKill(): void;
+  step(dt?: number): void;
+  spawnWave(): void;
+  dispose(): void;
+}
+
 export interface ProjectileDamageOptions {
   damage?: number;
   burstColor?: number;
@@ -168,6 +231,14 @@ export interface ModApi {
   winch?: (e: Entity, ax: number, ay: number, speed: number) => number;
   /** aim: unit direction from `from` toward the pointer, or along its facing (up while jump is held) when there is no pointer. */
   aim?: (from: Entity) => { x: number; y: number };
+  /** Optional camera position reader (top-left of viewport in world coordinates). ADR 0052. */
+  camera?: () => { x: number; y: number };
+  /** Optional wave spawner helper: multi-angle offscreen spawns (40% left, 40% right, 20% top). ADR 0052. */
+  spawnWaveUnit?: (options?: WaveSpawnOptions) => Entity;
+  /** Optional anti-clumping separation: apply mild boid separation to avoid stacking. ADR 0052. */
+  applySeparation?: (entities: Entity[] | readonly Entity[], options?: SwarmSeparationOptions) => void;
+  /** Optional wave controller: handles multi-angle waves, paced level-up milestones, and HUD banners. ADR 0052. */
+  createWaveController?: (options?: WaveControllerOptions) => WaveController;
 }
 
 export type KnobValue = number | string | boolean;
@@ -240,9 +311,9 @@ export type ClientMsg =
   | { kind: "paperLevel"; image: string; prompt?: string }
   // Self-improving feedback (ADR 0020): thumbs-up/down on entities or mod cards distills persistent rules & skills.
   | { kind: "feedback"; modId: string; entityType?: string; vote: "up" | "down"; note: string; fixNow?: boolean }
-  /** Draw-to-build (ADR 0026): a hand-drawn level sketch. `image` is a PNG data URL of
-   *  the sketch canvas; `strokes` carry exact world boxes; `view` is the world rect the
-   *  sketch covers; `prompt` is the optional typed hint. */
+  /** Draw-to-build (ADR 0026): a hand-drawn level sketch. `image` is a compact image data URL
+   *  of the sketch canvas (JPEG downscaled to ~720 px, ADR 0054); `strokes` carry exact world
+   *  boxes; `view` is the world rect the sketch covers; `prompt` is the optional typed hint. */
   | {
       kind: "sketch";
       image: string;

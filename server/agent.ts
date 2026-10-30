@@ -66,7 +66,7 @@ export interface AgentOptions {
   /** If set, the model is streamed (stream: true) and every piece of text or tool-call source is passed here as it arrives (ADR 0022). */
   onText?: (chunk: string) => void;
   /**
-   * Argument-free tools to run before the first model turn (ADR 0054). Each shows in the
+   * Argument-free tools to run before the first model turn (ADR 0058). Each shows in the
    * conversation as a call the model made, with its result, so the model skips a whole
    * turn whose only job was to ask for it. Counts toward maxCalls like any call.
    */

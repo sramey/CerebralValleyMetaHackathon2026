@@ -24,12 +24,13 @@ import type { AgentStep, AgentTrace } from "./agent";
 import { forceModId, modIdOf } from "./modid";
 import { runPool } from "./pool";
 import { parseRelativeAsk, relativeTweak } from "./relative-tweak";
+import { mergeDependentParts, mightBeCompound, splitCompound } from "./compound";
 import { forget, newRecent, noteCommand, noteTouched, recentText, resolvePronoun } from "./context";
 import type { Recent } from "./context";
 import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, formatManifest, ROUTER_SYSTEM, WONDER_SYSTEM } from "./prompt";
 import { activeLogFile, logBuild, logMood, saveModSources } from "./createlog";
 import { createStatsHandler } from "./stats-feed";
-import { artCachedUrl, artKeyForType, clearCachedArt, deriveSubject, generateSubjectArt, isScenerySubject, pickArtType, purgeLegacyArt } from "./art";
+import { artCachedUrl, artKeyForType, clearCachedArt, deriveSubject, generateSubjectArt, isFlyingRequest, isScenerySubject, pickArtType, purgeLegacyArt } from "./art";
 import { learnFromFix, learnRuleFromFeedback, learnSkillFromFeedback } from "./learn";
 import { segmentPhoto } from "./photo";
 import { Budget, readLimits } from "./budget";
@@ -94,6 +95,10 @@ const BUILTINS: BuiltinDef[] = [
   { alias: "chicken", file: "chicken.ts", id: "chicken" },
   { alias: "basketball", file: "basketball.ts", id: "basketball" },
   { alias: "hoop", file: "basketball.ts", id: "basketball" },
+  { alias: "swarm", file: "swarm.ts", id: "swarm" },
+  { alias: "swarms", file: "swarm.ts", id: "swarm" },
+  { alias: "wave", file: "swarm.ts", id: "swarm" },
+  { alias: "waves", file: "swarm.ts", id: "swarm" },
 ];
 
 // "starter world" alias: player then ground, delivered sequentially.
@@ -449,7 +454,9 @@ async function handleSketchMessage(ws: WebSocket, msg: Extract<ClientMsg, { kind
     }
   }
   if (!spend(ws, "build")) {
-    send(ws, { kind: "stage", stage: "done", detail: "feedback saved" });
+    // Budget/key denial used to `return` silently and leave the sketch overlay waiting out its
+    // watchdog; tell the overlay now so the player can keep drawing (bug q8x).
+    stage(ws, { kind: "stage", stage: "failed", detail: "the AI build budget for this visit is used up", command });
     return;
   }
   const manifest = sess(ws).manifest;
@@ -483,14 +490,18 @@ async function handleSketchMessage(ws: WebSocket, msg: Extract<ClientMsg, { kind
   };
   try {
     await runSketchBuild({
-      ask: (messages) => chat(WONDER, messages, 1400).then((r) => { timings.write += r.ms; return r.text; }),
+      // The signal is the sketch pipeline's own deadline (bug q8x): a hung vision call is
+      // cancelled here instead of holding the build until the client gives up.
+      ask: (messages, signal) => chat(WONDER, messages, 1400, "minimal", signal).then((r) => { timings.write += r.ms; return r.text; }),
       deliver,
       say: (text) => send(ws, { kind: "say", text }),
       stage: (s, detail) => stage(ws, { kind: "stage", stage: s, detail, command }),
       note: (text) => console.log(`[sketch] ${text}`),
     }, msg);
   } catch (err) {
-    send(ws, { kind: "say", text: `Sketch failed: ${err instanceof Error ? err.message : String(err)}` });
+    const why = err instanceof Error ? err.message : String(err);
+    send(ws, { kind: "say", text: `Sketch failed: ${why}` });
+    stage(ws, { kind: "stage", stage: "failed", detail: why.slice(0, 200), command });
     logBuild({ command, route: "new", outcome: "failed", timings: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) }, fixAttempted: false });
   }
   send(ws, { kind: "timing", command, ms: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) } });
@@ -512,7 +523,12 @@ async function handlePaperLevelMessage(ws: WebSocket, msg: Extract<ClientMsg, { 
       return;
     }
   }
-  if (!spend(ws, "build")) return;
+  if (!spend(ws, "build")) {
+    // A budget/key denial used to `return` silently and leave the orb on "Reading your paper
+    // level drawing..." forever; tell it now so the player can take another photo (ADR 0054).
+    stage(ws, { kind: "stage", stage: "failed", detail: "the AI build budget for this visit is used up", command });
+    return;
+  }
   const manifest = sess(ws).manifest;
   await adoptingOf.get(ws);
   await adoptBuiltins(manifest, ["ground"]);
@@ -543,14 +559,17 @@ async function handlePaperLevelMessage(ws: WebSocket, msg: Extract<ClientMsg, { 
   };
   try {
     await runPaperBuild({
-      ask: (messages) => chat(WONDER, messages, 1400).then((r) => { timings.write += r.ms; return r.text; }),
+      ask: (messages, signal) => chat(WONDER, messages, 1400, "minimal", signal).then((r) => { timings.write += r.ms; return r.text; }),
       deliver,
       say: (text) => send(ws, { kind: "say", text }),
       stage: (s, detail) => stage(ws, { kind: "stage", stage: s, detail, command }),
       note: (text) => console.log(`[paper] ${text}`),
     }, msg);
   } catch (err) {
-    send(ws, { kind: "say", text: `Paper level failed: ${err instanceof Error ? err.message : String(err)}` });
+    const why = err instanceof Error ? err.message : String(err);
+    send(ws, { kind: "say", text: `Paper level failed: ${why}` });
+    // A thrown build must not leave the orb waiting for a stage that never comes (ADR 0054).
+    stage(ws, { kind: "stage", stage: "failed", detail: why.slice(0, 200), command });
     logBuild({ command, route: "new", outcome: "failed", timings: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) }, fixAttempted: false });
   }
   send(ws, { kind: "timing", command, ms: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) } });
@@ -589,32 +608,6 @@ function stripFences(src: string): string {
   return s;
 }
 
-/** Ask Spark to split a compound build command into standalone add-commands. */
-async function trySplitCompound(command: string): Promise<string[] | null> {
-  try {
-    const res = await chat(SPARK, [
-      {
-        role: "system",
-        content: "Reply with ONLY a JSON array of strings, each a standalone add-command. Split the request into at most 4 independent single-add commands. No markdown, no prose.",
-      },
-      { role: "user", content: command },
-    ], 512);
-    const start = res.text.indexOf("[");
-    const end = res.text.lastIndexOf("]");
-    if (start < 0 || end <= start) return null;
-    const arr: unknown = JSON.parse(res.text.slice(start, end + 1));
-    if (!Array.isArray(arr)) return null;
-    const items = arr
-      .filter((s): s is string => typeof s === "string")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0)
-      .slice(0, 4);
-    return items.length >= 2 ? items : null;
-  } catch {
-    return null;
-  }
-}
-
 async function handleCommand(ws: WebSocket, text: string): Promise<void> {
   // Kid-safe screen first (ADR 0044): a declined request never reaches the router, so it can
   // never spend a Wonder build or become a mod. The reply is one kind sentence with an
@@ -630,30 +623,33 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
   }
   // A verdict that missed the deadline is read before the build writes anything (step 3 below).
   sess(ws).pendingSafety = safety.pending ? { command: text.slice(0, 400), verdict: safety.pending } : undefined;
-  // Compound split: only for build-shaped commands that join requests with
-  // "," or " and ". Anything else takes the normal single-command path.
-  if (/^\s*(add|make|create|spawn|build)\b/i.test(text) && (text.includes(",") || text.toLowerCase().includes(" and "))) {
-    // The split and the router run side by side (ADR 0054): most "and" commands are one
-    // request ("make me big and fast"), and those no longer wait for the split first.
+  // Compound requests (ADR 0053): Muse Spark splits, and only genuinely independent things
+  // become separate builds. One subject with several traits or behaviors stays ONE build, so
+  // parallel builds never race over the same mod id in front of the player. A part that points
+  // back at an earlier one is merged by a deterministic guard; the word splitter is the fallback.
+  // The router runs alongside the split (ADR 0058): most commands that might be compound are one
+  // request, and those no longer wait for the split call first.
+  let pre: { routing?: Promise<Routed> } | undefined;
+  if (mightBeCompound(text)) {
     await adoptingOf.get(ws);
     noteCommand(sess(ws).recent, text);
-    const routing = hasApiKey() ? routerChat(routerMessages(ws, text.slice(0, 400)), 1024) : undefined;
-    routing?.catch(() => { /* read (and reported) by handleSingle, or dropped for a compound */ });
-    const items = await trySplitCompound(text);
-    if (items && items.length >= 2) {
-      const limit = Math.max(1, Number(process.env.MAX_PARALLEL ?? 4));
-      const t0 = performance.now();
-      await runPool(items, limit, (item) => handleSingle(ws, item, { size: items.length, parallel: Math.min(limit, items.length) }));
-      console.log(`[batch] ${items.length} builds, parallel ${Math.min(limit, items.length)}, ${Math.round(performance.now() - t0)} ms`);
-      // End marker for the whole compound command (the sub-builds each sent their own), so clients and the rehearsal harness can tell it is done.
-      const total = Math.round(performance.now() - t0);
-      send(ws, { kind: "timing", command: text, ms: { route: 0, write: 0, compile: 0, verify: 0, total } });
-      return;
-    }
-    await handleSingle(ws, text, undefined, undefined, routing);
+    pre = hasApiKey() ? { routing: routerChat(routerMessages(ws, text.slice(0, 400)), 1024) } : {};
+    pre.routing?.catch(() => { /* read (and reported) by handleSingle, or dropped for a compound */ });
+  }
+  const parts = await splitWithSpark(text);
+  if (parts) {
+    // A mood part restyles the whole world, so a mood + build pair runs in order, not in parallel.
+    const sequential = parts.some((p) => detectMoodCommand(p) !== null);
+    const limit = sequential ? 1 : Math.max(1, Number(process.env.MAX_PARALLEL ?? 4));
+    const t0 = performance.now();
+    console.log(`[split] ${parts.length} independent requests, parallel ${Math.min(limit, parts.length)}: ${parts.join(" | ")}`);
+    await runPool(parts, limit, (item) => handleSingle(ws, item, { size: parts.length, parallel: Math.min(limit, parts.length) }));
+    // End marker for the whole compound command (the sub-builds each sent their own), so clients and the rehearsal harness can tell it is done.
+    const total = Math.round(performance.now() - t0);
+    send(ws, { kind: "timing", command: text, ms: { route: 0, write: 0, compile: 0, verify: 0, total } });
     return;
   }
-  await handleSingle(ws, text);
+  await handleSingle(ws, text, undefined, undefined, pre);
 }
 
 /** The router's messages for one command: its system prompt, the loaded mods and the short-term memory. */
@@ -664,10 +660,35 @@ function routerMessages(ws: WebSocket, command: string): ChatMessage[] {
   ];
 }
 
-/** `routing`: a router call the caller already started for this command (and already noted in memory). */
-async function handleSingle(ws: WebSocket, text: string, batch?: { size: number; parallel: number }, forceEditModId?: string, routing?: Promise<Routed>): Promise<void> {
+/** Spark splits a compound command (ADR 0053); null = one build. Falls back to the word splitter if Spark fails. */
+async function splitWithSpark(command: string): Promise<string[] | null> {
+  if (!mightBeCompound(command)) return null;
+  try {
+    const res = await chat(SPARK, [
+      {
+        role: "system",
+        content: "Reply with ONLY a JSON array of strings. Split the player's request into standalone build commands, one per genuinely separate thing (at most 4). " +
+          "ONE subject with its traits and behaviors stays ONE command: \"add a superhero cat that flies around dropping coins\" -> [\"add a superhero cat that flies around dropping coins\"]. " +
+          "Separate things split: \"add a dragon, some coins, and make it rain\" -> [\"add a dragon\", \"add some coins\", \"make it rain\"]. No markdown, no prose.",
+      },
+      { role: "user", content: command },
+    ], 512);
+    const start = res.text.indexOf("[");
+    const end = res.text.lastIndexOf("]");
+    if (start < 0 || end <= start) return splitCompound(command);
+    const arr: unknown = JSON.parse(res.text.slice(start, end + 1));
+    if (!Array.isArray(arr)) return splitCompound(command);
+    const items = mergeDependentParts(arr.filter((x): x is string => typeof x === "string"));
+    return items.length >= 2 ? items : null;
+  } catch {
+    return splitCompound(command);
+  }
+}
+
+/** `pre`: the caller already noted this command in memory, and may have started its router call (ADR 0058). */
+async function handleSingle(ws: WebSocket, text: string, batch?: { size: number; parallel: number }, forceEditModId?: string, pre?: { routing?: Promise<Routed> }): Promise<void> {
   await adoptingOf.get(ws);
-  if (!batch && !routing) noteCommand(sess(ws).recent, text);
+  if (!batch && !pre) noteCommand(sess(ws).recent, text);
   const t0 = performance.now();
   let routeMs = 0;
   let writeMs = 0;
@@ -688,7 +709,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
   let route: Route | null = null;
   try {
     const r0 = performance.now();
-    const res = await (routing ?? routerChat(routerMessages(ws, command), 1024));
+    const res = await (pre?.routing ?? routerChat(routerMessages(ws, command), 1024));
     routeMs = Math.round(performance.now() - r0);
     send(ws, { kind: "routed", command, model: res.model, open: res.open, ms: res.ms, fellBack: res.fellBack });
     route = parseRoute(res.text);
@@ -739,18 +760,18 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
   }
 
   // Relative knob asks ("make them faster", "jump higher", "more chickens") are instant knob
-  // tweaks, whatever the router said: a rewrite costs a whole Wonder build (ADR 0054).
+  // tweaks, whatever the router said: a rewrite costs a whole Wonder build (ADR 0058).
   if (route.action === "edit" || route.action === "tweak" || route.action === "new") {
     const ask = parseRelativeAsk(command);
     if (ask) {
       const tid = (route.target && manifest.has(route.target) ? route.target : undefined)
         ?? (isPlayerCommand(command) && manifest.has("player") ? "player" : undefined)
         ?? resolvePronoun(command, sess(ws).recent);
-      // An ask that names its thing ("more chickens", "make the slimes faster") may look through the whole world.
-      const chosen = !!tid && manifest.has(tid);
-      const candidates = chosen ? [manifest.get(tid)!] : ask.noun ? [...manifest.values()] : [];
-      for (const rec of candidates) {
-        const rel = relativeTweak(command, rec.knobs, `${rec.id} ${rec.title}`, chosen);
+      // A mod the ask names ("more chickens", "make the slimes faster") wins; then the chosen target, trusted.
+      const named = ask.noun ? [...manifest.values()].map((rec) => ({ rec, trusted: false })) : [];
+      const chosen = tid && manifest.has(tid) ? [{ rec: manifest.get(tid)!, trusted: true }] : [];
+      for (const { rec, trusted } of [...named, ...chosen]) {
+        const rel = relativeTweak(command, rec.knobs, `${rec.id} ${rec.title}`, trusted);
         if (!rel) continue;
         console.log(`[route] relative ${route.action} -> tweak ${rec.id}.${rel.knob}=${rel.value} for: ${command}`);
         route = { action: "tweak", target: rec.id, knob: rel.knob, value: rel.value };
@@ -976,7 +997,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     let text: string;
     try {
       // Requests that touch what already exists get the world snapshot up front, a local call of a few ms,
-      // instead of spending a whole Wonder turn asking for it (ADR 0054).
+      // instead of spending a whole Wonder turn asking for it (ADR 0058).
       const touchesWorld = !!editRec || isPlayerCommand(command) || !!resolvePronoun(command, session.recent);
       const ag = await runAgent({ system: `${WONDER_SYSTEM}\n\n${TOOL_RULES}`, user, tools: tools(), maxCalls: 3, onTool, onStep, onText, ...(touchesWorld ? { prefetch: ["inspect_world"] } : {}) });
       agentTrace.push(...ag.trace);
@@ -1010,7 +1031,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
       const w0 = performance.now();
       const spent0 = compileMs + verifyMs;
       const fix = await runAgent({
-        // Same system prompt as the write round, so a provider-side prefix cache can reuse it (ADR 0054).
+        // Same system prompt as the write round, so a provider-side prefix cache can reuse it (ADR 0058).
         system: `${WONDER_SYSTEM}\n\n${TOOL_RULES}`,
         user: `${buildFixPrompt(command, source, first.errors)}\n\nBe terse: change only what the failure requires, keep the mod's id and every other line as is, and write no comments.`,
         tools: tools(),
@@ -1046,7 +1067,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     // ships with artPending and the art streams in asynchronously.
     let art: { key: string; url: string; scenery?: boolean } | undefined;
     let artPending: string | undefined;
-    let pendingArt: { subject: string; key: string; scenery: boolean } | undefined;
+    let pendingArt: { subject: string; type: string; key: string; scenery: boolean; flying: boolean } | undefined;
     const artType = pickArtType(source);
     // Spark's visual kind (from the router call) decides the art path; word lists only cover a router miss (ADR 0015).
     const fb = route.visual ? undefined : fallbackVisual(`${command} ${artType ?? ""}`);
@@ -1054,15 +1075,17 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     const look = artType ? lookFor(visual, route.shape ?? fb?.shape, [artType.toLowerCase()]) : undefined;
     if (artType && !look) {
       const subject = deriveSubject(command, artType);
-      const key = artKeyForType(artType);
+      const scenery = visual === "prop" || isHeldItemType(subject) || isHeldItemType(artType) || entityKind(artType) === "prop" || (visual !== "creature" && (isScenerySubject(subject) || isScenerySubject(artType)));
+      // A flying request gets airborne poses, not the walk cycle (ADR 0053).
+      const flying = isFlyingRequest(`${command} ${subject}`, artType) && !scenery;
+      const key = artKeyForType(artType, flying ? "fly" : undefined);
       if (key) {
-        const scenery = visual === "prop" || isHeldItemType(subject) || isHeldItemType(artType) || entityKind(artType) === "prop" || (visual !== "creature" && (isScenerySubject(subject) || isScenerySubject(artType)));
-        const cachedUrl = artCachedUrl(key);
+        const cachedUrl = artCachedUrl(artType, flying ? "fly" : undefined);
         if (cachedUrl) {
           art = { key, url: cachedUrl, ...(scenery ? { scenery: true } : {}) };
         } else if (spend(ws, "image")) {
           artPending = key;
-          pendingArt = { subject, key, scenery };
+          pendingArt = { subject, type: artType, key, scenery, flying };
         }
       }
     }
@@ -1075,8 +1098,8 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     stage(ws, { kind: "stage", stage: "done", detail: `loaded ${def.id} (${SIM.healthFrames} frames OK)`, command });
     send(ws, { kind: "mod", mod: { id: def.id, title: def.title, source, compiled: first.js, knobs: rec.knobs, ...(art ? { art } : {}), ...(artPending ? { artPending } : {}), ...(look ? { look } : {}) } });
     if (pendingArt) {
-      const { subject, key, scenery } = pendingArt;
-      generateSubjectArt(subject, key, scenery).then(url => { if (url) { rec.art = { key, url, ...(scenery ? { scenery: true } : {}) }; try { send(ws, { kind: "art", modId: def.id, art: { key, url, ...(scenery ? { scenery: true } : {}) } }); } catch {} } }).catch(() => {});
+      const { subject, type, key, scenery, flying } = pendingArt;
+      generateSubjectArt(subject, type, scenery, flying).then(url => { if (url) { rec.art = { key, url, ...(scenery ? { scenery: true } : {}) }; try { send(ws, { kind: "art", modId: def.id, art: { key, url, ...(scenery ? { scenery: true } : {}) } }); } catch {} } }).catch(() => {});
       send(ws, { kind: "say", text: `Drawing ${subject}...` });
     }
     const files = saveModSources(sources, def.id);
@@ -1329,7 +1352,11 @@ function dispatchClientMsg(ws: WebSocket, msg: ClientMsg): void {
     });
   } else if (msg.kind === "paperLevel") {
     handlePaperLevelMessage(ws, msg).catch((err) => {
-      send(ws, { kind: "say", text: `Paper level failed: ${err instanceof Error ? err.message : String(err)}` });
+      const why = err instanceof Error ? err.message : String(err);
+      send(ws, { kind: "say", text: `Paper level failed: ${why}` });
+      // Safety net for a failure outside the build itself (kid-safe screen, level adopt): the orb
+      // still has to leave "Reading your paper level drawing..." (ADR 0054).
+      stage(ws, { kind: "stage", stage: "failed", detail: why.slice(0, 200), command: "📄 paper level" });
     });
   } else if (msg.kind === "restyle") {
     handleRestyle(ws, msg).catch(() => {});

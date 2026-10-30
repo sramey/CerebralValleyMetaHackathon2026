@@ -4,6 +4,7 @@ import { initFeedback } from "./feedback";
 import { initExplain } from "./explain";
 import { Application, Graphics, Sprite, Texture } from "pixi.js";
 import { computePrimaries, framesFor, isProjectileType, loadSpriteSheet, loadSubjects } from "./sprites";
+import { startLateArt } from "./art-late";
 import chickenMod from "../mods/chicken";
 import { SIM } from "../contract";
 import { canUseSpriteSheet, entityKind } from "../ontology";
@@ -30,6 +31,7 @@ import { createHud } from "./hud";
 import { createSketch } from "./sketch";
 import { CAMERA_LABEL, CAPTURE_LABEL, UPLOAD_LABEL, defaultAction, dialogCssVars, dialogLayout, fitInside, photoFindMessage, photoWorkSize, stageHint, wantsCameraStream } from "./camera-dialog";
 import type { DialogPhase } from "./camera-dialog";
+import { compactPaperImage, paperImageSize, paperLevelMessage } from "./paper-image";
 import { matchPaperIntent, matchSketchIntent } from "./phrases";
 import { World } from "../sim/world";
 import playerMod from "../mods/player";
@@ -41,6 +43,7 @@ import movingPlatformMod from "../mods/platform-moving";
 import fireArrowMod from "../mods/fire-arrow";
 import parallaxMod from "../mods/parallax";
 import basketballMod from "../mods/basketball";
+import swarmMod from "../mods/swarm";
 import { resolveItemMod, gunMod } from "./items";
 import { parseUrlFlags, shareIssueMessage, urlWithoutWorld } from "./url-flags";
 import type { ShareIssue } from "./url-flags";
@@ -53,6 +56,14 @@ const BUILTINS: Record<string, ModDefinition> = {
 
 const world = new World(1337);
 const loader = new ModLoader(world);
+// A mod that crashes mid-game is taken out and the world keeps running (ADR 0056).
+loader.isolateFaults((mod, message) => {
+  console.warn(`mod ${mod.id} crashed and was unloaded:`, message);
+  say(`${mod.title} crashed, so I took it out. Everything else keeps running.`, "failed");
+  log(`unloaded ${mod.id}: it crashed (${message.slice(0, 80)})`);
+  renderMods();
+  sendWorldState();
+});
 const ghost = createGhost(document.getElementById("stage-wrap")!);
 const pipeline = createPipeline(document.getElementById("stage-wrap")!);
 const theater = createTheater(document.getElementById("stage-wrap")!, (v) => pipeline.setCode(v.lines, v.partial, v.active), (m) => { pipeline.onMsg(m); theater.onMsg(m); });
@@ -170,11 +181,18 @@ const isEffectType = (type: string): boolean => kindOf(type)?.kind === "effect";
 // AI sprites (Muse Image sheets, chroma-keyed + sliced client-side). Frames:
 // 0 idle, 1-2 walk/run, 3 jump. Entities whose type names a subject get its
 // sprite; everything else falls back to code-drawn art.
-const framesBySubject = await loadSubjects({
+// Bead 8zu: those sheets load *behind* the render loop, not in front of it. Awaiting them
+// here held the first frame for up to 6 s per sheet — a black stage behind a socket that was
+// already connected. The map starts empty, so the loop paints the code-drawn world at once
+// and each subject's sprite swaps in when its sheet lands (art-late.ts).
+const lateArt = startLateArt(() => loadSubjects({
   ninja: "/art/ninja-sheet.webp",
   chicken: "/art/chicken.webp",
+}));
+const framesBySubject = lateArt.frames;
+void lateArt.settled.then(() => {
+  console.info(`[art] subjects loaded: ${Object.entries(framesBySubject).map(([k, v]) => `${k}=${v.length}`).join(" ")}`);
 });
-console.info(`[art] subjects loaded: ${Object.entries(framesBySubject).map(([k, v]) => `${k}=${v.length}`).join(" ")}`);
 const pendingArt = new Set<string>();
 const scenerySubjects = new Set<string>();
 let photoSeq = 0;
@@ -512,12 +530,17 @@ function onMood(m: MoodSpec | null): void {
   moodModCount = loader.list().length;
   renderMods();
   // Only sheets something in the world actually uses (no image spend on art nobody can see).
-  const used = new Set<string>();
-  for (const e of world.entities) { const k = subjectKeyFor(e); if (k) used.add(k); }
-  const keys = [...used].filter((k) => !k.startsWith("photo") && !origFrames.has(k) && framesBySubject[k].length > 0);
-  restyleLeft = keys.length; restyleOk = 0;
-  if (keys.length > 0) { say(`Making it ${m.name}: restyling ${keys.length} sprites…`, "building"); send({ kind: "restyle", mood: m.name, keys }); }
-  else say(`It's ${m.name} now.`, "done");
+  // Bead 8zu: the boot sheets may still be loading, so this runs once they are in — a mood
+  // spoken during the cold start still restyles them instead of quietly skipping them.
+  void lateArt.settled.then(() => {
+    if (!mood || mood.name !== m.name) return; // superseded by a newer mood
+    const used = new Set<string>();
+    for (const e of world.entities) { const k = subjectKeyFor(e); if (k) used.add(k); }
+    const keys = [...used].filter((k) => !k.startsWith("photo") && !origFrames.has(k) && (framesBySubject[k]?.length ?? 0) > 0);
+    restyleLeft = keys.length; restyleOk = 0;
+    if (keys.length > 0) { say(`Making it ${m.name}: restyling ${keys.length} sprites…`, "building"); send({ kind: "restyle", mood: m.name, keys }); }
+    else say(`It's ${m.name} now.`, "done");
+  });
 }
 async function onRestyled(msg: Extract<ServerMsg, { kind: "restyled" }>): Promise<void> {
   if (mood && mood.name === msg.mood) noteRestyled(msg.url !== null);
@@ -888,7 +911,17 @@ function render(): void {
 let last = performance.now();
 let acc = 0;
 let noPlayerTicks = 0;
+let frameFaultShown = false;
+/** One animation frame. Whatever throws inside it, the next frame is still scheduled, so the game never freezes. */
 function frame(now: number): void {
+  try {
+    stepAndRender(now);
+  } catch (err) {
+    if (!frameFaultShown) { frameFaultShown = true; console.error("frame failed:", err); log("a frame failed; the game keeps running"); }
+  }
+  requestAnimationFrame(frame);
+}
+function stepAndRender(now: number): void {
   // Sketch mode freezes the world (ADR 0028): you draw on a still frame, and the
   // accumulator is dropped so resuming does not fast-forward the sim.
   const sketching = sketch.active();
@@ -919,7 +952,6 @@ function frame(now: number): void {
     else if (++noPlayerTicks > 90) { noPlayerTicks = 0; loadLocal(playerMod); say("Knocked out — you're back in!", "done"); }
   }
   render();
-  requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
@@ -1063,6 +1095,7 @@ function handleLocal(text: string): boolean {
   if (n === "fire arrow" || n === "fire arrows" || n === "arrow" || n === "arrows" || n === "shoot fire arrows") { loadLocal(fireArrowMod); return true; }
   if (n === "parallax" || n === "parallax background" || n === "parallax forest" || n === "parallax vista") { loadLocal(parallaxMod); return true; }
   if (n === "chicken") { loadLocal(chickenMod); return true; }
+  if (n === "swarm" || n === "swarms" || n === "wave" || n === "waves") { loadLocal(swarmMod); return true; }
   if (t.includes("jump higher")) { tweak("player", "jump", 880, "Jump raised."); return true; }
   if (t.includes("faster")) {
     if (loader.has("enemies")) tweak("enemies", "speed", 140, "Walkers sped up.");
@@ -1531,7 +1564,9 @@ async function startCamera(): Promise<void> {
 
 function setPendingCapture(source: CanvasImageSource, sw: number, sh: number): void {
   if (sw <= 0 || sh <= 0) return;
-  const { w, h } = photoWorkSize({ w: sw, h: sh });
+  // A paper drawing is read as pencil lines, so it keeps more detail than a prop photo: its
+  // own 1024 px budget (bead 9ch, ADR 0054) instead of the 768 px the cut-out path uses.
+  const { w, h } = cameraPaper?.checked ? paperImageSize({ w: sw, h: sh }) : photoWorkSize({ w: sw, h: sh });
   const canvas = document.createElement("canvas");
   canvas.width = w;
   canvas.height = h;
@@ -1547,6 +1582,12 @@ function setPendingCapture(source: CanvasImageSource, sw: number, sh: number): v
   cameraConfirm.disabled = true;
   setCameraPhase("preview");
   redrawPreview();
+  // A level drawing is read whole by Wonder (ADR 0040): no SAM cut-out, so no SAM call and no box.
+  if (cameraPaper?.checked) {
+    cameraConfirm.disabled = false;
+    setCameraStatus("Drawing photo ready! Click 'Build this level' to make it playable.");
+    return;
+  }
   if (bgCanvas) computeDiff();
   if (diffComponents.length === 0) {
     // With no builder connected the SAM box never arrives: say so and point at the cut that works offline.
@@ -1649,7 +1690,7 @@ function handleSegment(key: string, rawBox: unknown): void {
 cameraPaper?.addEventListener("change", () => {
   if (cameraPaper.checked) {
     cameraLabel.placeholder = "Level name (optional, e.g. Sky Castle)";
-    if (pendingCapture) setCameraStatus("Drawing photo ready! Click 'Build this level' to make it playable.");
+    if (pendingCapture) { cameraConfirm.disabled = false; setCameraStatus("Drawing photo ready! Click 'Build this level' to make it playable."); }
     else setCameraStatus("Level drawing mode: upload or capture your paper drawing.");
   } else {
     cameraLabel.placeholder = "What are you holding? e.g. coffee mug";
@@ -1726,9 +1767,15 @@ cameraPreview.addEventListener("click", (e) => {
 cameraConfirm.addEventListener("click", () => {
   if (cameraPaper?.checked) {
     if (!pendingCapture) return;
-    const image = pendingCapture.dataUrl;
-    const prompt = cameraLabel.value.trim();
-    send({ kind: "paperLevel", image, ...(prompt ? { prompt } : {}) } as unknown as ClientMsg);
+    // A compact JPEG, not the raw photo (bead 9ch, ADR 0054): the drawing still travels at up
+    // to 1024 px so Wonder can read it, but at tens of KB instead of megabytes of base64.
+    const image = compactPaperImage(pendingCapture.canvas);
+    if (!image) {
+      setCameraStatus("That photo didn't come through — try taking it again.");
+      return;
+    }
+    console.info(`[paper] image ${pendingCapture.canvas.width}x${pendingCapture.canvas.height} jpeg = ${Math.round(image.length / 1024)} KB`);
+    send(paperLevelMessage(image, cameraLabel.value));
     closeCameraModal(false);
     say("Reading your paper level drawing...", "building");
     return;
@@ -1993,7 +2040,8 @@ function connect(): void {
         if (!sayWhileBuilding()) say(`${msg.mod.title} verified and live.`, "done");
         renderMods();
         const artPending = (msg.mod as { artPending?: string }).artPending;
-        if (artPending) { if (framesBySubject[artPending]) pendingArt.delete(artPending); else pendingArt.add(artPending); }
+        // Empty frames are "no sprite" (bead 8zu): a key can exist before its sheet lands.
+        if (artPending) { if ((framesBySubject[artPending]?.length ?? 0) > 0) pendingArt.delete(artPending); else pendingArt.add(artPending); }
         const art = msg.mod.art;
         if (art) {
           pendingArt.add(art.key);

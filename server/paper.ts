@@ -2,14 +2,17 @@
 //
 // Reuses the sketch compiler (server/sketch.ts) and photo capture (server/photo.ts).
 // 1. Detects paper sheet bounds in the photo (perspective-tolerant).
-// 2. Multimodal Wonder reads the photograph and returns the level-spec JSON.
+// 2. Multimodal Wonder reads the photograph and returns the level-spec JSON, with a hard time
+//    ceiling per call and for the whole reading phase (ADR 0054, same shape as the sketch build).
 // 3. Normalizes and maps paper coordinates to stage world space (ground line y = 400).
 // 4. Compiles, verifies, and hot-loads the mod, replacing the starter level.
-// 5. Fallback: if no drawing is spotted, asks the player to retake the photo.
+// 5. Fallback: no stroke boxes exist on this path (the payload is a photo), so an unreadable or
+//    over-budget drawing gets an immediate, explicit retake instead of a hang.
 import { inflateSync } from "node:zlib";
 import type { BuildStage } from "../src/contract";
 import type { ChatMessage } from "./meta";
 import {
+  askWithin,
   isEmptyLevel,
   levelToModSource,
   normalizeLevel,
@@ -64,21 +67,64 @@ Rules:
 - If the photo is blank, blurry, has no recognizable hand-drawn level, or is an arbitrary object, return:
 {"name":"empty","platforms":[],"coins":[],"enemies":[]}`;
 
+/**
+ * Time ceilings for one paper build, the same shape as the sketch build (ADR 0054). A photo
+ * either reads or hands itself back; it never sits on "Reading your paper level drawing..."
+ * until some client timer gives up. Measured end to end, a compact photo reads in ~5 s.
+ */
+export const PAPER_ASK_TIMEOUT_MS = 15_000;
+/** Every reading try — both attempts — must finish inside this, so the retake reply is instant. */
+export const PAPER_READ_BUDGET_MS = 18_000;
+/** Less runway than this and a second vision try cannot finish: stop and ask for a retake. */
+export const PAPER_RETRY_MIN_MS = 4_000;
+/** Ceiling on the one auto-fix vision call after a failed verification. */
+export const PAPER_FIX_TIMEOUT_MS = 8_000;
+/** Ceiling on all model calls for one paper build, start to finish. */
+export const PAPER_TOTAL_BUDGET_MS = 25_000;
+/** What a child sees when the drawing could not be read in time (or at all). */
+export const PAPER_RETAKE = "I couldn't spot a clear level drawing on that paper. Draw with a darker pen or thicker lines, hold it steady, and try taking the photo again.";
+
+/** The time ceilings of one paper build. Defaults are the constants above; tests shrink them. */
+export interface PaperLimits {
+  /** Ceiling on a single vision call. */
+  askTimeoutMs: number;
+  /** Ceiling on the reading phase (every try). */
+  readBudgetMs: number;
+  /** Minimum runway for a second try to be worth starting. */
+  retryMinMs: number;
+  /** Ceiling on the one post-verification fix call. */
+  fixTimeoutMs: number;
+  /** Ceiling on all model calls for one paper build. */
+  totalBudgetMs: number;
+}
+
+export const PAPER_LIMITS: Readonly<PaperLimits> = {
+  askTimeoutMs: PAPER_ASK_TIMEOUT_MS,
+  readBudgetMs: PAPER_READ_BUDGET_MS,
+  retryMinMs: PAPER_RETRY_MIN_MS,
+  fixTimeoutMs: PAPER_FIX_TIMEOUT_MS,
+  totalBudgetMs: PAPER_TOTAL_BUDGET_MS,
+};
+
 const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
 const n2 = (v: number): number => Math.round(v * 100) / 100;
+
+/** Last-resort guess when an image's format is unknown or its header is damaged. */
+const GUESS_DIMS = { w: 640, h: 480 } as const;
+
+/** Decode a `data:<mime>;base64,` string (or take a buffer as-is). Null when it carries no base64. */
+function toBuffer(dataUrlOrBuf: string | Buffer): Buffer | null {
+  if (typeof dataUrlOrBuf !== "string") return dataUrlOrBuf;
+  const idx = dataUrlOrBuf.indexOf("base64,");
+  if (idx < 0) return null;
+  return Buffer.from(dataUrlOrBuf.slice(idx + 7), "base64");
+}
 
 /** Extract width and height from a PNG data URL or buffer without external libraries. */
 export function parsePngDimensions(dataUrlOrBuf: string | Buffer): { w: number; h: number } | null {
   try {
-    let buf: Buffer;
-    if (typeof dataUrlOrBuf === "string") {
-      const idx = dataUrlOrBuf.indexOf("base64,");
-      if (idx < 0) return null;
-      buf = Buffer.from(dataUrlOrBuf.slice(idx + 7), "base64");
-    } else {
-      buf = dataUrlOrBuf;
-    }
-    if (buf.length < 24) return null;
+    const buf = toBuffer(dataUrlOrBuf);
+    if (!buf || buf.length < 24) return null;
     // PNG signature: 89 50 4E 47 0D 0A 1A 0A
     if (buf[0] !== 0x89 || buf[1] !== 0x50 || buf[2] !== 0x4e || buf[3] !== 0x47) return null;
     // IHDR starts at byte 12 (chunk data at 16)
@@ -90,15 +136,80 @@ export function parsePngDimensions(dataUrlOrBuf: string | Buffer): { w: number; 
   }
 }
 
+/** Frame headers that carry the image size: SOF0..SOF15 minus DHT (C4), JPG (C8) and DAC (CC). */
+function isSofMarker(marker: number): boolean {
+  return marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+}
+
+/**
+ * Width and height of a JPEG, read from its frame header (SOF), with no dependencies.
+ *
+ * A JPEG is a chain of `FF <marker> <len> <payload>` segments. The frame header (SOF0 baseline,
+ * SOF2 progressive, and the rest) holds `precision, height, width, components`, so walking the
+ * length fields reaches it without decoding any pixels. Walking stops at SOS: entropy-coded scan
+ * data follows the frame header and is not segment-framed.
+ */
+export function parseJpegDimensions(dataUrlOrBuf: string | Buffer): { w: number; h: number } | null {
+  try {
+    const buf = toBuffer(dataUrlOrBuf);
+    // SOI: FF D8
+    if (!buf || buf.length < 4 || buf[0] !== 0xff || buf[1] !== 0xd8) return null;
+    let p = 2;
+    while (p + 1 < buf.length) {
+      if (buf[p] !== 0xff) return null; // between segments only markers live here
+      // Fill bytes: any number of 0xFF may precede a marker.
+      while (p + 1 < buf.length && buf[p + 1] === 0xff) p++;
+      if (p + 1 >= buf.length) return null;
+      const marker = buf[p + 1];
+      p += 2;
+      // Standalone markers carry no length: TEM (01), RST0..RST7 (D0..D7), SOI (D8).
+      if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8)) continue;
+      if (marker === 0xd9) return null; // EOI before any frame header
+      if (marker === 0xda) return null; // SOS: no frame header in this file
+      if (p + 2 > buf.length) return null;
+      const len = buf.readUInt16BE(p);
+      if (len < 2) return null;
+      if (isSofMarker(marker)) {
+        // len(2) precision(1) height(2) width(2) components(1)...
+        if (p + 7 > buf.length) return null;
+        const h = buf.readUInt16BE(p + 3);
+        const w = buf.readUInt16BE(p + 5);
+        return w > 0 && h > 0 ? { w, h } : null;
+      }
+      p += len;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Width and height of any image the paper path accepts, sniffing the format from its magic
+ * bytes: PNG (89 50 4E 47) or JPEG (FF D8). Paper photos travel as JPEG (bead 9ch), so reading
+ * only PNG headers left every photo on a guessed 640x480 sheet.
+ */
+export function parseImageDimensions(dataUrlOrBuf: string | Buffer): { w: number; h: number } | null {
+  const buf = toBuffer(dataUrlOrBuf);
+  if (!buf || buf.length < 8) return null;
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return parsePngDimensions(buf);
+  if (buf[0] === 0xff && buf[1] === 0xd8) return parseJpegDimensions(buf);
+  return null;
+}
+
 /**
  * Perspective-tolerant paper bounds detection.
- * Inspects a PNG image to locate the bright, off-white paper region against a darker background.
- * Falls back to 90% centered frame if the paper already fills the camera view or on decode failure.
+ * Reads the image's real size (PNG or JPEG) and, for a PNG, inspects the pixels to locate the
+ * bright, off-white paper region against a darker background.
+ *
+ * A JPEG photo has no pure-JS pixel decode here, so it lands on the 90% centered frame — but on
+ * the frame's *real* pixels, so the bounds, the coordinates mapped through them and the size
+ * handed to Wonder are the photo's own instead of a guessed 640x480 (bead 8gk).
  */
-export function detectPaperBounds(pngDataUrl: string): PaperBounds {
-  const dims = parsePngDimensions(pngDataUrl);
-  const w = dims?.w ?? 640;
-  const h = dims?.h ?? 480;
+export function detectPaperBounds(imageDataUrl: string): PaperBounds {
+  const dims = parseImageDimensions(imageDataUrl);
+  const w = dims?.w ?? GUESS_DIMS.w;
+  const h = dims?.h ?? GUESS_DIMS.h;
   const fallback: PaperBounds = {
     x: Math.round(w * 0.05),
     y: Math.round(h * 0.05),
@@ -107,9 +218,11 @@ export function detectPaperBounds(pngDataUrl: string): PaperBounds {
   };
 
   try {
-    const idx = pngDataUrl.indexOf("base64,");
+    const idx = imageDataUrl.indexOf("base64,");
     if (idx < 0) return fallback;
-    const buf = Buffer.from(pngDataUrl.slice(idx + 7), "base64");
+    const buf = Buffer.from(imageDataUrl.slice(idx + 7), "base64");
+    // PNG signature: only PNG chunks can be walked for a pixel decode.
+    if (buf[0] !== 0x89 || buf[1] !== 0x50 || buf[2] !== 0x4e || buf[3] !== 0x47) return fallback;
 
     // Extract IDAT chunks to decompress raw scanlines
     let offset = 8;
@@ -302,12 +415,14 @@ export function parsePaperLevelReply(
   return { level };
 }
 
-export function paperPrompt(hint = "", bounds?: PaperBounds): string {
+export function paperPrompt(hint = "", bounds?: PaperBounds, imageDims?: { w: number; h: number }): string {
   const lines: string[] = [
     "The player held up or uploaded a photograph of a hand-drawn level sketch on paper.",
   ];
   if (bounds) {
-    lines.push(`Detected paper sheet bounds in the photo: x=${bounds.x}, y=${bounds.y}, w=${bounds.w}, h=${bounds.h}.`);
+    // The photo's own size, so the sheet bounds read as pixels of a known frame.
+    const frame = imageDims ? ` (${imageDims.w}x${imageDims.h} px)` : "";
+    lines.push(`Detected paper sheet bounds in the photo${frame}: x=${bounds.x}, y=${bounds.y}, w=${bounds.w}, h=${bounds.h}.`);
   }
   if (hint.trim()) {
     lines.push(`The player named or described it: "${hint.trim().slice(0, 200)}"`);
@@ -319,8 +434,12 @@ export function paperPrompt(hint = "", bounds?: PaperBounds): string {
 }
 
 export interface PaperDeps {
-  /** One multimodal Wonder call: sends the photographed drawing. */
-  ask: (messages: ChatMessage[]) => Promise<string>;
+  /**
+   * One multimodal Wonder call: sends the photographed drawing, plus an abort signal that
+   * fires when the call has used its time (ADR 0054). A dependency that ignores the signal
+   * is still bounded: the caller races it against the deadline.
+   */
+  ask: (messages: ChatMessage[], signal?: AbortSignal) => Promise<string>;
   /** Compile, verify and hot-load the generated mod source. */
   deliver: (source: string) => Promise<{ ok: boolean; errors: string[] }>;
   say: (text: string) => void;
@@ -332,17 +451,28 @@ export interface PaperDeps {
  * Run the complete paper-to-level pipeline:
  * 1. Validate image data URL.
  * 2. Detect paper bounds.
- * 3. Multimodal Wonder reads the photo.
+ * 3. Multimodal Wonder reads the photo (bounded, ADR 0054).
  * 4. Parse & map coordinates to the stage.
- * 5. Stroke-free fallback = ask the player to retake if unreadable.
+ * 5. Fallback: a retake request, sent immediately rather than after a watchdog.
  * 6. Compile & deliver verified mod.
+ *
+ * Unlike the sketch build there are no stroke boxes on the wire here — the payload is a photo,
+ * so no deterministic geometry exists to fall back to. The bounded outcome is therefore a
+ * fast, explicit retake (`stage: "failed"`) instead of a hang; see ADR 0054.
+ *
+ * `limits` overrides the time ceilings; production always uses `PAPER_LIMITS`.
  */
 export async function runPaperBuild(
   deps: PaperDeps,
   msg: { image?: unknown; prompt?: unknown },
+  limits: Partial<PaperLimits> = {},
 ): Promise<SketchResult> {
+  const L: PaperLimits = { ...PAPER_LIMITS, ...limits };
   const failed = (why: string): SketchResult => {
     deps.say(why);
+    // Always end the client's "Reading your paper level drawing..." state: without this the
+    // orb waits for a stage that never comes (bug q8x, ADR 0054).
+    deps.stage("failed", why);
     return { ok: false, title: "", source: "", usedFallback: false };
   };
 
@@ -356,36 +486,49 @@ export async function runPaperBuild(
   }
 
   const promptText = typeof msg.prompt === "string" ? msg.prompt.slice(0, 200) : "";
-  const dims = parsePngDimensions(msg.image);
+  const dims = parseImageDimensions(msg.image);
   const bounds = detectPaperBounds(msg.image);
 
   deps.stage("writing", "reading your paper drawing");
-  deps.note?.(`detected paper bounds: ${bounds.x},${bounds.y} ${bounds.w}x${bounds.h}`);
+  // Log the real photo size next to the bounds: "32,24 576x432" off a 640x480 guess was the
+  // trail that led here (bead 8gk).
+  deps.note?.(
+    `detected paper bounds: ${bounds.x},${bounds.y} ${bounds.w}x${bounds.h}` +
+      (dims ? ` in a ${dims.w}x${dims.h} image` : " (image size unknown)"),
+  );
 
   const body: ChatMessage[] = [
     { role: "system", content: PAPER_SYSTEM },
     {
       role: "user",
       content: [
-        { type: "text", text: paperPrompt(promptText, bounds) },
+        { type: "text", text: paperPrompt(promptText, bounds, dims ?? undefined) },
         { type: "image_url", image_url: { url: msg.image } },
       ],
     },
   ];
 
+  const started = Date.now();
+  const readUntil = started + L.readBudgetMs;
   let level: SketchLevel | undefined;
   let error = "";
 
   for (let attempt = 0; attempt < 2 && !level; attempt++) {
-    try {
-      const text = await deps.ask(body);
-      const parsed = parsePaperLevelReply(text, bounds, dims ?? undefined);
+    const left = readUntil - Date.now();
+    // A try that cannot finish inside the budget is a try that keeps the player waiting.
+    if (left < (attempt === 0 ? Math.min(1_000, L.readBudgetMs / 4) : L.retryMinMs)) {
+      error = error || "the model was too slow to answer";
+      break;
+    }
+    const outcome = await askWithin(deps, body, Math.min(L.askTimeoutMs, left));
+    if (typeof outcome.text === "string") {
+      const parsed = parsePaperLevelReply(outcome.text, bounds, dims ?? undefined);
       if (parsed.level) level = parsed.level;
       else error = parsed.error ?? "could not read level";
-    } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+    } else {
+      error = outcome.error ?? "the model did not answer";
     }
-    if (!level && attempt === 0) {
+    if (!level && attempt === 0 && readUntil - Date.now() >= L.retryMinMs) {
       deps.note?.(`first paper reply unusable (${error}), asking once more`);
       body.push({ role: "assistant", content: "(my last reply was not usable)" });
       body.push({
@@ -395,11 +538,10 @@ export async function runPaperBuild(
     }
   }
 
-  // Stroke-free fallback: ask to retake
+  // No stroke boxes to fall back on: the honest, instant outcome is a retake.
   if (!level || isEmptyLevel(level)) {
-    return failed(
-      "I couldn't spot a clear level drawing on that paper. Draw with a darker pen or thicker lines, hold it steady, and try taking the photo again.",
-    );
+    if (error) deps.note?.(`no usable paper level (${error})`);
+    return failed(PAPER_RETAKE);
   }
 
   deps.stage("compiling", "building your paper level");
@@ -407,8 +549,11 @@ export async function runPaperBuild(
   let built = await deps.deliver(source);
 
   if (!built.ok) {
-    deps.stage("fixing", "fixing the paper level");
-    try {
+    const fixLeft = L.totalBudgetMs - (Date.now() - started);
+    if (fixLeft < 2_000) {
+      deps.note?.("skipping the paper fix round: no time left in the build budget");
+    } else {
+      deps.stage("fixing", "fixing the paper level");
       const fixBody: ChatMessage[] = [
         { role: "system", content: PAPER_SYSTEM },
         {
@@ -416,16 +561,20 @@ export async function runPaperBuild(
           content: `This level spec failed verification:\n${JSON.stringify(level)}\nfailures:\n- ${built.errors.slice(0, 300).join("\n- ")}\nReply with a corrected JSON level object only.`,
         },
       ];
-      const text = await deps.ask(fixBody);
-      const parsed = parsePaperLevelReply(text, bounds, dims ?? undefined);
-      if (parsed.level) {
-        level = parsed.level;
-        source = levelToModSource(level);
-        deps.stage("compiling", "recompiling the fixed paper level");
-        built = await deps.deliver(source);
+      const outcome = await askWithin(deps, fixBody, Math.min(L.fixTimeoutMs, fixLeft));
+      if (typeof outcome.text === "string") {
+        const parsed = parsePaperLevelReply(outcome.text, bounds, dims ?? undefined);
+        if (parsed.level) {
+          level = parsed.level;
+          source = levelToModSource(level);
+          deps.stage("compiling", "recompiling the fixed paper level");
+          built = await deps.deliver(source);
+        } else {
+          deps.note?.(`paper fix round failed: ${parsed.error ?? "unusable reply"}`);
+        }
+      } else {
+        deps.note?.(`paper fix round failed: ${outcome.error ?? "no answer"}`);
       }
-    } catch (err) {
-      deps.note?.(`paper fix round failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

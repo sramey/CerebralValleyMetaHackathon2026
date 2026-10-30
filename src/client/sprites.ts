@@ -1,5 +1,6 @@
 import { Texture } from "pixi.js";
 import { canUseSpriteSheet } from "../ontology";
+import { loadAll } from "./art-late";
 
 // Loads an AI sprite sheet (flat magenta background), chroma-keys it, splits
 // it into frames by empty columns, trims each frame, and returns Pixi textures
@@ -9,12 +10,15 @@ function isMagenta(r: number, g: number, b: number): boolean {
   return r > 180 && g < 110 && b > 180;
 }
 
-export async function loadSubjects(map: Record<string, string>): Promise<Record<string, Texture[]>> {
-  const out: Record<string, Texture[]> = {};
-  for (const [subject, url] of Object.entries(map)) {
-    out[subject] = await loadSpriteSheet(url);
-  }
-  return out;
+/**
+ * Every sheet at once (bead 8zu): loaded in sequence, one stalled sheet held up the others.
+ * `load` is injectable so the concurrency rule is testable without a DOM.
+ */
+export async function loadSubjects(
+  map: Record<string, string>,
+  load: (url: string) => Promise<Texture[]> = loadSpriteSheet,
+): Promise<Record<string, Texture[]>> {
+  return loadAll(map, load);
 }
 
 export const PROJECTILE_PATTERN = /bullet|shot|projectile|arrow|fireball|laser|bolt|pellet|plasma/i;
@@ -32,11 +36,15 @@ export function framesFor(
   if (!canUseSpriteSheet(entityType)) return [];
   const lower = entityType.toLowerCase();
   if (isProjectileType(lower)) return [];
+  // A flying sheet is keyed "<base>-fly" (ADR 0053): match on the base, and prefer the longest
+  // matching key so "cat-fly" wins over a cached walking "cat" for the same subject.
+  let best: string | undefined;
   for (const key of Object.keys(framesBySubject).sort()) {
     if (!canUseSpriteSheet(key)) continue;
-    if (lower.includes(key.toLowerCase())) return framesBySubject[key];
+    const base = key.toLowerCase().replace(/-fly$/, "");
+    if (lower.includes(base) && (best === undefined || key.length > best.length)) best = key;
   }
-  return [];
+  return best === undefined ? [] : framesBySubject[best];
 }
 
 export function computePrimaries(

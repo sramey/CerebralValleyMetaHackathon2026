@@ -111,7 +111,7 @@ describe("runAgent (native tool-calling loop)", () => {
     expect(seen[1].messages.at(-1).content).toContain("kaput");
   });
 
-  it("prefetch runs a tool before the first turn, so the model starts already holding its result (ADR 0054)", async () => {
+  it("prefetch runs a tool before the first turn, so the model starts already holding its result (ADR 0058)", async () => {
     const bodies: any[] = [];
     const steps: any[] = [];
     const replies = [call("run_playtest", { source: "export default { v: 2 }" }, "c9")];

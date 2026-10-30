@@ -91,9 +91,9 @@ export function artUrlForKey(key: string): string {
   return `/art/gen/${key}.webp`;
 }
 
-export function artCachedUrl(keyRaw: string): string | null {
+export function artCachedUrl(keyRaw: string, variant?: string): string | null {
   try {
-    const key = artKeyForType(keyRaw);
+    const key = artKeyForType(keyRaw, variant);
     if (!key) {
       clearCachedArt(keyRaw);
       return null;
@@ -113,15 +113,36 @@ export function artCachedUrl(keyRaw: string): string | null {
 }
 
 /**
+ * True when the request (or the entity type) is about something that flies, so the sheet
+ * should show airborne poses instead of the walk/run cycle (ADR 0053, bead 2yt). Word list,
+ * not a model call: it only picks which pose prompt Muse Image gets.
+ */
+const FLYING_WORD = /\b(?:fly|flys|flies|flying|floats?|floating|hover(?:s|ed|ing)?|soar(?:s|ed|ing)?|glide|glides|gliding|winged?|wings|airborne)\b/i;
+const FLYING_TYPE = /\b(?:bird|bat|dragon|fairy|angel|bee|butterfly|moth|drone|ufo|rocket|spaceship|space-ship|jet|plane|blimp|zeppelin|helicopter|hawk|eagle|owl|crow|raven|pigeon|phoenix|griffin|wyvern|wisp)\b/i;
+
+export function isFlyingRequest(text: string, type = ""): boolean {
+  // "a slime on the floating platform": a floating/flying PLACE says where it stands, not that it flies.
+  const own = text.replace(/\b(?:floating|flying|hovering|sky)\s+(?:platforms?|islands?|blocks?|ledges?|steps?|stairs?|bridges?|rocks?)\b/gi, " ");
+  if (FLYING_WORD.test(own)) return true;
+  return FLYING_TYPE.test(type.replace(/[-_]+/g, " "));
+}
+
+/**
  * The sprite-sheet prompt for one subject, exactly as Muse Image receives it (the kid-safe screen
  * reads this string too, so it can be screened without spending an image call — bead 82z).
  */
-export function spritePrompt(cleanSubject: string, form: { held: boolean; scenery: boolean }): string {
+export function spritePrompt(cleanSubject: string, form: { held: boolean; scenery: boolean; flying?: boolean }): string {
   if (form.held) {
     return `Pixel art game held item icon sheet containing ONLY the isolated object ${cleanSubject} by itself (side view, pointing right): exactly 4 variants of that single item in one row, nothing else in the image, no landscape, no ground, no sky. ONLY the standalone weapon or item itself — NO character, NO person, NO warrior, NO ninja, NO hands holding it, NO body, NO head, NO face, NO eyes, NO arms, NO legs, NO animation poses. Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, variants far apart with wide empty magenta gaps between them, variants must NOT touch or overlap each other`;
   }
   if (form.scenery) {
     return `Pixel art game scenery sprite sheet containing ONLY ${cleanSubject}: exactly 4 variants of that single object in one row, nothing else in the image, no landscape, no ground, no sky, no other objects or props. Each variant is the same object with a slightly different shape or size. NOT a character, no face, no eyes, no mouth, no arms, no legs, no animation poses. Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, variants far apart with wide empty magenta gaps between them, bottoms aligned on the same baseline, variants must NOT touch or overlap each other`;
+  }
+  if (form.flying) {
+    return `Pixel art game sprite sheet of ${cleanSubject} in flight, side view, AIRBORNE: ` +
+      `4 poses in a row: hovering, gliding, flying, diving. The ${cleanSubject} is off the ground in every pose — ` +
+      `feet and paws lifted, wings or arms spread, cape or tail streaming behind it, nothing underneath to stand on, no ground line, no shadow, no landscape, no sky. ` +
+      `Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
   }
   return `Pixel art game sprite sheet of ${cleanSubject}, side view, 4 poses in a row: ` +
     `idle, running, running, jumping. Flat solid magenta background (#FF00FF), ` +
@@ -132,9 +153,11 @@ export function spritePrompt(cleanSubject: string, form: { held: boolean; scener
  * Generate sprite-sheet art for a subject, or reuse the cached file.
  * Returns the public URL, or null on any failure. Never throws.
  */
-export async function generateSubjectArt(subject: string, keyRaw: string, scenery = false): Promise<string | null> {
+export async function generateSubjectArt(subject: string, keyRaw: string, scenery = false, flying = false): Promise<string | null> {
   try {
-    const key = artKeyForType(keyRaw);
+    // A flying subject gets its own sheet ("cat-fly"), so a cached walking cat can never
+    // stand in for a flying one (ADR 0053).
+    const key = artKeyForType(keyRaw, flying && !scenery ? "fly" : undefined);
     if (!key) {
       clearCachedArt(keyRaw);
       return null;
@@ -155,7 +178,7 @@ export async function generateSubjectArt(subject: string, keyRaw: string, scener
     const plan = artPlanFor(key);
     const heldItem = isHeldItemType(cleanSubject) || plan === "held-item";
     const effectiveScenery = scenery || heldItem || plan === "scenery" || isScenerySubject(cleanSubject);
-    const prompt = spritePrompt(cleanSubject, { held: heldItem, scenery: effectiveScenery });
+    const prompt = spritePrompt(cleanSubject, { held: heldItem, scenery: effectiveScenery, flying: flying && !heldItem && !effectiveScenery });
     const t0 = performance.now();
     // Image prompts take the same kid-safe screen (ADR 0044): a declined subject simply gets
     // no AI art, and the mod still loads with its code-drawn shape.
@@ -245,12 +268,14 @@ export function deriveSubject(command: string, fallbackType: string): string {
  * (e.g. "snow-ground", "brick-wall", "boss-bullet", "christmas-light", "christmas-star")
  * NEVER produce a sprite key.
  */
-export function artKeyForType(type: string): string {
+export function artKeyForType(type: string, variant?: string): string {
   const lower = type.toLowerCase().trim();
   if (!lower || isSkippedType(lower)) return "";
   const parts = lower.split("-").filter(Boolean);
   const base = parts.length > 1 ? (parts[parts.length - 1] ?? lower) : lower;
   const key = sanitizeArtKey(base || lower);
   if (!key || isSkippedType(key)) return "";
-  return key;
+  // A pose variant (e.g. "fly") gets its own sheet, so a cached walking cat never stands in
+  // for a flying one (ADR 0053).
+  return variant ? sanitizeArtKey(`${key}-${variant}`) : key;
 }

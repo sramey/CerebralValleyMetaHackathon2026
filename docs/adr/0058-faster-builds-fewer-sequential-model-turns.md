@@ -1,4 +1,4 @@
-# 0054 — Faster builds: fewer sequential model turns
+# 0058 — Faster builds: fewer sequential model turns
 
 - **Status:** Draft
 - **Date:** 2026-10-30
@@ -31,18 +31,18 @@ at the same time as another one:
    clamped to its min/max. If nothing matches, or the knob is already at its limit, the router's
    route stands. Size words ("huge", "giant") are deliberately not matched, so the
    rejected-then-fixed "make me huge" beat is unchanged.
-2. **Split alongside the router.** For a compound-shaped command, `handleCommand` starts the
-   router call and the split call together. Two or more items build in parallel as before (the
-   router reply is dropped). One item goes straight to `handleSingle` with the router call already
-   in flight.
+2. **Split alongside the router.** For a command that might be compound (`mightBeCompound`,
+   ADR 0053), `handleCommand` starts the router call and the Spark split together. Two or more
+   independent parts build as ADR 0053 says (the router reply is dropped). One part goes straight
+   to `handleSingle` with the router call already in flight.
 3. **Prefetched world snapshot.** `runAgent` takes `prefetch: ["inspect_world"]`, used when the
    build edits a mod, is about the player, or uses a pronoun. The tool runs before the first model
    turn and appears in the conversation as a call the model made, with its result, so the lane
    still shows it and it still counts toward the 3-call bound. The tool rule tells Wonder not to
    call it again.
 4. **Small items.** The fix round's system prompt is now byte-identical to the write round's
-   (the "be terse" instruction moved into its user message). `MAX_PARALLEL` defaults to 4,
-   matching the split's 4-item cap, so a 4th item no longer queues behind the slowest build.
+   (the "be terse" instruction moved into its user message). `MAX_PARALLEL` defaults to 4 (mood
+   pairs still run in order), matching the split's 4-item cap, so a 4th item no longer queues behind the slowest build.
 
 ## Consequences
 

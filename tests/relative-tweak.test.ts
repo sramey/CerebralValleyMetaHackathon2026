@@ -4,7 +4,7 @@ import { parseRelativeAsk, relativeTweak, stemOf } from "../server/relative-twea
 const player = { speed: { value: 260, min: 80, max: 600 }, jump: { value: 720, min: 300, max: 1100 } };
 const chickens = { count: { value: 2, min: 1, max: 6, label: "Chicken count" }, speed: { value: 60, min: 20, max: 200 } };
 
-describe("relative knob asks become tweaks (ADR 0054)", () => {
+describe("relative knob asks become tweaks (ADR 0058)", () => {
   it("reads speed, jump and count asks", () => {
     expect(parseRelativeAsk("make them faster")).toMatchObject({ dim: "speed", up: true });
     expect(parseRelativeAsk("Make the enemies a lot slower!")).toMatchObject({ dim: "speed", up: false, strength: 2 });
