@@ -3,6 +3,7 @@
 // should ask for it back, and a small debounced autosave that never fires more than one save per
 // quiet moment. No DOM, no globals read at import time: `main.ts` passes the storage in.
 import { HOME_WORLD_KEY, HOME_WORLD_PREFIX, isHomeWorldId } from "../contract";
+import type { ClientMsg, KnobValue } from "../contract";
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -105,6 +106,23 @@ export function resumeSlotId(args: { slot: HomeSlot; worldParam: string | null; 
   if (args.worldParam) return null;
   if (args.slot.created) return null;
   return isHomeWorldId(args.slot.id) ? args.slot.id : null;
+}
+
+/**
+ * What a reconnect sends so the server can adopt its own autosave file back into the session
+ * (ADR 0072), or null when there is nothing to say. Only a page that is *showing* its own autosaved
+ * world may ask: a world opened from a share link or a demo has its own mod ids, and mixing the
+ * browser's previous file into it would hand the server code the player is not looking at. A page
+ * with nothing loaded has nothing to adopt.
+ */
+export function adoptFrame(args: {
+  worldIsHome: boolean;
+  slot: string;
+  mods: { id: string; values: Record<string, KnobValue> }[];
+}): Extract<ClientMsg, { kind: "worldAdopt" }> | null {
+  if (!args.worldIsHome) return null;
+  if (args.mods.length === 0) return null;
+  return { kind: "worldAdopt", id: args.slot, mods: args.mods };
 }
 
 export interface Autosave {

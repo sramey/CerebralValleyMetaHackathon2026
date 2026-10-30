@@ -41,7 +41,7 @@ import { segmentPhoto } from "./photo";
 import { Budget, readLimits } from "./budget";
 import type { Kind } from "./budget";
 import { Timeline, type Snapshot } from "./timeline";
-import { isWorldId, restyledForWorld, reuseStoredMods, snapshotWorld, WorldStore } from "./worlds";
+import { isWorldId, restyledForWorld, reuseStoredMods, sessionRecOf, snapshotWorld, WorldStore } from "./worlds";
 import type { StoredWorld } from "./worlds";
 import { generateExportHtml } from "./export";
 import { createStaticHandler } from "./static";
@@ -262,7 +262,7 @@ function handleTimelineRestore(ws: WebSocket, n: number): void {
   if (!step) { send(ws, { kind: "say", text: "That step is no longer in the timeline." }); return; }
   s.manifest.clear();
   for (const m of step.mods) {
-    if (m.builtin !== true) s.manifest.set(m.id, { id: m.id, title: m.title, source: m.source, compiled: m.compiled, knobs: structuredClone(m.knobs), ...(sheetsOf(m).length > 0 ? { art: sheetsOf(m)[0], arts: sheetsOf(m) } : {}), ...(m.skinArt ? { skinArt: m.skinArt } : {}), ...(m.look ? { look: m.look } : {}) });
+    if (m.builtin !== true) s.manifest.set(m.id, sessionRecOf(m));
   }
   s.mood = step.mood;
   s.moodMods = step.mood ? new Set(s.manifest.keys()) : undefined;
@@ -1321,7 +1321,7 @@ function applyStoredWorld(ws: WebSocket, w: StoredWorld, resumed: boolean): void
   const manifest = s.manifest;
   manifest.clear();
   for (const m of w.mods) {
-    if (m.builtin !== true) manifest.set(m.id, { id: m.id, title: m.title, source: m.source, compiled: m.compiled, knobs: structuredClone(m.knobs), ...(sheetsOf(m).length > 0 ? { art: sheetsOf(m)[0], arts: sheetsOf(m) } : {}), ...(m.skinArt ? { skinArt: m.skinArt } : {}), ...(m.look ? { look: m.look } : {}) });
+    if (m.builtin !== true) manifest.set(m.id, sessionRecOf(m));
   }
   s.mood = w.mood;
   s.moodMods = w.mood ? new Set(manifest.keys()) : undefined;
@@ -1348,6 +1348,17 @@ function handleWorldResume(ws: WebSocket, msg: Extract<ClientMsg, { kind: "world
   if (!w || w.mods.length === 0) { send(ws, { kind: "worldMissing", id: msg.id }); return; }
   applyStoredWorld(ws, w, true);
   console.log(`[autosave] resumed ${msg.id} (${w.mods.length} mods)`);
+}
+
+/**
+ * A reconnect kept the world on screen but this process's session is new (a restarted server, or any
+ * dropped socket: sessions are per socket), so edits, undo and knobs had nothing to act on (ADR 0072).
+ * Adopt the browser's own slot file back into the session, silently: no `world` frame goes back, so
+ * the client's world is never re-rendered or reset, and the page keeps playing.
+ */
+function handleWorldAdopt(ws: WebSocket, msg: Extract<ClientMsg, { kind: "worldAdopt" }>): void {
+  const gained = worlds.adoptSlot(msg.id, msg.mods, sess(ws).manifest);
+  if (gained.length > 0) console.log(`[reconnect] adopted ${gained.length} mod(s) from ${msg.id}`);
 }
 
 /** "How does this work?" (ADR 0043): explain one loaded mod's code in plain words, from the
@@ -1453,6 +1464,7 @@ function dispatchClientMsg(ws: WebSocket, msg: ClientMsg): void {
   } else if (msg.kind === "worldSave") handleWorldSave(ws, msg);
   else if (msg.kind === "worldLoad") handleWorldLoad(ws, msg);
   else if (msg.kind === "worldResume") handleWorldResume(ws, msg);
+  else if (msg.kind === "worldAdopt") handleWorldAdopt(ws, msg);
   else if (msg.kind === "worldExport") handleWorldExport(ws, msg);
   else if (msg.kind === "feedback") {
     handleFeedback(ws, msg).catch((err) => {

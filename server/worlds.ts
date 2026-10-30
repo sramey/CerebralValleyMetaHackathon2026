@@ -9,6 +9,7 @@ import { HOME_WORLD_PREFIX, isHomeWorldId, sheetsOf } from "../src/contract";
 import type { ArtSheet, DemoWorld, KnobDefs, Look, KnobValue, KnobValues, MoodSpec, WorldMod } from "../src/contract";
 import { scrubWorld } from "./hygiene";
 import { moodKey, parseBackdrop, restyledUrl } from "./mood";
+import { clampKnobValue } from "./validate";
 
 export const MAX_WORLD_MODS = 40;
 export const MAX_WORLD_BYTES = 600_000;
@@ -206,6 +207,58 @@ export function reuseStoredMods(
   return out;
 }
 
+/**
+ * The mods a reconnecting session adopts from its own slot file (ADR 0072): the ones the page still
+ * has loaded, that this session does not already know, with the client's own knob values laid over
+ * the file's. A restarted server (or any reconnect: sessions are per socket) holds no manifest for
+ * the world on screen, so without this an edit, an undo or a knob change fails until the page is
+ * reloaded. Ids the session already holds are never touched (a build made after the reconnect wins),
+ * an id the file does not have is not invented, and built-ins are left to `adoptBuiltins`.
+ */
+export function adoptStoredMods(
+  requested: readonly { id: string; values?: KnobValues }[],
+  manifest: ReadonlyMap<string, SessionMod>,
+  previous: StoredWorld | null,
+): Extract<WorldMod, { builtin?: false }>[] {
+  if (!previous) return [];
+  const stored = new Map(previous.mods.map((m) => [m.id, m]));
+  const out: Extract<WorldMod, { builtin?: false }>[] = [];
+  const seen = new Set<string>();
+  for (const r of requested) {
+    if (!r || typeof r.id !== "string" || seen.has(r.id) || manifest.has(r.id)) continue;
+    seen.add(r.id);
+    const kept = stored.get(r.id);
+    if (!kept || kept.builtin === true) continue;
+    out.push({ ...kept, values: { ...kept.values, ...sanitizeValues(r.values) } });
+  }
+  return out;
+}
+
+/**
+ * A stored world mod as the session record the server needs to edit, undo and tweak it again.
+ * Knob values from the mod (and any the client reported on top) become each knob's current value,
+ * clamped exactly like a live knob message, so a re-adopted mod keeps the size the player chose
+ * instead of snapping back to the mod's default on the next autosave.
+ */
+export function sessionRecOf(m: Extract<WorldMod, { builtin?: false }>, overrides?: KnobValues): SessionMod {
+  const knobs = structuredClone(m.knobs ?? {});
+  for (const [k, v] of Object.entries({ ...m.values, ...sanitizeValues(overrides) })) {
+    const def = Object.prototype.hasOwnProperty.call(knobs, k) ? knobs[k] : undefined;
+    if (def) knobs[k] = { ...def, value: clampKnobValue(def, v) };
+  }
+  const sheets = sheetsOf(m);
+  return {
+    id: m.id,
+    title: m.title,
+    source: m.source,
+    compiled: m.compiled,
+    knobs,
+    ...(sheets.length > 0 ? { art: sheets[0], arts: sheets } : {}),
+    ...(m.skinArt ? { skinArt: m.skinArt } : {}),
+    ...(m.look ? { look: m.look } : {}),
+  };
+}
+
 /** Defensive parse of a stored file (a hand-edited or truncated file must not crash the server). */export function parseWorld(text: string): StoredWorld | null {
   try {
     const w = JSON.parse(text) as Partial<StoredWorld>;
@@ -304,6 +357,29 @@ export class WorldStore {
       }
     }
     return null;
+  }
+
+  /**
+   * Adopt this browser's own slot back into a session that has just reconnected (ADR 0072). The page
+   * kept its world in memory across a dropped socket or a server restart, but sessions are per socket,
+   * so a fresh session knows none of those mods and "edit it", undo and the knobs would all fail until
+   * a reload. Only ids the client still lists are adopted, only out of this server's own stored file,
+   * and only when the session does not already know that id. Returns the records the session gained;
+   * nothing is written and nothing is sent to the client.
+   */
+  adoptSlot(
+    slot: string,
+    requested: readonly { id: string; values?: KnobValues }[],
+    manifest: Map<string, SessionMod>,
+  ): SessionMod[] {
+    if (!isHomeWorldId(slot)) return [];
+    const gained: SessionMod[] = [];
+    for (const m of adoptStoredMods(requested, manifest, this.get(slot))) {
+      const rec = sessionRecOf(m);
+      manifest.set(rec.id, rec);
+      gained.push(rec);
+    }
+    return gained;
   }
 
   demos(): DemoWorld[] {

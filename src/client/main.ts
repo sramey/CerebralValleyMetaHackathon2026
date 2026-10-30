@@ -61,7 +61,7 @@ import parallaxMod from "../mods/parallax";
 import basketballMod from "../mods/basketball";
 import swarmMod from "../mods/swarm";
 import { resolveItemMod, gunMod } from "./items";
-import { browserStorage, createAutosave, homeSlot, nextHomeSlot, resumeSlotId } from "./home-world";
+import { adoptFrame, browserStorage, createAutosave, homeSlot, nextHomeSlot, resumeSlotId } from "./home-world";
 import { parseUrlFlags, shareIssueMessage, urlWithoutWorld } from "./url-flags";
 import type { ShareIssue } from "./url-flags";
 
@@ -2071,6 +2071,12 @@ const home = homeSlot(homeStorage);
 const resumeOf = resumeSlotId({ slot: home, worldParam, shareIssue: urlFlags.shareIssue !== null });
 let resumeAsked = false;
 let resumeFallbackTimer = 0;
+/**
+ * True once the world on screen is the one this browser has autosaved (ADR 0072): it was resumed from
+ * the home slot, or it has been written to it since. Only then may a reconnect ask the server to adopt
+ * that file, so a world opened from a share link is never mixed with the browser's own old one.
+ */
+let worldIsHome = false;
 
 function worldList(): { id: string; values: Record<string, KnobValue> }[] {
   return loader.list().map((m) => ({ id: m.id, values: m.values }));
@@ -2080,6 +2086,7 @@ const autosave = createAutosave({
   send: () => {
     if (ws?.readyState !== WebSocket.OPEN) return;
     send({ kind: "worldSave", mods: worldList(), slot: home.id });
+    worldIsHome = true; // this world now is the browser's own: a reconnect may adopt it (ADR 0072)
   },
 });
 /** Something in the world changed: one save once it goes quiet (a compound command lands in bursts). */
@@ -2117,6 +2124,11 @@ async function applyWorld(msg: Extract<ServerMsg, { kind: "world" }>): Promise<v
   // A whole new world supersedes any step this client guessed locally (bug bv4); the server's own
   // timeline frame (a restore) or a fresh session (a link) is the truth from here.
   timelineView.clearLocal();
+  // Resumed from this browser's own slot = the page now shows the home world. A link or a demo is
+  // not, until its next autosave copies it into that slot (ADR 0070). A timeline restore (no id)
+  // leaves the page on the world it was already building, so it does not change the answer.
+  if (msg.resumed === true) worldIsHome = true;
+  else if (msg.id) worldIsHome = false;
   applyMood(msg.mood ?? null);
   for (const m of loader.list()) loader.unload(m.id);
   let loaded = 0;
@@ -2235,7 +2247,14 @@ function connect(): void {
       resumeAsked = true;
       say("Getting your world back…", "building");
       send({ kind: "worldResume", id: resumeOf });
-    } else sendWorldState();
+    } else {
+      sendWorldState();
+      // This connection is a reconnect of a page that still shows its world (a server restart, a
+      // dropped socket). The new session has no manifest for it, so ask the server to adopt its own
+      // autosave file: edits, undo and knobs keep working, and the world is not reloaded (ADR 0072).
+      const adopt = adoptFrame({ worldIsHome, slot: home.id, mods: worldList() });
+      if (adopt) send(adopt);
+    }
     if (worldParam && !worldRequested) {
       worldRequested = true;
       say("Opening the world from that link…");
