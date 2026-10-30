@@ -39,9 +39,9 @@ export function currentLevelParams(knobs: KnobDefs | undefined): Partial<LevelPa
 /** Describe what was built in the voice of the game. */
 export function levelSay(p: LevelParams, stats: { gaps: number; hazards: number; enemies: number; platforms: number }, mode: "built" | "changed"): string {
   const feel = ["a gentle", "an easy", "a medium", "a tough", "a brutal"][p.difficulty - 1];
-  const metres = Math.round(p.length / 100);
+  const screens = Math.max(1, Math.round(p.length / 1200));
   const bits = [`${stats.gaps} pits to jump`, `${stats.platforms} ledges and blocks at different heights`, `${stats.hazards} hazards`, `${stats.enemies} enemies`];
-  return `${mode === "built" ? "Built" : "Rebuilt"} ${feel} level, about ${metres} screens of running to the flag: ${bits.join(", ")}. Say "make it harder", "extend the level" or "make a new level" to change it.`;
+  return `${mode === "built" ? "Built" : "Rebuilt"} ${feel} level, about ${screens} screens of running to the flag: ${bits.join(", ")}. Say "make it harder", "extend the level" or "make a new level" to change it.`;
 }
 
 /** The mod. Plain source so it is saved, shared, exported and shown in the receipt like any other mod. */
