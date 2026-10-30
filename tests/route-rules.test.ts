@@ -99,6 +99,24 @@ describe("resolveRoute keeps the guards it replaced, in order", () => {
       .toEqual({ action: "order", target: "enemies", order: "stay" });
   });
 
+
+  it("coerces visual: shape to prop or creature when ontology dictates art", () => {
+    // Asteroid is an ontological prop
+    const r1 = resolveRoute({ action: "new", visual: "shape", shape: "block" }, ctx("add some asteroids I can shoot"));
+    expect(r1.route?.visual).toBe("prop");
+    expect(r1.route?.shape).toBeUndefined();
+    expect(r1.rules.some((rule) => rule.includes("visual-ontology"))).toBe(true);
+
+    // Dragon is an ontological creature
+    const r2 = resolveRoute({ action: "new", visual: "shape", shape: "circle" }, ctx("add a flying dragon"));
+    expect(r2.route?.visual).toBe("creature");
+    expect(r2.route?.shape).toBeUndefined();
+
+    // Plain ball stays a shape
+    const r3 = resolveRoute({ action: "new", visual: "shape", shape: "circle" }, ctx("add a bouncing ball"));
+    expect(r3.route?.visual).toBe("shape");
+    expect(r3.route?.shape).toBe("circle");
+  });
   it("an unchanged route reports no rules", () => {
     expect(resolveRoute({ action: "new", visual: "creature" }, ctx("a sleepy owl"))).toEqual({ route: { action: "new", visual: "creature" }, rules: [] });
   });
