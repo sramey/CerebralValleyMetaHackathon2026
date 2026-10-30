@@ -8,6 +8,7 @@ import { landingVelocity } from "./bounce";
 import { collectPickups } from "./collect";
 import { canInteract, interactLabel, isOrderable, orderAck, ORDER_TICKS, steerByOrder } from "./interact";
 import { touches } from "./reach";
+import { mountGear, wearerOf } from "./sockets";
 
 type TickHandler = (dt: number) => void;
 type EventListener = (ev: ModEvent) => void;
@@ -525,33 +526,19 @@ export class World {
     // Post-step 1: Rigid player equipment / weapon mounting (bead qwc). An item flagged held
     // always mounts; one that is merely named like gear mounts unless it says it is not the
     // player's (a pickup still lying in the level, another creature's weapon) (ADR 0057).
-    if (player) {
-      for (const e of this.entities) {
-        if (e === player) continue;
-        const isHeld = e.data.heldByPlayer === true || e.data.equipped === true || e.data.attachedTo === "player";
-        const t = traitsOf(e.type);
-        if (isHeld || (t.equipment && !notPlayersGear(e))) {
-          e.facing = player.facing;
-          const socket = e.data.socket || t.socket;
-          if (socket === "back") {
-            const ox = typeof e.data.offsetX === "number" ? e.data.offsetX : 8;
-            const oy = typeof e.data.offsetY === "number" ? e.data.offsetY : 6;
-            e.x = player.facing >= 0 ? player.x - e.w + ox : player.x + player.w - ox;
-            e.y = player.y + oy;
-          } else if (socket === "head") {
-            e.x = player.x + (player.w - e.w) / 2;
-            e.y = player.y - e.h + 2;
-          } else {
-            // Hand socket: held in front at chest/waist height (player.h * 0.45)
-            const ox = typeof e.data.offsetX === "number" ? e.data.offsetX : 4;
-            const oy = typeof e.data.offsetY === "number" ? e.data.offsetY : Math.round(player.h * 0.45);
-            e.x = player.facing >= 0 ? player.x + player.w - ox : player.x - e.w + ox;
-            e.y = player.y + oy;
-          }
-          e.vx = player.vx;
-          e.vy = player.vy;
-        }
+    // Sockets sit on the drawn body (ADR 0061): src/sim/sockets.ts. Gear may also be attached to
+    // any entity (data.attachedTo = id or creature type), so a dragon can wear a hat.
+    for (const e of this.entities) {
+      if (e === player) continue;
+      const a = e.data.attachedTo;
+      if (a !== undefined && a !== "player" && (typeof a === "number" || typeof a === "string")) {
+        const wearer = wearerOf(e, this.entities, player);
+        if (wearer && e.data.pickup !== true) mountGear(e, wearer);
+        continue;
       }
+      if (!player) continue;
+      const isHeld = e.data.heldByPlayer === true || e.data.equipped === true || a === "player";
+      if (isHeld || (traitsOf(e.type).equipment && !notPlayersGear(e))) mountGear(e, player);
     }
 
     // Post-step 2: Universal projectile collision & enemy combat (bead 578). A projectile a mod
@@ -630,7 +617,7 @@ function retire(e: Entity): void {
 }
 
 /** What an entity's type name alone says about it. Cached per type: the step asks every tick. */
-interface TypeTraits { scenery: boolean; equipment: boolean; socket: "back" | "head" | "hand"; projectile: boolean; tether: boolean; enemyName: boolean }
+interface TypeTraits { scenery: boolean; equipment: boolean; projectile: boolean; tether: boolean; enemyName: boolean }
 const traitCache = new Map<string, TypeTraits>();
 function traitsOf(type: string): TypeTraits {
   let t = traitCache.get(type);
@@ -638,7 +625,6 @@ function traitsOf(type: string): TypeTraits {
     t = {
       scenery: /^(cloud|sky|day-sky|night-sky|background|parallax)/i.test(type),
       equipment: /^(gun|blaster|sword|jetpack|backpack|shield|weapon|bow|wand|dagger|spear|axe|hat|crown|helmet|cape)$/i.test(type),
-      socket: /^(jetpack|backpack|cape)$/i.test(type) ? "back" : /^(hat|crown|helmet)$/i.test(type) ? "head" : "hand",
       projectile: /^(bullet|projectile|laser|arrow|fireball|plasma|shot)$/i.test(type),
       tether: /hook|grappl|tether/i.test(type),
       enemyName: /^(enemy|walker|turtle|boss|monster|zombie|goblin|slime|spider|bat|skeleton|demon|orc)$/i.test(type),

@@ -1,3 +1,4 @@
+import { visualBox } from "../src/sim/sockets";
 import { touches } from "../src/sim/reach";
 import { describe, expect, it } from "vitest";
 import { World } from "../src/sim/world";
@@ -323,7 +324,8 @@ describe("hand cannon weapon mod (gunMod)", () => {
     world.step();
     expect(jetpack.facing).toBe(1);
     expect(gun.facing).toBe(1);
-    expect(gun.y).toBe(p.y + Math.round(p.h * 0.45)); // hand height, not leg
+    const box = visualBox(p);
+    expect(gun.y + gun.h / 2).toBeCloseTo(box.bottom - box.h * 0.55, 5); // hand height of the DRAWN body, not leg (ADR 0061)
 
     // Turn player left:
     p.facing = -1;

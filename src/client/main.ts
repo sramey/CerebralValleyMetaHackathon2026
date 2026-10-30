@@ -16,6 +16,7 @@ import { Sound, buildSfx } from "./sound";
 import { createTester } from "./tester";
 import { createOnboarding, createSoundButton, plainBuildMessage } from "./onboard";
 import { Portal } from "./portal";
+import { visualHeight } from "../sim/sockets";
 import { drawCliff, drawHoop, drawShape, drawTetherGear, isCliff, isTetherGear, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
 import { celestialPos, computeDesiredCamY, depthFog, drawContactShadows, drawDistantMountains, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
 import { drawScenery } from "./scenery";
@@ -616,7 +617,7 @@ const scaleOverride = new Map<number, number>();
 function visualHeightOf(e: Entity): number {
   const frames = framesFor(framesBySubject, e.type, e.type === "player");
   if (frames.length >= 1 && !kindOf(e.type)) {
-    return e.type === "player" ? 56 * (e.h / 34) : Math.min(630, Math.max(34, e.h * 1.5));
+    return visualHeight(e);
   }
   return e.h;
 }
