@@ -239,7 +239,42 @@ export interface ModApi {
   applySeparation?: (entities: Entity[] | readonly Entity[], options?: SwarmSeparationOptions) => void;
   /** Optional wave controller: handles multi-angle waves, paced level-up milestones, and HUD banners. ADR 0052. */
   createWaveController?: (options?: WaveControllerOptions) => WaveController;
+  /** React to what happens to your entities (ADR 0059): touch, hit, death, interact, order, signal. Delivered next tick. */
+  on?: (event: ModEventName, fn: (ev: ModEvent) => void) => void;
+  /** Show a speech bubble over an entity for `seconds` of sim time (default 3). Text is cut to 60 characters. */
+  say?: (entity: Entity, text: string, seconds?: number) => void;
+  /** Tell every other mod something happened ("boss-down", "door-open"); they get a "signal" event next tick. */
+  signal?: (name: string, value?: KnobValue) => void;
 }
+
+/** Standing orders the player can give any creature by voice, with no rebuild (ADR 0059). The engine steers
+ *  the mod's creatures after its own tick code runs: follow (stay near the player), come (walk over, then carry
+ *  on), stay (hold position), flee (back off for a few seconds), free (back to the mod's own behaviour). */
+export type CreatureOrder = "follow" | "come" | "stay" | "flee" | "free";
+export const CREATURE_ORDERS: readonly CreatureOrder[] = ["follow", "come", "stay", "flee", "free"];
+
+/** Things that happen to a mod's entities, delivered to `api.on` listeners at the start of the next tick (ADR 0059).
+ *  - "touch": the player started touching one of your entities (entity, other = the player).
+ *  - "hit": one of your entities took damage (entity, amount, by = the mod id that dealt it, or "engine").
+ *  - "death": one of your entities was destroyed by damage; entity is a copy taken just before, so x/y are still set.
+ *  - "interact": the player pressed the action key next to one of your entities that has data.interact.
+ *  - "order": the player gave one of your creatures an order (entity, order).
+ *  - "signal": another mod called api.signal(name, value) (name, value, from). */
+export type ModEventName = "touch" | "hit" | "death" | "interact" | "order" | "signal";
+export interface ModEvent {
+  type: ModEventName;
+  entity?: Entity;
+  other?: Entity;
+  amount?: number;
+  by?: string;
+  order?: CreatureOrder;
+  name?: string;
+  value?: KnobValue;
+  from?: string;
+}
+
+/** A speech bubble over an entity (ADR 0059). Pure data on the world, like HUD widgets; the client draws it. */
+export interface Speech { entityId: number; owner: string; text: string; remaining: number }
 
 export type KnobValue = number | string | boolean;
 export interface KnobDef { value: KnobValue; min?: number; max?: number; label?: string }
@@ -392,6 +427,8 @@ export type ServerMsg =
   | { kind: "mood"; mood: MoodSpec | null }
   | { kind: "restyled"; mood: string; key: string; url: string | null }
   | { kind: "tweak"; modId: string; knob: string; value: KnobValue }
+  /** A standing order for a mod's creatures, applied at once with no build (ADR 0059). modId "*" means every mod. */
+  | { kind: "order"; modId: string; order: CreatureOrder }
   | { kind: "removed"; modId: string }
   | { kind: "say"; text: string }
   | { kind: "segment"; key: string; box: { x: number; y: number; w: number; h: number } | null }

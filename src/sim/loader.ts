@@ -1,4 +1,4 @@
-import type { KnobDefs, KnobValues, ModApi, ModDefinition, TestApi } from "../contract";
+import type { CreatureOrder, KnobDefs, KnobValues, ModApi, ModDefinition, TestApi } from "../contract";
 import { emptyInput } from "../contract";
 import { checkProjectileHitAndDamage } from "./combat";
 import { touches } from "./reach";
@@ -62,6 +62,12 @@ export class ModLoader {
     return true;
   }
 
+  /** A standing order for `id`'s creatures, or every mod's for "*" (ADR 0059). Returns how many took it. */
+  order(id: string, order: CreatureOrder): number {
+    if (id !== "*" && !this.loaded.has(id)) return 0;
+    return this.world.giveOrder(id, order);
+  }
+
   list(): LoadedMod[] { return [...this.loaded.values()]; }
   has(id: string): boolean { return this.loaded.has(id); }
 }
@@ -74,7 +80,7 @@ export function modApiFor(w: World, owner: string): ModApi {
       const e = w.entities.find((en) => en.id === id);
       if (e && e.owner === owner) w.despawn(id);
     },
-    damage: (id, amt) => w.damage(id, amt),
+    damage: (id, amt) => w.damage(id, amt, owner),
     entities: () => w.entities,
     byType: (type) => w.entities.filter((e) => e.type === type),
     touches: (a, b) => touches(a, b),
@@ -100,6 +106,9 @@ export function modApiFor(w: World, owner: string): ModApi {
     spawnWaveUnit: (opts) => spawnWaveUnit(api, opts),
     applySeparation: (entities, opts) => applySwarmSeparation(entities, opts),
     createWaveController: (opts) => createWaveController(api, opts),
+    on: (event, fn) => w.on(owner, event, fn),
+    say: (e, text, seconds) => w.say(owner, e?.id, text, seconds),
+    signal: (name, value) => w.signal(owner, name, value),
   };
   return api;
 }

@@ -86,3 +86,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0056](0056-contain-crashing-and-looping-mods.md) | Contain crashing and looping mods: quarantine on throw, compile-time loop guards | Draft |
 | [0057](0057-engine-rules-gear-shots-ground-broad-phase.md) | Engine rules for gear, shots and the ground slab; a broad phase for collision | Draft |
 | [0058](0058-faster-builds-fewer-sequential-model-turns.md) | Faster builds: relative tweaks, split beside the router, prefetched world snapshot | Draft |
+| [0059](0059-living-creations-events-speech-orders-and-route-rules.md) | Living creations: mod events, speech bubbles, voice orders to any creature, route rules as a named pipeline | Draft |

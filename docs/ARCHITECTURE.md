@@ -29,7 +29,7 @@ What happens to one command, in order:
    so the API key never reaches the client. A session is kept warm so the key press starts
    transcribing at once. `server/voice.ts`, `src/client/voice.ts`,
    [ADR 0012](adr/0012-voice-hold-to-talk.md).
-2. **Router.** One short, structured call decides `new`, `tweak`, `edit`, `undo`, `mood` or
+2. **Router.** One short, structured call decides `new`, `tweak`, `edit`, `undo`, `mood`, `order` or
    `question`, and also picks the thing's visual kind so no second call is needed.
    `server/prompt.ts` (system prompt), `server/index.ts` (`handleSingle`),
    [ADR 0002](adr/0002-router-guardrails.md), [0015](adr/0015-spark-visual-kind-shapes-fx.md).
@@ -47,6 +47,13 @@ What happens to one command, in order:
    - Relative asks ("make them faster", "jump higher", "more chickens") become instant knob
      tweaks when the target mod has a matching knob, whatever the router answered.
      `server/relative-tweak.ts`, [ADR 0058](adr/0058-faster-builds-fewer-sequential-model-turns.md).
+   - **Route rules.** Every deterministic guard on top of Spark's answer (build fallback, mood
+     safety net, player ability, pronouns, add-is-a-build, relative tweaks, order checks) is one
+     named rule in a pure, ordered pipeline that reports which rules fired.
+     `server/route-rules.ts`, [ADR 0059](adr/0059-living-creations-events-speech-orders-and-route-rules.md).
+   - **Orders.** "Chickens, follow me", "everyone stay", "dragon, go away" are matched locally
+     before the router (no model call) against loaded mods' ids, titles and spawned types; the
+     client gives the order and the engine steers those creatures (`src/sim/interact.ts`).
 3. **Wonder, as an agent.** Muse Wonder writes the mod through Meta's OpenAI-compatible
    tool calling. Two tools: `inspect_world` (what is loaded: mods, knobs, entity types) and
    `run_playtest` (compile, verify and playtest its own full draft; a pass ends the loop, a
@@ -123,6 +130,11 @@ The engine holds the laws of nature; everything visible in the game is a mod.
   whose tick handler throws is unloaded and reported, and the frame loop always reschedules
   (`World.onFault`, `ModLoader.isolateFaults`, [ADR 0056](adr/0056-contain-crashing-and-looping-mods.md)).
   The verifier and playtest leave containment off so a crashing mod still fails there.
+- **Events, speech, interaction.** `api.on("touch" | "hit" | "death" | "interact" | "order" | "signal")`
+  delivers what happened to a mod's entities at the start of the next tick, contained like tick
+  handlers; `api.say` puts a speech bubble on `world.speech` (drawn by `src/client/speech.ts`);
+  `data.interact` makes an entity usable with the action key; `api.signal` reaches other mods
+  ([ADR 0059](adr/0059-living-creations-events-speech-orders-and-route-rules.md)).
 - **Broad phase.** Collision queries a uniform grid of solids (`src/sim/grid.ts`) that returns
   candidates in scan order, so results match a full scan
   ([ADR 0057](adr/0057-engine-rules-gear-shots-ground-broad-phase.md)).

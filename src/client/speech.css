@@ -1,0 +1,19 @@
+/* Speech bubbles and the action-key prompt over entities (ADR 0059). Above the stage, below dialogs. */
+#speech-layer { position: absolute; inset: 0; pointer-events: none; z-index: 6; overflow: hidden; }
+.speech-bubble {
+  position: absolute; transform: translate(-50%, -100%); max-width: 220px; padding: 5px 9px;
+  background: #fffdf3; color: #14161c; border: 2px solid #14161c; border-radius: 10px;
+  font: 600 13px/1.25 system-ui, sans-serif; text-align: center; white-space: normal;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35); animation: speech-pop 0.18s ease-out;
+}
+.speech-bubble::after {
+  content: ""; position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%);
+  border: 6px solid transparent; border-top-color: #14161c; border-bottom: 0;
+}
+.speech-prompt {
+  position: absolute; transform: translate(-50%, -100%); padding: 3px 8px; border-radius: 6px;
+  background: rgba(10, 12, 18, 0.82); color: #ffc94d; font: 700 12px/1.2 system-ui, sans-serif;
+  border: 1px solid #ffc94d;
+}
+.speech-prompt kbd { font: inherit; color: #14161c; background: #ffc94d; border-radius: 3px; padding: 0 4px; margin-right: 4px; }
+@keyframes speech-pop { from { transform: translate(-50%, -80%) scale(0.85); opacity: 0; } to { transform: translate(-50%, -100%) scale(1); opacity: 1; } }
