@@ -5,6 +5,15 @@ import type { Entity, ModApi, ProjectileDamageOptions } from "../contract";
 
 export { ProjectileDamageOptions };
 
+/** Damage a projectile deals when it does not say (data.damage), for the engine and api.damageHit alike. */
+export const DEFAULT_PROJECTILE_DAMAGE = 50;
+
+/** Enemy fire: a projectile flagged as a hostile's. It hits the player and heroes, never other hostiles. */
+function isEnemyFire(projectile: Entity): boolean {
+  return projectile.data.fromPlayer !== true
+    && (projectile.data.hostile === true || projectile.data.enemy === true || projectile.data.fromEnemy === true);
+}
+
 export function overlap(
   a: { x: number; y: number; w: number; h: number },
   b: { x: number; y: number; w: number; h: number },
@@ -47,6 +56,7 @@ export function isDamageableTarget(
     // Projectile from enemy: can hit player
     if (target.type === "player") return true;
     if (target.data.fromPlayer === true) return false;
+    if (isEnemyFire(projectile)) return target.data.hero === true;
   }
 
   // Explicit hostile or creature tags
@@ -73,7 +83,9 @@ export function checkProjectileHitAndDamage(
   projectile: Entity,
   options: ProjectileDamageOptions = {},
 ): Entity | undefined {
-  const damage = options.damage ?? (typeof projectile.data.damage === "number" ? projectile.data.damage : 50);
+  // The mod resolves this projectile itself, so the engine's universal pass leaves it alone (ADR 0053).
+  projectile.data.modCombat = true;
+  const damage = options.damage ?? (typeof projectile.data.damage === "number" ? projectile.data.damage : DEFAULT_PROJECTILE_DAMAGE);
   const despawnOnHit = options.despawnOnHit !== false;
   const despawnOnSolid = options.despawnOnSolid !== false;
   const burstColor = options.burstColor ?? projectile.color ?? 0xffd700;

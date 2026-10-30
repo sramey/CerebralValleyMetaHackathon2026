@@ -1,7 +1,8 @@
 import { SIM, emptyInput } from "../contract";
 import { entityKind } from "../ontology";
-import { isDamageableTarget } from "./combat";
+import { DEFAULT_PROJECTILE_DAMAGE, isDamageableTarget } from "./combat";
 import type { Entity, HudDef, HudWidget, InputState, Particle, SpawnDef } from "../contract";
+import { SolidGrid } from "./grid";
 import { createRng } from "./rng";
 
 type TickHandler = (dt: number) => void;
@@ -25,6 +26,7 @@ export class World {
   private nextId = 1;
   private handlers = new Map<string, TickHandler[]>();
   private rng: () => number;
+  private grid = new SolidGrid();
 
   constructor(seed = 1337) {
     this.rng = createRng(seed);
@@ -85,14 +87,38 @@ export class World {
     this.handlers.set(owner, list);
   }
 
-  removeByOwner(owner: string): void {
-    this.handlers.delete(owner);
+  /**
+   * When set, a tick handler that throws is contained (ADR 0052): its owner's handlers stop and
+   * this is called, and the rest of the world keeps stepping. Unset (verifier, playtest, tests),
+   * the error propagates so a bad mod fails loudly.
+   */
+  onFault?: (owner: string, err: unknown) => void;
+
+  /** Every mod's tick handlers, in load order. */
+  private runHandlers(dt: number): void {
+    for (const [owner, list] of [...this.handlers]) {
+      if (this.handlers.get(owner) !== list) continue; // unloaded or reloaded earlier this tick
+      for (const fn of [...list]) {
+        if (!this.onFault) { fn(dt); continue; }
+        try {
+          fn(dt);
+        } catch (err) {
+          this.handlers.delete(owner);
+          this.onFault(owner, err);
+          break;
+        }
+      }
+    }
+  }
+
+  /** Remove everything `owner` made. `keepSlot` keeps its place in the tick order, for a reload. */
+  removeByOwner(owner: string, keepSlot = false): void {
+    if (keepSlot && this.handlers.has(owner)) this.handlers.set(owner, []);
+    else this.handlers.delete(owner);
     for (const e of this.entities) {
       if (e.owner === owner) {
-        (e as any).dead = true;
-        (e as any).despawned = true;
-        (e as any).x = undefined;
-        (e as any).y = undefined;
+        retire(e);
+        this.forget(e.id);
       }
     }
     this.entities = this.entities.filter((e) => e.owner !== owner);
@@ -134,10 +160,8 @@ export class World {
   despawn(id: number): void {
     const e = this.entities.find((en) => en.id === id);
     if (e) {
-      (e as any).dead = true;
-      (e as any).despawned = true;
-      (e as any).x = undefined;
-      (e as any).y = undefined;
+      retire(e);
+      this.forget(e.id);
     }
     this.entities = this.entities.filter((en) => en.id !== id);
   }
@@ -165,9 +189,19 @@ export class World {
     if (this.particles.length > 1000) this.particles.splice(0, this.particles.length - 1000);
   }
 
+  /** Drop the engine's per-entity bookkeeping for a despawned entity, so it never grows over a session. */
+  private forget(id: number): void {
+    this.blocked.delete(id);
+    this.hopCooldown.delete(id);
+    this.turning.delete(id);
+    this.clearOfPlayer.delete(id);
+  }
+
   /** Ticks each mover has pushed into a wall, for stuck recovery (engine-side, so every creature gets it). */
   private blocked = new Map<number, number>();
   private hopCooldown = new Map<number, number>();
+  /** Non-player projectiles that have been clear of the player at least once (they may hit the player from then on). */
+  private clearOfPlayer = new Set<number>();
 
   /** Creatures told to walk the other way: direction and the tick the order lapses (ADR 0051). */
   private turning = new Map<number, { dir: number; until: number }>();
@@ -196,7 +230,7 @@ export class World {
   private ledgeAhead(e: Entity, solids: Entity[], dir: number): boolean {
     const px = dir > 0 ? e.x + e.w + 4 : e.x - 4;
     const probe = { x: px, y: e.y + e.h, w: 1, h: 40 };
-    return !solids.some((s) => s !== e && overlap(probe, s));
+    return !this.grid.query(probe).some((i) => solids[i] !== e && overlap(probe, solids[i]));
   }
 
   /** Engine-side behaviour states for hostile creatures (ADR 0051): data.aiState is patrol, notice, attack or cooldown. Mods read it, they never have to track it. */
@@ -228,18 +262,25 @@ export class World {
     const dt = SIM.dt;
     this.tickCount++;
     this.ageHud(dt);
-    for (const list of [...this.handlers.values()]) for (const fn of [...list]) fn(dt);
+    this.runHandlers(dt);
 
     const solids = this.entities.filter((e) => e.solid);
+    const grid = this.grid;
+    grid.build(solids);
+    const solidIndex = new Map<Entity, number>();
+    solids.forEach((s, i) => solidIndex.set(s, i));
+    /** A solid that moved this pass is re-filed so the movers after it collide with where it is now. */
+    const refile = (e: Entity): void => { if (e.solid) { const i = solidIndex.get(e); if (i !== undefined) grid.update(i); } };
     const player = this.entities.find((e) => e.type === "player");
     for (const e of this.entities) {
       // Static solids (gravityScale 0) never move. A solid with gravity still
       // gets physics: it collides with other solids, it just also blocks them.
       if (e.solid && e.gravityScale === 0) continue;
-      if (e.data.tetherTo !== undefined) { e.x += e.vx * dt; e.y += e.vy * dt; continue; } // grappling gear flies free; the mod latches it by raycast (ADR 0050)
-      if (typeof e.data.parallax === "number" || /^(cloud|sky|day-sky|night-sky|background|parallax)/i.test(e.type)) {
+      if (e.data.tetherTo !== undefined) { e.x += e.vx * dt; e.y += e.vy * dt; refile(e); continue; } // grappling gear flies free; the mod latches it by raycast (ADR 0050)
+      if (typeof e.data.parallax === "number" || traitsOf(e.type).scenery) {
         e.x += e.vx * dt;
         e.y += e.vy * dt;
+        refile(e);
         continue;
       }
       const wantsMove = e.vx !== 0 && e.type !== "player";
@@ -267,53 +308,74 @@ export class World {
       const pushDir = Math.sign(e.vx);
       e.vy = Math.min(e.vy + SIM.gravity * e.gravityScale * dt, 1100); // terminal velocity
       // X axis. One-way platforms (data.oneWay) never block sideways.
+      // One broad-phase query covers both axes: PAD outruns a tick of travel at terminal velocity.
+      let region = padded(e);
+      const nearBoth = grid.query(region);
+      let near = nearBoth;
       e.x += e.vx * dt;
       let blockedX = false;
-      for (const s of solids) if (s !== e && !s.data.oneWay && overlap(e, s)) {
-        const stepHeight = (e.y + e.h) - s.y;
-        if (e.onGround && e.vx !== 0 && stepHeight > 0 && stepHeight <= 28) {
-          const steppedBox = { x: e.x, y: s.y - e.h, w: e.w, h: e.h };
-          const headBlocked = solids.some((s2) => s2 !== e && s2 !== s && !s2.data.oneWay && overlap(steppedBox, s2));
-          if (!headBlocked) {
-            e.y = s.y - e.h;
-            e.onGround = true;
-            continue;
+      if (!inside(e, region)) { region = padded(e); near = grid.query(region); }
+      for (let c = 0; c < near.length; c++) {
+        const si = near[c];
+        const s = solids[si];
+        if (s !== e && !s.data.oneWay && overlap(e, s)) {
+          const stepHeight = (e.y + e.h) - s.y;
+          let stepped = false;
+          if (e.onGround && e.vx !== 0 && stepHeight > 0 && stepHeight <= 28) {
+            const steppedBox = { x: e.x, y: s.y - e.h, w: e.w, h: e.h };
+            const headBlocked = grid.query(steppedBox).some((i2) => { const s2 = solids[i2]; return s2 !== e && s2 !== s && !s2.data.oneWay && overlap(steppedBox, s2); });
+            if (!headBlocked) {
+              e.y = s.y - e.h;
+              e.onGround = true;
+              stepped = true;
+            }
+          }
+          if (!stepped && !(!e.solid && isGroundSlab(s))) {
+            if (e.vx > 0) e.x = s.x - e.w;
+            else if (e.vx < 0) e.x = s.x + s.w;
+            else e.x = (e.x + e.w / 2 < s.x + s.w / 2) ? s.x - e.w : s.x + s.w;
+            e.vx = 0;
+            blockedX = true;
           }
         }
-        if (!e.solid && s.y === 400) continue;
-        if (e.vx > 0) e.x = s.x - e.w;
-        else if (e.vx < 0) e.x = s.x + s.w;
-        else e.x = (e.x + e.w / 2 < s.x + s.w / 2) ? s.x - e.w : s.x + s.w;
-        e.vx = 0;
-        blockedX = true;
+        // A resolution can push the mover out of the queried area: re-query the rest of the scan.
+        if (!inside(e, region)) { region = padded(e); near = grid.query(region).filter((i) => i > si); c = -1; }
       }
       this.unstick(e, wantsMove && blockedX && pushDir !== 0, pushDir);
       // Y axis. One-way platforms only catch a falling entity that was above them.
       const prevBottom = e.y + e.h;
       e.y += e.vy * dt;
       e.onGround = false;
-      for (const s of solids) if (s !== e && overlap(e, s)) {
-        if (s.data.oneWay && !(e.vy > 0 && prevBottom <= s.y + 0.5)) continue;
-        if (!e.solid && s.y === 400) { e.y = s.y - e.h; e.onGround = true; } else if (e.vy > 0) { e.y = s.y - e.h; e.onGround = true; }
-        else if (e.vy < 0) e.y = s.y + s.h;
-        else if (e.y + e.h / 2 < s.y + s.h / 2) { e.y = s.y - e.h; e.onGround = true; }
-        else e.y = s.y + s.h;
-        e.vy = 0;
+      if (near !== nearBoth || !inside(e, region)) { region = padded(e); near = grid.query(region); } else near = nearBoth;
+      for (let c = 0; c < near.length; c++) {
+        const si = near[c];
+        const s = solids[si];
+        if (s !== e && overlap(e, s) && !(s.data.oneWay && !(e.vy > 0 && prevBottom <= s.y + 0.5))) {
+          if (!e.solid && isGroundSlab(s)) { e.y = s.y - e.h; e.onGround = true; } else if (e.vy > 0) { e.y = s.y - e.h; e.onGround = true; }
+          else if (e.vy < 0) e.y = s.y + s.h;
+          else if (e.y + e.h / 2 < s.y + s.h / 2) { e.y = s.y - e.h; e.onGround = true; }
+          else e.y = s.y + s.h;
+          e.vy = 0;
+        }
+        if (!inside(e, region)) { region = padded(e); near = grid.query(region).filter((i) => i > si); c = -1; }
       }
+      refile(e);
     }
     for (const p of this.particles) {
       p.life += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 300 * dt;
     }
     this.particles = this.particles.filter((p) => p.life < p.maxLife);
-    // Post-step 1: Rigid player equipment / weapon mounting (bead qwc)
+    // Post-step 1: Rigid player equipment / weapon mounting (bead qwc). An item flagged held
+    // always mounts; one that is merely named like gear mounts unless it says it is not the
+    // player's (a pickup still lying in the level, another creature's weapon) (ADR 0053).
     if (player) {
       for (const e of this.entities) {
         if (e === player) continue;
         const isHeld = e.data.heldByPlayer === true || e.data.equipped === true || e.data.attachedTo === "player";
-        const isEquipment = /^(gun|blaster|sword|jetpack|backpack|shield|weapon|bow|wand|dagger|spear|axe|hat|crown|helmet|cape)$/i.test(e.type);
-        if (isHeld || isEquipment) {
+        const t = traitsOf(e.type);
+        if (isHeld || (t.equipment && !notPlayersGear(e))) {
           e.facing = player.facing;
-          const socket = e.data.socket || (/^(jetpack|backpack|cape)$/i.test(e.type) ? "back" : /^(hat|crown|helmet)$/i.test(e.type) ? "head" : "hand");
+          const socket = e.data.socket || t.socket;
           if (socket === "back") {
             const ox = typeof e.data.offsetX === "number" ? e.data.offsetX : 8;
             const oy = typeof e.data.offsetY === "number" ? e.data.offsetY : 6;
@@ -335,13 +397,18 @@ export class World {
       }
     }
 
-    // Post-step 2: Universal projectile collision & enemy combat (bead 578)
-    const projectiles = this.entities.filter((e) => e.data.tetherTo === undefined && !/hook|grappl|tether/i.test(e.type) && (e.data.visual === "projectile" || entityKind(e) === "projectile" || /^(bullet|projectile|laser|arrow|fireball|plasma|shot)$/i.test(e.type))); // grappling gear latches instead (ADR 0050)
+    // Post-step 2: Universal projectile collision & enemy combat (bead 578). A projectile a mod
+    // already resolves through api.damageHit is the mod's: the engine leaves it alone, so the
+    // mod's damage, filter and piercing hold (ADR 0053).
+    const projectiles = this.entities.filter((e) => e.data.tetherTo === undefined && e.data.modCombat !== true && !traitsOf(e.type).tether && (e.data.visual === "projectile" || entityKind(e) === "projectile" || traitsOf(e.type).projectile)); // grappling gear latches instead (ADR 0050)
     for (const proj of projectiles) {
-      if ((proj as any).dead) continue;
-      const damage = typeof proj.data.damage === "number" ? proj.data.damage : 25;
+      if (proj.dead) continue;
+      const damage = typeof proj.data.damage === "number" ? proj.data.damage : DEFAULT_PROJECTILE_DAMAGE;
+      // A shot that is not the player's must leave the player once before it can hit them, so it never hits on the frame it spawns.
+      if (player && !this.clearOfPlayer.has(proj.id) && !overlap(proj, player)) this.clearOfPlayer.add(proj.id);
       for (const target of this.entities) {
-        if (target.id === proj.id || (target as any).dead) continue;
+        if (target.id === proj.id || target.dead) continue;
+        if (target === player && proj.data.fromPlayer !== true && !this.clearOfPlayer.has(proj.id)) continue;
         if (isDamageableTarget(target, proj) && overlap(proj, target)) {
           this.burst(proj.x + proj.w / 2, proj.y + proj.h / 2, proj.color || 0xffd700, 8);
           this.damage(target.id, damage);
@@ -350,9 +417,10 @@ export class World {
         }
       }
       // Despawn on solid obstacles
-      if (!(proj as any).dead) {
-        for (const s of solids) {
-          if (!s.data.oneWay && overlap(proj, s)) {
+      if (!proj.dead) {
+        for (const i of grid.query(proj)) {
+          const s = solids[i];
+          if (!s.dead && !s.data.oneWay && overlap(proj, s)) {
             this.burst(proj.x + proj.w / 2, proj.y + proj.h / 2, proj.color || 0xffd700, 4);
             this.despawn(proj.id);
             break;
@@ -362,15 +430,14 @@ export class World {
     }
 
     // Post-step 3: Enemy contact damage to player with brief invulnerability timer
-    if (player && !(player as any).dead) {
+    if (player && !player.dead) {
       const hitCd = typeof player.data.hitCooldown === "number" ? player.data.hitCooldown : 0;
       if (hitCd > 0) {
         player.data.hitCooldown = hitCd - 1;
       } else {
         for (const en of this.entities) {
-          if (en.id === player.id || (en as any).dead) continue;
-          const isEnemy = en.data.hostile === true || en.data.enemy === true || /^(enemy|walker|turtle|boss|monster|zombie|goblin|slime|spider|bat|skeleton|demon|orc)$/i.test(en.type);
-          if (isEnemy && overlap(player, en)) {
+          if (en.id === player.id || en.dead) continue;
+          if (hurtsOnContact(en) && overlap(player, en)) {
             const dmg = typeof en.data.damage === "number" ? en.data.damage : 10;
             this.damage(player.id, dmg);
             player.data.hitCooldown = 30; // 0.5s cooldown at 60Hz
@@ -387,6 +454,63 @@ export class World {
     }
   }
 }
+
+/** Mark a removed entity so a mod still holding it sees it is gone (bead dbj): dead, with no coordinates. */
+function retire(e: Entity): void {
+  e.dead = true;
+  e.despawned = true;
+  (e as { x: number | undefined }).x = undefined;
+  (e as { y: number | undefined }).y = undefined;
+}
+
+/** What an entity's type name alone says about it. Cached per type: the step asks every tick. */
+interface TypeTraits { scenery: boolean; equipment: boolean; socket: "back" | "head" | "hand"; projectile: boolean; tether: boolean; enemyName: boolean }
+const traitCache = new Map<string, TypeTraits>();
+function traitsOf(type: string): TypeTraits {
+  let t = traitCache.get(type);
+  if (!t) {
+    t = {
+      scenery: /^(cloud|sky|day-sky|night-sky|background|parallax)/i.test(type),
+      equipment: /^(gun|blaster|sword|jetpack|backpack|shield|weapon|bow|wand|dagger|spear|axe|hat|crown|helmet|cape)$/i.test(type),
+      socket: /^(jetpack|backpack|cape)$/i.test(type) ? "back" : /^(hat|crown|helmet)$/i.test(type) ? "head" : "hand",
+      projectile: /^(bullet|projectile|laser|arrow|fireball|plasma|shot)$/i.test(type),
+      tether: /hook|grappl|tether/i.test(type),
+      enemyName: /^(enemy|walker|turtle|boss|monster|zombie|goblin|slime|spider|bat|skeleton|demon|orc)$/i.test(type),
+    };
+    if (traitCache.size > 4096) traitCache.clear();
+    traitCache.set(type, t);
+  }
+  return t;
+}
+
+/** Gear named like equipment that explicitly is not the player's: a pickup still in the level, or another creature's. */
+function notPlayersGear(e: Entity): boolean {
+  return e.data.pickup === true || e.data.heldByPlayer === false || e.data.equipped === false
+    || (typeof e.data.attachedTo === "string" && e.data.attachedTo !== "player")
+    || e.data.hostile === true || e.data.enemy === true;
+}
+
+/** Contact damage: flagged hostiles, or enemy-named types that did not opt out (friendly, casual or hero). */
+function hurtsOnContact(e: Entity): boolean {
+  if (e.data.hostile === true || e.data.enemy === true) return true;
+  if (e.data.hostile === false || e.data.casual === true || e.data.hero === true) return false;
+  return traitsOf(e.type).enemyName;
+}
+
+/** The world's main ground slab: non-solid movers are never blocked sideways by it and always land on top. */
+function isGroundSlab(s: Entity): boolean {
+  return s.type === "ground";
+}
+
+const PAD = 32;
+function padded(e: Box): Box {
+  return { x: e.x - PAD, y: e.y - PAD, w: e.w + 2 * PAD, h: e.h + 2 * PAD };
+}
+function inside(e: Box, r: Box): boolean {
+  return e.x >= r.x && e.y >= r.y && e.x + e.w <= r.x + r.w && e.y + e.h <= r.y + r.h;
+}
+
+type Box = { x: number; y: number; w: number; h: number };
 
 function overlap(a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }): boolean {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;

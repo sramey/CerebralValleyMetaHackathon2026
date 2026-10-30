@@ -159,7 +159,9 @@ Never commit keys. `.env` is gitignored.
 - **"It can't break":** every AI-written mod is playtested by a scripted bot in a copy of *your* world (3 seeds × 2 worlds, 1–6 ms). A ghost window replays the actual run. A failing change is rejected with a one-line reason, and Wonder, as a tool-using agent (`run_playtest`), fixes and re-playtests it before it lands. Live on main: "make me huge" → *"You'd be too big to fit through the gap"* → fixed → landed, 2/2 (7/7 across the lease's runs once tuned) ([ADR 0013](docs/adr/0013-visible-verifier.md)).
 - **Visual kinds and effects:** Spark's router also decides what kind of thing you asked for (shape, effect, prop or creature) in the same call. Shapes (ball, ring, spikes, star…) and effects are drawn in code with no image wait; only props and creatures go to Muse Image. Rain has slanted streaks, splashes and mist, fog drifts as soft puffs, and explosions have a flash, fire, sparks, smoke and a shockwave (~0.1 ms/frame) ([ADR 0015](docs/adr/0015-spark-visual-kind-shapes-fx.md)).
 - **Share links, spend guard, visitor mode:** a live check builds 3 AI mods, saves the world, reopens the link in a fresh session with byte-identical code, and remixes it (`scripts/deploy-check.ts`, 8/8 on main).
-- Tests: 441 passing (`npm test`, green in a fresh clone), typecheck clean, production build green.
+- **Crash containment:** a mod that throws mid-game is taken out and the orb says so; the rest of the world keeps running. Every loop in an AI-written mod gets an iteration guard at compile time, so an infinite loop fails verification in milliseconds instead of hanging the server or the tab ([ADR 0052](docs/adr/0052-contain-crashing-and-looping-mods.md)).
+- **Engine budget:** a 500-entity level steps in ~0.4 ms (2 ms budget) with a grid broad phase that gives identical results to a full scan ([ADR 0053](docs/adr/0053-engine-rules-gear-shots-ground-broad-phase.md)).
+- Tests: 535 passing (`npm test`, green in a fresh clone), typecheck clean, production build green.
 
 **Art pipeline: first proof (2026-10-27)**
 
@@ -169,4 +171,5 @@ Never commit keys. `.env` is gitignored.
 - Goal-reachability search (the playtest bot runs right and jumps; it doesn't prove a goal is reachable).
 - Endless level generator (cut for the hackathon).
 - Public hosting (deploy-ready; host not chosen yet), worker-thread verifier isolation ([ADR 0003](docs/adr/0003-verifier-in-process-empty-world.md)).
+- Known limitation: the mod sandbox is a forbidden-token check plus in-process verification, not a security boundary. A determined mod can reach Node globals (and so the server's environment) by indirection. That is fine for its intended use, a local single-user run with your own key; it is not hardened for hosting strangers' prompts on a shared key (that would need the worker-thread verifier above, with no environment and a timeout).
 - Known nit: relative tweaks ("jump higher") sometimes build a new mod instead of instantly tweaking a knob ([ADR 0005](docs/adr/0005-tweak-edit-fallbacks.md)).

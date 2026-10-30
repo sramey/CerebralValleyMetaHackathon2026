@@ -41,6 +41,9 @@ export interface Entity {
   /** Owning mod id, or "engine" for built-ins. Set by the loader. */
   owner: string;
   data: Record<string, number | string | boolean>;
+  /** Set by the engine when the entity is despawned or destroyed; a mod holding a stale reference can check it. */
+  dead?: boolean;
+  despawned?: boolean;
 }
 
 /** Procedural shapes the client draws in code, so primitives never go to Muse Image (ADR 0015). */

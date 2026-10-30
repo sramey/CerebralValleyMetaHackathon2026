@@ -112,6 +112,14 @@ The engine holds the laws of nature; everything visible in the game is a mod.
   output is never trusted to run un-verified: a world only saves mods from the server's own
   verified session manifest, so a share link never runs uploaded code
   (`server/worlds.ts`, [ADR 0014](adr/0014-deploy-share-spend-visitor.md)).
+- **Containment.** Every loop in compiled mod JS gets an iteration guard (`guardLoops` in
+  `server/compile.ts`), so a runaway loop throws instead of hanging. In the live game a mod
+  whose tick handler throws is unloaded and reported, and the frame loop always reschedules
+  (`World.onFault`, `ModLoader.isolateFaults`, [ADR 0052](adr/0052-contain-crashing-and-looping-mods.md)).
+  The verifier and playtest leave containment off so a crashing mod still fails there.
+- **Broad phase.** Collision queries a uniform grid of solids (`src/sim/grid.ts`) that returns
+  candidates in scan order, so results match a full scan
+  ([ADR 0053](adr/0053-engine-rules-gear-shots-ground-broad-phase.md)).
 
 ## 3. The ontology
 
