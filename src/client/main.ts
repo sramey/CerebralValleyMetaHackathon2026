@@ -1736,6 +1736,8 @@ function handleSegment(key: string, rawBox: unknown): void {
 cameraPaper?.addEventListener("change", () => {
   if (cameraPaper.checked) {
     cameraLabel.placeholder = "Level name (optional, e.g. Sky Castle)";
+    // A drawing is read whole (ADR 0040): there is no finder answer to wait for on this photo.
+    cameraFinder({ kind: "covered" });
     if (pendingCapture) { cameraConfirm.disabled = false; setCameraStatus("Drawing photo ready! Click 'Build this level' to make it playable."); }
     else setCameraStatus("Level drawing mode: upload or capture your paper drawing.");
   } else {
