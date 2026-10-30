@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findPoseBounds } from "../src/client/sprites";
+import { alignPoseBounds, findPoseBounds } from "../src/client/sprites";
 
 function makeSheet(w: number, h: number, boxes: { x: number; y: number; w: number; h: number }[]): Uint8Array {
   const px = new Uint8Array(w * h * 4);
@@ -98,5 +98,70 @@ describe("findPoseBounds: real pose bounds instead of 4 equal columns", () => {
     expect(bounds).toHaveLength(2);
     expect(bounds[0].w).toBe(150);
     expect(bounds[1].x).toBe(350);
+  });
+
+  it("extracts exactly 4 full creature poses without splitting wide poses into leg fragments (zombie regression)", () => {
+    const w = 1600, h = 1600;
+    // Real zombie sheet layout: pose 1 (stride) is 491px wide (> w * 0.28 = 448px)
+    // Previously, the slicer kept splitting wide poses when runs.length >= 4,
+    // which sliced pose 1 into a torso (380px) and a detached leg frame (111px, h=119).
+    const boxes = [
+      { x: 30, y: 552, w: 241, h: 622 },    // idle (baseline y=1174)
+      { x: 286, y: 617, w: 491, h: 524 },   // stride 1 (wide stride pose, previously split at x=666)
+      { x: 777, y: 541, w: 417, h: 632 },   // stride 2 (baseline y=1173)
+      { x: 1203, y: 433, w: 386, h: 575 },  // jump mid-air (y=433..1008)
+    ];
+    const px = makeSheet(w, h, boxes);
+    const bounds = findPoseBounds(w, h, px, 4);
+    // console.log("zombie bounds:", bounds);
+    expect(bounds).toHaveLength(4);
+    for (let i = 0; i < 4; i++) {
+      expect(bounds[i].w).toBeGreaterThan(150);
+      expect(bounds[i].h).toBeGreaterThan(500);
+    }
+  });
+
+  it("extracts exactly 4 flying poses from a contiguous dragon sheet without slicing into tail/wing pieces (dragon regression)", () => {
+    const w = 1600, h = 1600;
+    // Real dragon-fly sheet: flight poses have wide wings (pose 1 is 473px wide)
+    // and poses touch via wingtips (thin bridges).
+    const boxes = [
+      { x: 0, y: 510, w: 386, h: 444 },
+      { x: 386, y: 510, w: 2, h: 4 }, // bridge
+      { x: 388, y: 510, w: 471, h: 344 },
+      { x: 859, y: 510, w: 2, h: 4 }, // bridge
+      { x: 861, y: 510, w: 350, h: 424 },
+      { x: 1211, y: 560, w: 2, h: 4 }, // bridge
+      { x: 1213, y: 560, w: 379, h: 471 },
+    ];
+    const px = makeSheet(w, h, boxes);
+    const bounds = findPoseBounds(w, h, px, 4);
+
+    expect(bounds).toHaveLength(4);
+    // None is a tiny tail fragment (width 127, height 110)
+    for (let i = 0; i < 4; i++) {
+      expect(bounds[i].w).toBeGreaterThan(300);
+      expect(bounds[i].h).toBeGreaterThan(300);
+    }
+  });
+
+  it("alignPoseBounds aligns all poses to a uniform height and consistent baseline", () => {
+    const tightBounds = [
+      { x: 30, y: 552, w: 241, h: 622 },   // baseline = 552 + 622 = 1174
+      { x: 286, y: 617, w: 491, h: 524 },  // baseline = 617 + 524 = 1141
+      { x: 777, y: 541, w: 417, h: 632 },  // baseline = 541 + 632 = 1173
+      { x: 1203, y: 433, w: 386, h: 575 }, // jump: y=433, baseline = 433 + 575 = 1008
+    ];
+    const aligned = alignPoseBounds(tightBounds);
+
+    expect(aligned).toHaveLength(4);
+    // minTop = 433, maxBaseline = 1174, commonH = 1174 - 433 = 741
+    const commonH = 1174 - 433;
+    for (let i = 0; i < 4; i++) {
+      expect(aligned[i].y).toBe(433);
+      expect(aligned[i].h).toBe(commonH);
+      expect(aligned[i].x).toBe(tightBounds[i].x);
+      expect(aligned[i].w).toBe(tightBounds[i].w);
+    }
   });
 });
