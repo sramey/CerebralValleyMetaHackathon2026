@@ -89,7 +89,7 @@ Open **http://127.0.0.1:8787/** (or your configured `PORT`) in Chrome, click the
 | `make this christmas themed` | Theme words restyle the world (no new code): snow-frosted surfaces, icy hills, falling snow |
 | `change the background to medieval` (or `…to be in an Indiana farm`, `desert`, `city`) | A new themed parallax backdrop in under a second, with no router call: a castle on the hill, village, church, windmills, tents and torches (or barns, silos, corn and hay bales on flat farmland). Sprites keep their look. Other places ("ancient Egypt", "a jungle") get palette and scenery from one Spark call. `spooky castle` puts the spooky palette on the medieval scenery. `undo` restores it ([ADR 0067](docs/adr/0067-themed-parallax-backdrops.md)) |
 | `turn this into a 2d space shooter` | Genre change in one sentence: the terrain and scenery disappear, a space sky replaces the world, the ninja becomes a generated ship, and there are targets to shoot. `undo` brings the platformer back exactly ([ADR 0066](docs/adr/0066-genre-change-set-scene.md)) |
-| `build a volcano` | A real drawn prop, not a flat shape: named things get Muse Image art and are sliced pose by pose ([item quality review](docs/process/item-quality-review.md)). Set-pieces and debris rendering for big props like this are still being merged |
+| `build a volcano` | A real drawn prop, not a flat shape: named things get Muse Image art and are sliced pose by pose ([item quality review](docs/process/item-quality-review.md)). Big set-pieces sit on the ground behind the play layer, and lava, rocks and sparks are glowing shaded particles |
 | `add some stairs` | Wonder builds code-drawn stone steps; the player walks up them |
 | `give me a gun`, then press **F** | Equips a hand cannon; F (or X) fires shots that damage enemies |
 | **✏️ Draw a level** (or say "let me draw a level") | Sketch ledges, coins and enemies over the game; Wonder reads the drawing and builds it |
@@ -223,7 +223,6 @@ Never commit keys. `.env` is gitignored.
 - Muse Image (`muse-image-1.0`) generates a sprite sheet in ~17 s (p50 over 77 logged sheets, p90 23 s); the client chroma-keys the magenta background, slices frames, and animates the player as a real AI-drawn ninja (idle/run/jump). Regenerate with `npx tsx scripts/art-sheet.ts`. SAM 3.1 answers in ~1.2s with box + encoded mask (mask decode pending — [ADR 0007](docs/adr/0007-art-pipeline-chroma-key-first.md)). Art is now generated on demand per mod subject and streams asynchronously with a digitize placeholder while it loads ([ADR 0008](docs/adr/0008-async-art-digitize-placeholder.md)); scenery subjects render as static variants with no animation cycling ([ADR 0009](docs/adr/0009-scenery-vs-creature-art.md)).
 
 **Not built yet**
-- Set-pieces and debris rendering (big props breaking apart): being merged.
 - Goal-reachability search (the playtest bot runs right and jumps; it doesn't prove a goal is reachable).
 - Endless level generator (cut for the hackathon).
 - Public hosting (deploy-ready; host not chosen yet), worker-thread verifier isolation ([ADR 0003](docs/adr/0003-verifier-in-process-empty-world.md)).
