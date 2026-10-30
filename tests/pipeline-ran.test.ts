@@ -18,9 +18,9 @@ describe("pipeline: which nodes a message proves ran", () => {
     expect(ranNode(pending)).toBeNull();
   });
 
-  it("lights SAM 3.1 on a cut-out reply, with or without a box", () => {
+  it("lights SAM 3.1 only when a cut-out came back (a null box may be the budget-spent reply)", () => {
     expect(ranNode({ kind: "segment", key: "k", box: { x: 0, y: 0, w: 1, h: 1 } })).toBe("sam");
-    expect(ranNode({ kind: "segment", key: "k", box: null })).toBe("sam");
+    expect(ranNode({ kind: "segment", key: "k", box: null })).toBeNull();
   });
 
   it("lights the build nodes from stage events, but only for a named build", () => {

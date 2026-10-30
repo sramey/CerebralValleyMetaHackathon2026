@@ -20,7 +20,7 @@ export function ranNode(msg: ServerMsg): RanNode | null {
     case "agentStep": return "wonder";
     case "art": return "image";
     case "restyled": return msg.url ? "image" : null; // a null url means the draw failed
-    case "segment": return "sam";
+    case "segment": return msg.box ? "sam" : null; // a null box is also the budget-spent reply
     case "mod": return msg.mod.art ? "image" : null;
     case "stage": return msg.command ? STAGE_NODE[msg.stage] ?? null : null;
     default: return null;
