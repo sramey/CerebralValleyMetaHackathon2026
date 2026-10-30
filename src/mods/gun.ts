@@ -15,7 +15,7 @@ export const gunMod: ModDefinition = {
     const speed = Number(knobs.speed);
 
     // Spawn the held weapon; the engine mounts it on the hand (ADR 0057) and the loadout owns
-    // switching, dropping, ammo and the HUD line (ADR 0070).
+    // switching, dropping, ammo and the HUD line (ADR 0074).
     const p = api.player();
     const gun = api.spawn({
       type: "gun",

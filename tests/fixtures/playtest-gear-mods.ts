@@ -1,5 +1,5 @@
 // Real mods Wonder wrote in a first-time-player session (2026-10-30), trimmed, as regression fixtures for the loadout
-// (ADR 0070). They are LEGACY on purpose: none calls api.gear; each just reads input.shoot / input.use.
+// (ADR 0074). They are LEGACY on purpose: none calls api.gear; each just reads input.shoot / input.use.
 // @ts-nocheck
 import type { ModDefinition } from "../../src/contract";
 

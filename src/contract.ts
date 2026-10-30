@@ -14,7 +14,7 @@ export interface InputState {
   pointerY?: number;
   /** Primary mouse button / touch is held. */
   pointerDown?: boolean;
-  /** Loadout keys (ADR 0070), held like the rest; the engine reads their edges. reload: R / pad L2. drop: G / pad d-pad down.
+  /** Loadout keys (ADR 0074), held like the rest; the engine reads their edges. reload: R / pad L2. drop: G / pad d-pad down.
    *  nextItem / prevItem: Q or wheel / pad L1 or d-pad up. slot: 1-9 picks that item. A mod sees `reload` only when its item has no engine ammo. */
   reload?: boolean;
   drop?: boolean;
@@ -280,12 +280,12 @@ export interface ModApi {
   setScene?: (options: SceneOptions) => void;
   /** Tell every other mod something happened ("boss-down", "door-open"); they get a "signal" event next tick. */
   signal?: (name: string, value?: KnobValue) => void;
-  /** Register the thing you hold or wield with the engine loadout (ADR 0070): one item is active at a time, Q / wheel / L1 switches,
+  /** Register the thing you hold or wield with the engine loadout (ADR 0074): one item is active at a time, Q / wheel / L1 switches,
    *  G drops it, R reloads it, and the HUD shows it. Optional: a mod that only reads `input.shoot` is registered automatically. */
   gear?: (def: GearDef) => GearHandle;
 }
 
-/** What api.gear takes (ADR 0070). */
+/** What api.gear takes (ADR 0074). */
 export interface GearDef {
   /** Short id for this item, unique within your mod. Defaults to your mod id. */
   id?: string;
@@ -304,7 +304,7 @@ export interface GearDef {
   cooldown?: number;
 }
 
-/** The handle api.gear returns (ADR 0070). */
+/** The handle api.gear returns (ADR 0074). */
 export interface GearHandle {
   /** True when this is the item in hand: carried, selected, and no vehicle has taken over. Gate your fire code on it. */
   active(): boolean;

@@ -50,7 +50,7 @@ export class World {
   /** Standing orders by entity id and the tick each one lapses. */
   private orders = new Map<number, { order: CreatureOrder; until: number }>();
   private prevAction = false;
-  /** One active held item, switch / drop / reload, vehicles (ADR 0070). */
+  /** One active held item, switch / drop / reload, vehicles (ADR 0074). */
   readonly loadout = new Loadout(this);
   /** Mod titles by id, so an item the engine registered for a mod can be named on the HUD. */
   readonly modTitles = new Map<string, string>();

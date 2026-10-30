@@ -1,4 +1,4 @@
-// ADR 0070 / beads 4lj + s8r: the engine loadout. One active item, switch / drop / reload, a vehicle that
+// ADR 0074 / beads 4lj + s8r: the engine loadout. One active item, switch / drop / reload, a vehicle that
 // takes over the weapon slot and runs hostiles over. The playtest sequence (gun + grapple + tank) uses the
 // mods Wonder really wrote that session (tests/fixtures/playtest-gear-mods.ts): none of them knows the loadout.
 import { describe, expect, it } from "vitest";
@@ -332,7 +332,7 @@ describe("unloading", () => {
   });
 });
 
-describe("controls (ADR 0070)", () => {
+describe("controls (ADR 0074)", () => {
   const pad = (...pressed: number[]): PadLike => ({
     axes: [0, 0],
     buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: pressed.includes(i) })),

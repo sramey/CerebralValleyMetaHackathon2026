@@ -13,7 +13,7 @@ export const ACTION_KEYS = ["KeyB", "KeyX", "KeyJ", "KeyF"] as const;
 /** Use / pick up / interact: everything the action keys do, plus E. */
 export const USE_KEYS = ["KeyB", "KeyF", "KeyE", "KeyX", "KeyJ"] as const;
 
-/** Loadout (ADR 0070): Q next item, R reload, G drop, 1-9 pick an item. The mouse wheel is handled in main.ts. */
+/** Loadout (ADR 0074): Q next item, R reload, G drop, 1-9 pick an item. The mouse wheel is handled in main.ts. */
 export const NEXT_ITEM_KEYS = ["KeyQ"] as const;
 export const RELOAD_KEYS = ["KeyR"] as const;
 export const DROP_KEYS = ["KeyG"] as const;

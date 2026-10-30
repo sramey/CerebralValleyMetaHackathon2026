@@ -1,4 +1,4 @@
-// The engine loadout (ADR 0070): one active held item, switch / drop / reload, a HUD line for it,
+// The engine loadout (ADR 0074): one active held item, switch / drop / reload, a HUD line for it,
 // a mounted vehicle that takes over the weapon slot, and vehicles that run over hostiles.
 // Pure and deterministic: ticks, not clocks; no DOM, no Math.random.
 //

@@ -180,7 +180,7 @@ describe("hand cannon weapon mod (gunMod)", () => {
     const loader = new ModLoader(world);
     loader.load(gunMod);
 
-    // The loadout (ADR 0070) owns the item line: icon, name and ammo; the mod adds a short key-hint banner.
+    // The loadout (ADR 0074) owns the item line: icon, name and ammo; the mod adds a short key-hint banner.
     const widget = world.hud.get("gear");
     expect(widget).toBeDefined();
     expect(widget?.icon).toBe("🔫");

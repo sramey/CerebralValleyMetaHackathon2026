@@ -1,4 +1,4 @@
-# ADR 0070: Engine loadout: one active item, switch / drop / reload, vehicle weapons, run-over
+# ADR 0074: Engine loadout: one active item, switch / drop / reload, vehicle weapons, run-over
 
 - **Status:** Proposed
 - **Date:** 2026-10-30

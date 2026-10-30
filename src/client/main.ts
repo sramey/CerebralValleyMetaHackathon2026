@@ -1090,7 +1090,7 @@ function pollPad(): void {
   padInput = f.input;
   syncInput();
 }
-// The mouse wheel over the game switches items (ADR 0070): a tap, held for one sim step.
+// The mouse wheel over the game switches items (ADR 0074): a tap, held for one sim step.
 const wheelTap = { nextItem: false, prevItem: false };
 app.canvas.addEventListener("wheel", (ev) => {
   if (ev.deltaY === 0) return;
