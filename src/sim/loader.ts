@@ -1,6 +1,7 @@
 import type { CreatureOrder, KnobDefs, KnobValues, ModApi, ModDefinition, TestApi } from "../contract";
 import { emptyInput } from "../contract";
 import { checkProjectileHitAndDamage } from "./combat";
+import { buildLevel } from "./level";
 import { touches } from "./reach";
 import { aimFrom, raycastSolid, winchToward } from "./tether";
 import { applySwarmSeparation, createWaveController, spawnWaveUnit } from "./waves";
@@ -110,6 +111,7 @@ export function modApiFor(w: World, owner: string): ModApi {
     say: (e, text, seconds) => w.say(owner, e?.id, text, seconds),
     signal: (name, value) => w.signal(owner, name, value),
     setScene: (o) => w.setScene(owner, o),
+    buildLevel: (o) => buildLevel(api, o),
   };
   return api;
 }

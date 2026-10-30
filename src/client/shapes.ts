@@ -23,6 +23,7 @@ export function clearLooks(): void { looks.length = 0; }
 const SHAPE_WORDS: [ShapeName, RegExp][] = [
   ["ring", /ring|halo|hoop/],
   ["spikes", /spike|thorn/],
+  ["flag", /^(?:finish|goal|checkpoint)-flag$/],
   ["triangle", /triangle|cone|wedge/],
   ["diamond", /diamond|rhombus/],
   ["star", /^star$|-star$|^star-/],
@@ -109,6 +110,16 @@ export function drawShape(g: Graphics, e: Entity, x: number, y: number, shape: S
         poly(g, [sx + sw / 2, y, sx + sw, y + h, sx, y + h], c);
         g.poly([sx + sw / 2, y + 2, sx + sw / 2, y + h - 1, sx + 1.5, y + h - 1]).fill({ color: scale(c, 1.35), alpha: 0.55 });
       }
+      return;
+    }
+    case "flag": {
+      // A goal flag (ADR 0074): a pole standing on the ground with a pennant that waves a little.
+      const px = x + w * 0.2, wave = Math.sin(performance.now() / 180) * 3;
+      g.rect(px - 2.5, y - 1.5, 6, h + 1.5).fill(OUTLINE);
+      g.rect(px - 1, y, 3, h).fill(0xe8e8ee);
+      poly(g, [px + 2, y + 2, x + w, y + h * 0.17 + wave, px + 2, y + h * 0.34], c);
+      g.circle(px + 0.5, y, 4).fill(OUTLINE);
+      g.circle(px + 0.5, y, 2.5).fill(0xffd94d);
       return;
     }
     case "pill": {
