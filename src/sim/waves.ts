@@ -9,6 +9,7 @@ import type {
   WaveControllerOptions,
   WaveSpawnOptions,
 } from "../contract";
+import { isFlyerType } from "../ontology";
 
 export interface WaveSpawnPosition {
   x: number;
@@ -45,9 +46,16 @@ export function computeWaveSpawn(
     }
   }
 
+  const canFly = options.allowFlyers ?? (
+    options.flyerType !== undefined ||
+    (options.type === undefined ? true : isFlyerType(options.type))
+  );
   let side: "left" | "right" | "top";
   if (options.side) {
     side = options.side;
+  } else if (!canFly) {
+    // Walker hostiles must stay on the ground and have gravity: flank 50% left, 50% right
+    side = api.rand() < 0.5 ? "left" : "right";
   } else {
     // 40% left, 40% right, 20% airborne flyers from top
     const roll = api.rand();
@@ -338,6 +346,7 @@ export class WaveController implements IWaveController {
       screenHeight: this.options.screenHeight,
       type: this.options.enemyType,
       flyerType: this.options.flyerType,
+      allowFlyers: this.options.allowFlyers,
     });
     this.trackedEnemies.set(e.id, e);
     this.spawnedThisWave++;

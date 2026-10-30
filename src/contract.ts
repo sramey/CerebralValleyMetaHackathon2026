@@ -156,6 +156,7 @@ export interface HudWidget extends HudDef {
 export interface WaveSpawnOptions {
   type?: string;
   flyerType?: string;
+  allowFlyers?: boolean;
   screenWidth?: number;
   screenHeight?: number;
   groundY?: number;
@@ -189,6 +190,7 @@ export interface WaveControllerOptions {
   screenHeight?: number;
   enemyType?: string;
   flyerType?: string;
+  allowFlyers?: boolean;
   separationRadius?: number;
   separationStrength?: number;
   autoTick?: boolean;

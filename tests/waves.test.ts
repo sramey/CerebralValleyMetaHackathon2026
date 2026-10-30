@@ -212,6 +212,32 @@ describe("wave spawner & swarm archetype (ADR 0052)", () => {
     expect(world.hud.has("wave-level")).toBe(false);
     expect(world.entities.filter((e) => e.owner === "swarm").length).toBe(0);
   });
+
+  it("walker hostiles (zombies) stay on the ground with gravityScale 1 and never fly unless requested", () => {
+    const world = new World(99);
+    const loader = new ModLoader(world);
+    loader.load({ id: "t", title: "T", setup() {}, dispose() {} });
+    const api = (loader as any).apiFor("t");
+    api.spawn({ type: "player", x: 400, y: 360, w: 26, h: 34 });
+
+    // Spawn 50 zombies
+    for (let i = 0; i < 50; i++) {
+      const z = spawnWaveUnit(api, { type: "zombie", groundY: 400, h: 48 });
+      expect(z.gravityScale).toBe(1);
+      expect(z.data.flying).toBe(false);
+      expect(z.y).toBe(400 - 48);
+      expect(z.data.side === "left" || z.data.side === "right").toBe(true);
+      expect(z.data.side).not.toBe("top");
+    }
+
+    // Explicit flyer type or allowFlyers: true CAN spawn from top
+    let topCount = 0;
+    for (let i = 0; i < 100; i++) {
+      const b = spawnWaveUnit(api, { type: "bat", groundY: 400, h: 20 });
+      if (b.data.side === "top") topCount++;
+    }
+    expect(topCount).toBeGreaterThan(5);
+  });
 });
 
 describe("camera after the player is knocked out", () => {
