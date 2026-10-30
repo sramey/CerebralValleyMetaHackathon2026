@@ -20,6 +20,7 @@ Rubric: Impact 30 · Meta tooling 25 · Depth 20 · Demo 25. Category risk: "AI 
 | 4 | Non-coder test: 3–5 people, 15 min each; capture clips and numbers | Impact | Sun |
 | 5 | "Make it spooky" world restyle | Demo | Sun if time |
 | 6 | Rehearse the 8 demo commands 20× each; fix flakiness only | Demo | Mon–Tue |
+| 7 | Cold-start paint: the stage renders before the sprite sheets load, so a stalled sheet can't show a black stage (**done**, bead 8zu) | Demo (judging "runs cold") | done |
 
 **Meta everywhere (owner, 2026-10-29):** every in-game AI call is a Meta model or agent. Look for real jobs for more of the stack: Wonder as a true agent (tool calls into the verifier/playtest, sub-agents for parallel builds) targets Best Agentic; Muse Image edit-from-anchor for restyle targets Best Creative.
 
