@@ -167,7 +167,7 @@ describe("single-file HTML export (ADR 0042)", () => {
     try {
       const fileUrl = `file:///${tempFile.replace(/\\/g, "/")}`;
       const cmd = `"${edge}" --headless=new --disable-gpu --virtual-time-budget=1500 --dump-dom "${fileUrl}"`;
-      const out = execSync(cmd, { encoding: "utf8", timeout: 15000 });
+      const out = execSync(cmd, { encoding: "utf8", timeout: 15000, maxBuffer: 16 * 1024 * 1024 });
 
       expect(out).toContain("<canvas");
       expect(out).toContain("Headless Browser Test");

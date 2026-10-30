@@ -15,7 +15,7 @@ export interface LearnedRule {
   id: string;
   subsystem: RuleSubsystem;
   rule: string;
-  source: "feedback" | "autofix" | "seed";
+  source: "feedback" | "autofix" | "seed" | "review";
   modId?: string;
   command?: string;
   note?: string;
@@ -179,7 +179,7 @@ export function loadRules(dir?: string): LearnedRule[] {
         id: typeof r.id === "string" && r.id ? r.id : `rule-${Date.now()}`,
         subsystem: r.subsystem === "router" || r.subsystem === "art" ? r.subsystem : "wonder",
         rule: r.rule.trim(),
-        source: r.source === "feedback" || r.source === "autofix" || r.source === "seed" ? r.source : "feedback",
+        source: r.source === "feedback" || r.source === "autofix" || r.source === "seed" || r.source === "review" ? r.source : "feedback",
         ...(r.modId ? { modId: r.modId } : {}),
         ...(r.command ? { command: r.command } : {}),
         ...(r.note ? { note: r.note } : {}),
@@ -250,7 +250,7 @@ export async function learnRuleFromFeedback(input: FeedbackInput, dir?: string):
             "Reply with ONLY a single JSON object, no markdown, no prose:",
             '{"subsystem":"router"|"wonder"|"art","rule":"<concise 1-line imperative rule, max 140 chars>","clearArt":true|false,"editInstruction":"<1-sentence instruction to fix this specific mod right now>"}',
             "Subsystems:",
-            '- "router": visual classification rules (e.g. balls, orbs, bubbles, rings, and simple shapes must route with visual:"shape" instead of creature/prop sprite art; weather/fog/rain must route with visual:"effect").',
+            '- "router": visual classification rules (e.g. only literal primitives (a ball, orb, bubble, ring) route with visual:"shape"; any nameable thing (volcano, rock, lava, tower, asteroid, ship) is prop or creature art, never shape; weather/fog/rain must route with visual:"effect").',
             '- "art": sprite sheet generation rules (e.g. solid #FF00FF magenta background, separated frames, scenery vs character poses).',
             '- "wonder": mod code, physics, entity sizing, collision, controls, spawning, or gameplay behavior.',
             'Set "clearArt": true if the complaint says an object got unwanted/bad sprite art or should be a code-drawn shape/effect instead of a sprite.',
@@ -630,4 +630,35 @@ export function formatLearnedBlock(subsystem: RuleSubsystem, command = "", dir?:
   }
 
   return parts.join("\n\n");
+}
+
+/**
+ * Turn an accepted review fix into a persistent learned rule so future Wonder
+ * builds stop repeating that mistake (ADR 0068).
+ */
+export function learnRuleFromReview(
+  modId: string,
+  issue: string,
+  command?: string,
+  subsystem: RuleSubsystem = "wonder",
+  dir?: string,
+): LearnedRule | null {
+  if (learningFrozen()) return null;
+  const ruleText = cleanOneLine(issue, 150);
+  if (!ruleText) return null;
+  const entry: LearnedRule = {
+    id: "review-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+    subsystem,
+    rule: ruleText,
+    source: "review",
+    modId,
+    ...(command ? { command } : {}),
+    note: issue,
+    createdAt: new Date().toISOString(),
+  };
+  const existing = loadRules(dir);
+  const updated = dedupAndCapRules(existing, entry);
+  saveRules(updated, dir);
+  logLearn({ event: "review-rule", rule: entry.rule, modId, command, issue });
+  return entry;
 }

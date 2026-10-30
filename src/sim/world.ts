@@ -1,7 +1,7 @@
 import { SIM, emptyInput } from "../contract";
 import { entityKind } from "../ontology";
 import { DEFAULT_PROJECTILE_DAMAGE, isDamageableTarget } from "./combat";
-import type { CreatureOrder, Entity, HudDef, HudWidget, InputState, KnobValue, ModEvent, ModEventName, Particle, SpawnDef, Speech } from "../contract";
+import type { CreatureOrder, Entity, SceneOptions, SceneState, HudDef, HudWidget, InputState, KnobValue, ModEvent, ModEventName, Particle, SpawnDef, Speech } from "../contract";
 import { SolidGrid } from "./grid";
 import { createRng } from "./rng";
 import { landingVelocity } from "./bounce";
@@ -9,6 +9,7 @@ import { collectPickups } from "./collect";
 import { canInteract, interactLabel, isOrderable, orderAck, ORDER_TICKS, steerByOrder } from "./interact";
 import { touches } from "./reach";
 import { mountGear, wearerOf } from "./sockets";
+import { BACKDROPS, cleanSceneWord, isSceneScenery, isSceneTerrain, sceneOptionsOk, type SceneRec } from "./scene";
 
 type TickHandler = (dt: number) => void;
 type EventListener = (ev: ModEvent) => void;
@@ -35,6 +36,8 @@ export class World {
   speech = new Map<number, Speech>();
   /** What the action key would interact with right now (ADR 0059), for the client's "B: Talk" prompt. */
   interactable?: { id: number; label: string };
+  /** Scene claims in load order (ADR 0066). The last claim with a backdrop or skin wins. */
+  private scenes: SceneRec[] = [];
   private nextId = 1;
   private handlers = new Map<string, TickHandler[]>();
   /** api.on listeners per owner and event (ADR 0059). */
@@ -253,7 +256,57 @@ export class World {
   }
 
   /** Remove everything `owner` made. `keepSlot` keeps its place in the tick order, for a reload. */
+  /** What the client should paint: the newest claim's backdrop and player skin. */
+  get scene(): SceneState {
+    const out: SceneState = {};
+    for (const r of this.scenes) { if (r.backdrop) out.backdrop = r.backdrop; if (r.skin) out.playerSkin = r.skin; }
+    return out;
+  }
+
+  /** Genre change (ADR 0066): take terrain/scenery out of the world, set a backdrop and player skin, all undone by `unscene`. */
+  setScene(owner: string, raw: SceneOptions): void {
+    const o = sceneOptionsOk(raw);
+    let rec = this.scenes.find((r) => r.owner === owner);
+    const player = this.entities.find((e) => e.type === "player");
+    if (!rec) {
+      const below = this.scenes[this.scenes.length - 1]?.prevGravity ?? player?.gravityScale;
+      rec = { owner, stash: [], ...(below !== undefined ? { prevGravity: below } : {}) };
+      this.scenes.push(rec);
+    }
+    const hideTerrain = o.hideTerrain === true;
+    const hideScenery = o.hideScenery === true;
+    if (hideTerrain || hideScenery) {
+      const keep: Entity[] = [];
+      for (const e of this.entities) {
+        if ((hideTerrain && isSceneTerrain(e)) || (hideScenery && isSceneScenery(e))) rec.stash.push(e); else keep.push(e);
+      }
+      this.entities = keep;
+    }
+    const b = cleanSceneWord(o.backdrop);
+    if (b && BACKDROPS.includes(b)) rec.backdrop = b;
+    const skin = cleanSceneWord(o.playerSkin);
+    if (skin) rec.skin = skin;
+  }
+
+  /** Undo one mod's scene claim. Out-of-order undo hands the saved gravity to the next claim up the stack, so the player ends as before the first scene. */
+  private unscene(owner: string): void {
+    const i = this.scenes.findIndex((r) => r.owner === owner);
+    if (i < 0) return;
+    const rec = this.scenes[i];
+    this.scenes.splice(i, 1);
+    // Back into the world in spawn order (ids only grow), skipping what its own mod has since unloaded.
+    if (rec.stash.length > 0) {
+      this.entities = [...this.entities, ...rec.stash].sort((a, b) => a.id - b.id);
+    }
+    const above = this.scenes[i];
+    const player = this.entities.find((e) => e.type === "player");
+    if (above) { if (above.prevGravity === undefined) above.prevGravity = rec.prevGravity; }
+    else if (player && rec.prevGravity !== undefined) player.gravityScale = rec.prevGravity;
+  }
+
   removeByOwner(owner: string, keepSlot = false): void {
+    for (const r of this.scenes) r.stash = r.stash.filter((e) => e.owner !== owner);
+    this.unscene(owner);
     if (keepSlot && this.handlers.has(owner)) this.handlers.set(owner, []);
     else this.handlers.delete(owner);
     for (const e of this.entities) {

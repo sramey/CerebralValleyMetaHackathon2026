@@ -48,9 +48,16 @@ export function plainBuildMessage(stage: "rejected" | "failed", detail: string):
 /** Placeholder text for slot `i` of the rotation. */
 export const ideaPlaceholder = (i: number): string => `Try: “${IDEAS[((i % IDEAS.length) + IDEAS.length) % IDEAS.length]}”`;
 
-const STEP_TEXT: Record<1 | 2 | 3, { title: string; body: string }> = {
+/**
+ * The three cards' words. Exported so a test can hold them to the real bindings: a step that
+ * gives a wait time has to say what the person can press meanwhile (bead q4u), and the play
+ * step has to name the keys `keys.ts` actually listens to.
+ */
+export const STEP_TEXT: Record<1 | 2 | 3, { title: string; body: string }> = {
   1: { title: "1 · Tell it what to build", body: "Type an idea in the box at the top, or hold Shift and say it out loud." },
-  2: { title: "2 · Watch it get built", body: "It writes the code, then a robot player tests it. This takes about 20 seconds." },
+  // The wait is the one step with nothing obvious to do, so it names the × on the build
+  // (builds.ts, ADR 0060): the only control that exists while the robot player is testing.
+  2: { title: "2 · Watch it get built", body: "It writes the code, then a robot player tests it. This takes about 20 seconds — keep playing, or press the × on the build to stop it." },
   3: { title: "3 · Now play it!", body: "Move: A / D or arrows. Jump: W or Space. Shoot: X or B. Ask for anything else and it keeps building." },
 };
 

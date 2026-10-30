@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { artPlanFor, canUseSpriteSheet, isHeldItemType } from "../src/ontology";
 import { isFlyingRequest, isScenerySubject } from "./art";
 import { chat, loadEnv, SPARK } from "./meta";
-import type { MoodSpec } from "../src/contract";
+import { BACKDROP_MOTIFS, type ThemedBackdrop, type BackdropMotif, type MoodSpec } from "../src/contract";
 
 const IMAGE_EDIT_URL = "https://api.meta.ai/v1/images/edits";
 const IMAGE_MODEL = "muse-image-1.0";
@@ -62,6 +62,64 @@ const ALIASES: Record<string, string> = {
   sunset: "sunset", dusk: "sunset", evening: "sunset", golden: "sunset", twilight: "sunset", dawn: "sunset", sunrise: "sunset",
 };
 
+/**
+ * Themed backdrops we expect on stage (ADR 0067): a palette plus what stands in the parallax bands.
+ * Anything else gets its backdrop from the same Spark call that designs the palette.
+ */
+export const BACKDROP_PRESETS: Record<string, MoodSpec> = {
+  medieval: {
+    name: "medieval",
+    anchor: "medieval fantasy kingdom in golden afternoon light: stone castle on a hill, thatched village, warm earthy browns and greens",
+    skyTop: 0x4a78b8, skyBottom: 0xf3cf96, ridgeFar: 0x6b7f93, ridgeNear: 0x4d6b55, moon: 0xfff1c4, star: 0xffffff,
+    grass: 0x6fae4a, soil: 0x5a3d26, tint: 0xffd9a0, grade: 0.08, dim: 1, fog: 0.15, vignette: 0.2, ambient: "none",
+    backdrop: { skyline: "mountains", landmark: "castle", far: ["village", "church", "tower", "windmill", "pine"], mid: ["oak", "village", "pine", "oak", "tent"], near: ["fence", "torch", "haybale", "banner", "well", "cart", "bush"] },
+  },
+  farm: {
+    name: "farm",
+    anchor: "Midwest farmland on a clear summer day: red barns, white farmhouses, silos, endless corn and golden hay under a big blue sky",
+    skyTop: 0x2f7fe0, skyBottom: 0xaedcff, ridgeFar: 0x6f9a62, ridgeNear: 0x4f8a3c, moon: 0xffe9a0, star: 0xffffff,
+    grass: 0x8fc94a, soil: 0x6b4a2b, tint: 0xfff0c8, grade: 0.06, dim: 1.03, fog: 0.05, vignette: 0.1, ambient: "none",
+    backdrop: { skyline: "flat", landmark: "barn", far: ["silo", "farmhouse", "watertower", "windmill", "oak", "barn"], mid: ["corn", "oak", "corn", "haybale", "silo"], near: ["fence", "corn", "haybale", "fence", "bush"] },
+  },
+  desert: {
+    name: "desert",
+    anchor: "sun-baked desert at golden hour: sand dunes, ancient pyramids, palms and cacti, warm orange and ochre light",
+    skyTop: 0x3f6fb5, skyBottom: 0xffc98a, ridgeFar: 0xc79a62, ridgeNear: 0xb5834e, moon: 0xfff0b0, star: 0xffffff,
+    grass: 0xe0bf7a, soil: 0x9a6a3a, tint: 0xffcf8a, grade: 0.1, dim: 1.02, fog: 0.12, vignette: 0.18, ambient: "none",
+    backdrop: { skyline: "hills", landmark: "pyramid", far: ["pyramid", "rock", "palm", "tent"], mid: ["palm", "cactus", "rock"], near: ["cactus", "rock", "bush", "cart"] },
+  },
+  city: {
+    name: "city",
+    anchor: "big city at dusk: tall skyscrapers with lit windows, street lamps, cool blue and warm amber lights",
+    skyTop: 0x1a2350, skyBottom: 0xe0876a, ridgeFar: 0x3a3f5c, ridgeNear: 0x2c3046, moon: 0xffe0b0, star: 0xffffff,
+    grass: 0x5f8f5a, soil: 0x3a3a44, tint: 0xffb98a, grade: 0.08, dim: 1, fog: 0.12, vignette: 0.25, ambient: "none",
+    backdrop: { skyline: "hills", landmark: "city", far: ["city", "watertower", "city"], mid: ["oak", "city", "lamp"], near: ["lamp", "bush", "fence"] },
+  },
+};
+const BACKDROP_ALIASES: Record<string, string> = {
+  medieval: "medieval", medevil: "medieval", mideval: "medieval", medival: "medieval", medeval: "medieval", midevil: "medieval",
+  castle: "medieval", castles: "medieval", kingdom: "medieval", village: "medieval", knight: "medieval", knights: "medieval", camelot: "medieval", fantasy: "medieval",
+  farm: "farm", farms: "farm", farmland: "farm", countryside: "farm", barnyard: "farm", barn: "farm", ranch: "farm", rural: "farm", prairie: "farm",
+  cornfield: "farm", corn: "farm", indiana: "farm", iowa: "farm", kansas: "farm", nebraska: "farm", ohio: "farm", illinois: "farm", midwest: "farm",
+  desert: "desert", egypt: "desert", egyptian: "desert", sahara: "desert", pyramids: "desert", pyramid: "desert", dunes: "desert",
+  city: "city", downtown: "city", skyline: "city", skyscrapers: "city", urban: "city", metropolis: "city",
+};
+
+const MOTIFS = new Set<string>(BACKDROP_MOTIFS);
+const motifList = (v: unknown): BackdropMotif[] =>
+  Array.isArray(v) ? v.map((m) => String(m).toLowerCase().trim()).filter((m): m is BackdropMotif => MOTIFS.has(m)).slice(0, 8) : [];
+
+/** Validate a backdrop (Spark-written or stored): only known motifs survive; nothing to draw means no backdrop. */
+export function parseBackdrop(raw: unknown): ThemedBackdrop | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o = raw as Record<string, unknown>;
+  const skyline = o.skyline === "flat" || o.skyline === "hills" ? o.skyline : "mountains";
+  const landmark = typeof o.landmark === "string" && MOTIFS.has(o.landmark.toLowerCase()) ? (o.landmark.toLowerCase() as BackdropMotif) : undefined;
+  const far = motifList(o.far), mid = motifList(o.mid), near = motifList(o.near);
+  if (!landmark && far.length + mid.length + near.length === 0) return undefined;
+  return { skyline, ...(landmark ? { landmark } : {}), far, mid, near };
+}
+
 export function moodKey(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 24) || "mood";
 }
@@ -94,6 +152,7 @@ export function parseMoodSpec(text: string, name: string): MoodSpec | null {
       grass: hex(o.grass, base.grass), soil: hex(o.soil, base.soil),
       tint: hex(o.tint, base.tint), grade: num(o.grade, 0, 0.6, 0.25), dim: num(o.dim, 0.5, 1.2, 0.9),
       fog: num(o.fog, 0, 1, 0), vignette: num(o.vignette, 0, 0.8, 0.3), ambient,
+      ...(parseBackdrop(o.backdrop) ? { backdrop: parseBackdrop(o.backdrop) } : {}),
     };
   } catch {
     return null;
@@ -104,17 +163,38 @@ const MOOD_SYSTEM = `You art-direct a 2D pixel-art platformer. Given a mood or t
 {"anchor":"one sentence describing the visual style in plain words (colors, lighting, texture, details) that an image editor can follow",
 "skyTop":"#rrggbb","skyBottom":"#rrggbb","ridgeFar":"#rrggbb","ridgeNear":"#rrggbb","moon":"#rrggbb","star":"#rrggbb","grass":"#rrggbb","soil":"#rrggbb",
 "tint":"#rrggbb (overall color wash)","grade":0-0.6 (wash strength),"dim":0.5-1.2 (brightness),"fog":0-1,"vignette":0-0.8,"ambient":"none"|"fog"|"snow"|"embers"|"sparks"}
-Sky is a vertical gradient from skyTop to skyBottom; ridges are far hill silhouettes; grass is the ground's top edge, soil its speckles. Keep the whole picture readable.`;
+Sky is a vertical gradient from skyTop to skyBottom; ridges are far hill silhouettes; grass is the ground's top edge, soil its speckles. Keep the whole picture readable.
+When the theme is a PLACE or setting (a village, a farm, a city, a jungle, ancient Egypt), also add
+"backdrop":{"skyline":"mountains"|"hills"|"flat","landmark":"<one motif>","far":[motifs],"mid":[motifs],"near":[motifs]}
+using ONLY these motifs: ${BACKDROP_MOTIFS.join(", ")}. far = distant buildings and landmarks, mid = trees and big props, near = low props and fences. Leave "backdrop" out when no motif fits.`;
 
-/** The look for a mood word: a hand-tuned preset when we have one, otherwise Spark designs it (preset spooky as a safety net). */
-export async function moodSpecFor(mood: string): Promise<MoodSpec> {
+/**
+ * The look for a mood word: a hand-tuned preset when we have one, otherwise Spark designs it (preset spooky as a safety net).
+ * A backdrop preset word ("medieval", "indiana farm") brings its scenery; with a mood word too ("spooky castle")
+ * the mood's palette wears the backdrop's scenery. `background` scopes it to the backdrop (ADR 0067): sprites keep
+ * their look, so the colour wash stays light.
+ */
+export async function moodSpecFor(mood: string, opts: { background?: boolean } = {}): Promise<MoodSpec> {
+  const spec = await designMood(mood);
+  if (!opts.background) return spec;
+  return { ...spec, scope: "background", grade: Math.min(spec.grade, 0.1), dim: Math.max(0.9, spec.dim) };
+}
+
+async function designMood(mood: string): Promise<MoodSpec> {
   const word = mood.toLowerCase().trim();
-  for (const w of word.split(/[^a-z]+/)) if (ALIASES[w]) return PRESETS[ALIASES[w]];
+  const words = word.split(/[^a-z]+/);
+  const moodHit = words.find((w) => ALIASES[w]);
+  const backdropHit = words.find((w) => BACKDROP_ALIASES[w]);
+  if (moodHit && backdropHit) {
+    return { ...PRESETS[ALIASES[moodHit]], name: moodKey(`${ALIASES[moodHit]} ${BACKDROP_ALIASES[backdropHit]}`), backdrop: BACKDROP_PRESETS[BACKDROP_ALIASES[backdropHit]].backdrop };
+  }
+  if (moodHit) return PRESETS[ALIASES[moodHit]];
+  if (backdropHit) return BACKDROP_PRESETS[BACKDROP_ALIASES[backdropHit]];
   try {
     const res = await chat(SPARK, [
       { role: "system", content: MOOD_SYSTEM },
       { role: "user", content: `Mood: "${word.slice(0, 60)}"` },
-    ], 700);
+    ], 900);
     const spec = parseMoodSpec(res.text, word);
     if (spec) return spec;
   } catch { /* fall through to the safety net */ }

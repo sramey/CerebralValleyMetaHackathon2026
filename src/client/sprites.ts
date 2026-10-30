@@ -31,8 +31,10 @@ export function framesFor(
   framesBySubject: Record<string, Texture[]>,
   entityType: string,
   isPlayer: boolean,
+  playerSkin?: string,
 ): Texture[] {
-  if (isPlayer) return framesBySubject["ninja"] ?? [];
+  // A genre change re-skins the player (ADR 0066); until its sheet lands the ninja stays.
+  if (isPlayer) return (playerSkin && framesBySubject[`${playerSkin}-skin`]) || framesBySubject["ninja"] || [];
   if (!canUseSpriteSheet(entityType)) return [];
   const lower = entityType.toLowerCase();
   if (isProjectileType(lower)) return [];
@@ -51,11 +53,12 @@ export function computePrimaries(
   entities: { id: number; owner?: string; type: string; w: number; h: number }[],
   framesBySubject: Record<string, Texture[]>,
   hasCustomLook?: (type: string) => boolean,
+  playerSkin?: string,
 ): Set<number> {
   const primaries = new Set<number>();
   const groups = new Map<string, { maxArea: number; items: { id: number; area: number }[] }>();
   for (const e of entities) {
-    const frames = framesFor(framesBySubject, e.type, e.type === "player");
+    const frames = framesFor(framesBySubject, e.type, e.type === "player", playerSkin);
     if (frames.length < 1 || (hasCustomLook && hasCustomLook(e.type))) continue;
     const subject = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0] ?? e.type;
     const gk = `${e.owner ?? ""}|${subject}`;
@@ -100,6 +103,119 @@ function imageDrawable(img: HTMLImageElement, timeoutMs: number): Promise<boolea
 
 /** How long one sprite sheet may hold up the boot. Sheets are ~150 KB; 6 s is a stall, not a slow network. */
 const SHEET_TIMEOUT_MS = 6000;
+
+export interface FrameBounds {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Deterministically find the true bounding box for each pose in an AI-generated
+ * sprite sheet (flat solid magenta background, 4 poses in 1 row).
+ * Never assumes 4 equal-width columns: detects actual occupied pixel runs,
+ * recursively splits merged poses at occupancy valleys using image width ratios,
+ * crops to the dominant vertical band, and trims tight horizontal bounds.
+ */
+export function findPoseBounds(
+  w: number,
+  h: number,
+  px: Uint8ClampedArray | Uint8Array,
+  targetFrames = 4,
+): FrameBounds[] {
+  // 1. Column occupancy (filter out stray alpha noise: > 2 occupied pixels)
+  const colCount = new Uint32Array(w);
+  for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) {
+      if (px[(y * w + x) * 4 + 3] > 20) colCount[x]++;
+    }
+  }
+
+  // 2. Identify initial contiguous occupied runs separated by >4 empty columns
+  const runs: { x0: number; x1: number }[] = [];
+  let start = -1;
+  let gap = 0;
+  for (let x = 0; x < w; x++) {
+    if (colCount[x] > 2) {
+      if (start < 0) start = x;
+      gap = 0;
+    } else if (start >= 0 && ++gap > 4) {
+      runs.push({ x0: start, x1: x - gap });
+      start = -1;
+      gap = 0;
+    }
+  }
+  if (start >= 0) runs.push({ x0: start, x1: w - 1 });
+
+  // 3. Recursively split merged poses at the column with lowest pixel occupancy (valley).
+  // Dynamic threshold based on image width rather than a hardcoded 520 px.
+  const maxPoseW = Math.round(w * 0.28);
+  const splitCutoff = Math.min(maxPoseW, Math.round(w * 0.24));
+  while (runs.length < targetFrames || runs.some((r) => r.x1 - r.x0 + 1 > maxPoseW)) {
+    if (runs.length >= 6) break;
+    let widest = -1, widestW = splitCutoff;
+    for (let i = 0; i < runs.length; i++) {
+      const wd = runs[i].x1 - runs[i].x0 + 1;
+      if (wd > widestW) { widestW = wd; widest = i; }
+    }
+    if (widest < 0) break;
+    const run = runs[widest];
+    const span = run.x1 - run.x0;
+    let bestX = -1, bestCount = Infinity;
+    // Scan central 22% - 78% for the valley
+    for (let x = Math.floor(run.x0 + span * 0.22); x < run.x0 + span * 0.78; x++) {
+      const count = colCount[x];
+      if (count < bestCount) { bestCount = count; bestX = x; }
+    }
+    if (bestX <= run.x0 || bestX >= run.x1) break;
+    runs.splice(widest, 1, { x0: run.x0, x1: bestX - 1 }, { x0: bestX, x1: run.x1 });
+  }
+
+  // 4. For each run, find dominant vertical band and tight horizontal bounds
+  const frames: FrameBounds[] = [];
+  for (const run of runs) {
+    const rowCount = new Int32Array(h);
+    for (let y = 0; y < h; y++) {
+      let count = 0;
+      for (let x = run.x0; x <= run.x1; x++) {
+        if (px[(y * w + x) * 4 + 3] > 20) count++;
+      }
+      rowCount[y] = count;
+    }
+    const bands: { top: number; bottom: number; total: number }[] = [];
+    let cur: { top: number; bottom: number; total: number } | null = null;
+    let emptyRun = 0;
+    for (let y = 0; y < h; y++) {
+      if (rowCount[y] > 0) {
+        if (!cur) cur = { top: y, bottom: y, total: rowCount[y] };
+        else if (emptyRun > 24) { bands.push(cur); cur = { top: y, bottom: y, total: rowCount[y] }; }
+        else { cur.bottom = y; cur.total += rowCount[y]; }
+        emptyRun = 0;
+      } else if (cur) emptyRun++;
+    }
+    if (cur) bands.push(cur);
+    if (bands.length === 0) continue;
+    let best = bands[0];
+    for (const b of bands) if (b.total > best.total) best = b;
+    const y0 = best.top, y1 = best.bottom;
+    if (y1 <= y0) continue;
+
+    // Tight horizontal bounding box inside the vertical band
+    let x0 = run.x1, x1 = run.x0;
+    for (let y = y0; y <= y1; y++) {
+      for (let x = run.x0; x <= run.x1; x++) {
+        if (px[(y * w + x) * 4 + 3] > 20) {
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+        }
+      }
+    }
+    if (x1 < x0) continue;
+    frames.push({ x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 });
+  }
+  return frames;
+}
 
 export async function loadSpriteSheet(url: string): Promise<Texture[]> {
   try {
@@ -160,93 +276,13 @@ export async function loadSpriteSheet(url: string): Promise<Texture[]> {
     }
     ctx.putImageData(data, 0, 0);
 
-    // column occupancy -> frame runs separated by >12 empty columns
-    const colHas = new Uint8Array(w);
-    for (let x = 0; x < w; x++) {
-      for (let y = 0; y < h; y++) {
-        if (px[(y * w + x) * 4 + 3] > 20) { colHas[x] = 1; break; }
-      }
-    }
-    const runs: { x0: number; x1: number }[] = [];
-    let start = -1;
-    let gap = 0;
-    for (let x = 0; x < w; x++) {
-      if (colHas[x]) {
-        if (start < 0) start = x;
-        gap = 0;
-      } else if (start >= 0 && ++gap > 5) {
-        runs.push({ x0: start, x1: x - gap });
-        start = -1; gap = 0;
-      }
-    }
-    if (start >= 0) runs.push({ x0: start, x1: w - 1 });
-    // Split merged poses recursively: repeatedly cut the widest run wider
-    // than 520px at its emptiest column in the central 25%-75%, re-examining
-    // spliced pieces, until no run exceeds 520px or there are 6 runs.
-    while (runs.length < 6) {
-      let widest = -1, widestW = 520;
-      for (let i = 0; i < runs.length; i++) {
-        const wd = runs[i].x1 - runs[i].x0 + 1;
-        if (wd > widestW) { widestW = wd; widest = i; }
-      }
-      if (widest < 0) break;
-      const run = runs[widest];
-      const span = run.x1 - run.x0;
-      let bestX = -1, bestCount = Infinity;
-      for (let x = Math.floor(run.x0 + span * 0.25); x < run.x0 + span * 0.75; x++) {
-        let count = 0;
-        for (let y = 0; y < h; y++) if (px[(y * w + x) * 4 + 3] > 20) count++;
-        if (count < bestCount) { bestCount = count; bestX = x; }
-      }
-      if (bestX <= run.x0 || bestX >= run.x1) break;
-      runs.splice(widest, 1, { x0: run.x0, x1: bestX - 1 }, { x0: bestX, x1: run.x1 });
-    }
-
+    const bounds = findPoseBounds(w, h, px);
     const textures: Texture[] = [];
-    for (const run of runs) {
-      // Band crop: split occupied rows into bands separated by >24 empty
-      // rows and keep only the band with the most occupied pixels, so a
-      // stray object above/below the pose does not stretch the frame.
-      const rowCount = new Int32Array(h);
-      for (let y = 0; y < h; y++) {
-        let count = 0;
-        for (let x = run.x0; x <= run.x1; x++) {
-          if (px[(y * w + x) * 4 + 3] > 20) count++;
-        }
-        rowCount[y] = count;
-      }
-      const bands: { top: number; bottom: number; total: number }[] = [];
-      let cur: { top: number; bottom: number; total: number } | null = null;
-      let emptyRun = 0;
-      for (let y = 0; y < h; y++) {
-        if (rowCount[y] > 0) {
-          if (!cur) {
-            cur = { top: y, bottom: y, total: rowCount[y] };
-          } else if (emptyRun > 24) {
-            bands.push(cur);
-            cur = { top: y, bottom: y, total: rowCount[y] };
-          } else {
-            cur.bottom = y;
-            cur.total += rowCount[y];
-          }
-          emptyRun = 0;
-        } else if (cur) {
-          emptyRun++;
-        }
-      }
-      if (cur) bands.push(cur);
-      if (bands.length === 0) continue;
-      let best = bands[0];
-      for (const band of bands) if (band.total > best.total) best = band;
-      const y0 = best.top;
-      const y1 = best.bottom;
-      if (y1 <= y0) continue;
-      const fw = run.x1 - run.x0 + 1;
-      const fh = y1 - y0 + 1;
+    for (const b of bounds) {
       const frame = document.createElement("canvas");
-      frame.width = fw;
-      frame.height = fh;
-      frame.getContext("2d")!.drawImage(canvas, run.x0, y0, fw, fh, 0, 0, fw, fh);
+      frame.width = b.w;
+      frame.height = b.h;
+      frame.getContext("2d")!.drawImage(canvas, b.x, b.y, b.w, b.h, 0, 0, b.w, b.h);
       textures.push(Texture.from(frame));
     }
     return textures;

@@ -62,6 +62,29 @@ export interface MoodSpec {
   skyTop: number; skyBottom: number; ridgeFar: number; ridgeNear: number; moon: number; star: number; grass: number; soil: number;
   tint: number; grade: number; dim: number; fog: number; vignette: number;
   ambient: "none" | "fog" | "snow" | "embers" | "sparks";
+  /** Themed parallax scenery that replaces the starter scenery ("change the background to medieval", ADR 0067). */
+  backdrop?: ThemedBackdrop;
+  /** "background": the ask named only the backdrop, so sprites keep their look (no Muse Image edits). */
+  scope?: "world" | "background";
+}
+
+/** Landmarks and props the code-drawn backdrop can paint (ADR 0067). Spark picks from this list; nothing else is drawn. */
+export const BACKDROP_MOTIFS = [
+  "castle", "tower", "village", "church", "windmill", "farmhouse", "barn", "silo", "watertower", "city", "pyramid", "tent",
+  "pine", "oak", "deadtree", "palm", "cactus", "rock", "bush", "fence", "lamp", "torch", "haybale", "corn", "banner", "well", "cart",
+] as const;
+export type BackdropMotif = (typeof BACKDROP_MOTIFS)[number];
+
+/**
+ * A themed backdrop: the skyline shape plus what stands in each parallax band behind the play plane.
+ * `landmark` is the big set piece repeated far apart in the far band (a castle on a hill).
+ */
+export interface ThemedBackdrop {
+  skyline: "mountains" | "hills" | "flat";
+  landmark?: BackdropMotif;
+  far: BackdropMotif[];
+  mid: BackdropMotif[];
+  near: BackdropMotif[];
 }
 
 export interface Particle {
@@ -243,6 +266,11 @@ export interface ModApi {
   on?: (event: ModEventName, fn: (ev: ModEvent) => void) => void;
   /** Show a speech bubble over an entity for `seconds` of sim time (default 3). Text is cut to 60 characters. */
   say?: (entity: Entity, text: string, seconds?: number) => void;
+  /** Genre change (ADR 0066): reshape the whole scene, not just add to it. Undone automatically, in stack order, when the mod unloads.
+   *  hideTerrain / hideScenery take ground, platforms, towers / trees, lamps, sky layers OUT of the world (nothing can hit, see or collect them);
+   *  backdrop paints a code-drawn sky ("space"); playerSkin re-skins the player with generated art (e.g. "spaceship") and
+   *  the player's gravity is put back on unload. Calling it again from the same mod adds to its claim. */
+  setScene?: (options: SceneOptions) => void;
   /** Tell every other mod something happened ("boss-down", "door-open"); they get a "signal" event next tick. */
   signal?: (name: string, value?: KnobValue) => void;
 }
@@ -275,6 +303,10 @@ export interface ModEvent {
 
 /** A speech bubble over an entity (ADR 0059). Pure data on the world, like HUD widgets; the client draws it. */
 export interface Speech { entityId: number; owner: string; text: string; remaining: number }
+
+export interface SceneOptions { hideTerrain?: boolean; hideScenery?: boolean; backdrop?: string; playerSkin?: string }
+/** What the scene looks like right now, derived from the mods' claims (ADR 0066). Pure data: the client paints it. */
+export interface SceneState { backdrop?: string; playerSkin?: string }
 
 export type KnobValue = number | string | boolean;
 export interface KnobDef { value: KnobValue; min?: number; max?: number; label?: string }
@@ -367,7 +399,7 @@ export type ClientMsg =
 /** One mod in a saved world: a built-in the client bundles, or a verified AI mod with its source. */
 export type WorldMod =
   | { builtin: true; id: string; values: KnobValues }
-  | { builtin?: false; id: string; title: string; source: string; compiled: string; knobs: KnobDefs; values: KnobValues; art?: { key: string; url: string; scenery?: boolean }; look?: Look };
+  | { builtin?: false; id: string; title: string; source: string; compiled: string; knobs: KnobDefs; values: KnobValues; art?: { key: string; url: string; scenery?: boolean }; skinArt?: { key: string; url: string }; look?: Look };
 
 /** One step of the session's time-travel strip (ADR 0041): what the world was after a build, mood, undo or restore. */
 export interface TimelineStep { n: number; kind: "start" | "build" | "mood" | "undo" | "restore"; label: string; mood?: string; mods: { id: string; title: string }[] }
@@ -429,7 +461,7 @@ export type BuildStage = "routing" | "writing" | "compiling" | "verifying" | "re
 
 export type ServerMsg =
   | { kind: "stage"; stage: BuildStage; detail: string; command?: string }
-  | { kind: "mod"; mod: { id: string; title: string; source: string; compiled: string; knobs: KnobDefs; art?: { key: string; url: string; scenery?: boolean }; artPending?: string; look?: Look } }
+  | { kind: "mod"; mod: { id: string; title: string; source: string; compiled: string; knobs: KnobDefs; art?: { key: string; url: string; scenery?: boolean }; artPending?: string; skinArt?: { key: string; url: string }; skinPending?: string; look?: Look } }
   | { kind: "art"; modId: string; art: { key: string; url: string; scenery?: boolean } }
   | { kind: "mood"; mood: MoodSpec | null }
   | { kind: "restyled"; mood: string; key: string; url: string | null }
@@ -487,6 +519,14 @@ export interface ReceiptArt {
   ms?: number;
 }
 /** "How was this made?" (ADR 0065): the chain from words to a verified, playable mod. */
+export interface ReceiptReview {
+  model: string;
+  verdict: "ok" | "fix";
+  issues: string[];
+  accepted: boolean;
+  ms: number;
+}
+
 export interface BuildReceipt {
   modId: string;
   title: string;
@@ -502,6 +542,7 @@ export interface BuildReceipt {
   /** What the verifier ran before this could load. */
   proof: { healthFrames: number; msBudget: number; msPerFrame: number; playtestSeeds: number; playtests: number; fixed: boolean };
   art?: ReceiptArt;
+  review?: ReceiptReview;
   timings?: { route: number; write: number; compile: number; verify: number; total: number };
   at?: string;
 }

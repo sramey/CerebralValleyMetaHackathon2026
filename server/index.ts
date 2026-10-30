@@ -6,7 +6,7 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
 import { SIM } from "../src/contract";
-import { detectMoodCommand, entityKind, extractSpawnedEntities, isHeldItemType, isPlayerAbilityCommand, isPlayerCommand } from "../src/ontology";
+import { detectBackdropCommand, detectMoodCommand, entityKind, extractSpawnedEntities, isHeldItemType, isPlayerAbilityCommand, isPlayerCommand } from "../src/ontology";
 import { moodKey, moodSpecFor, pool, restyleSheet, sheetPath } from "./mood";
 import { fallbackVisual, lookFor, parseShape, parseVisual } from "./visual";
 import type { Visual } from "./visual";
@@ -31,7 +31,8 @@ import type { Recent } from "./context";
 import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, formatManifest, ROUTER_SYSTEM, WONDER_SYSTEM } from "./prompt";
 import { activeLogFile, logBuild, logMood, saveModSources } from "./createlog";
 import { createStatsHandler } from "./stats-feed";
-import { artCachedUrl, artKeyForType, clearCachedArt, deriveSubject, generateSubjectArt, isFlyingRequest, isScenerySubject, pickArtType, purgeLegacyArt, subjectArtPrompt, IMAGE_MODEL } from "./art";
+import { genreWarnings } from "./genre";
+import { MAX_ART_PER_BUILD, artCachedUrl, artKeyForType, clearCachedArt, deriveSubject, generateSubjectArt, isFlyingRequest, isScenerySubject, pickArtType, pickSkin, purgeLegacyArt, subjectArtPrompt, IMAGE_MODEL } from "./art";
 import { aiReceipt, plainReceipt } from "./receipt";
 import { learnFromFix, learnRuleFromFeedback, learnSkillFromFeedback } from "./learn";
 import { segmentPhoto } from "./photo";
@@ -42,6 +43,7 @@ import { isWorldId, restyledForWorld, snapshotWorld, WorldStore } from "./worlds
 import { generateExportHtml } from "./export";
 import { createStaticHandler } from "./static";
 import { createVoiceHub } from "./voice";
+import { queueBuildReview } from "./reviewer";
 import { appendTester, sanitizeTester } from "./testers";
 import { runSketchBuild } from "./sketch";
 import { runPaperBuild } from "./paper";
@@ -62,6 +64,8 @@ interface ManifestRec {
   compiled: string;
   knobs: KnobDefs;
   art?: { key: string; url: string; scenery?: boolean };
+  /** The player's re-skin sheet from api.setScene({ playerSkin }) (ADR 0066). */
+  skinArt?: { key: string; url: string };
   look?: Look;
   /** How this mod was made (ADR 0065), when it was built in this session. */
   receipt?: BuildReceipt;
@@ -240,13 +244,20 @@ function noteTimelineSoon(ws: WebSocket): void {
   s.tlTimer = setTimeout(() => { s.tlTimer = undefined; noteTimeline(ws); }, 450);
 }
 
+/** Record a mood undo on the timeline now, as its own step (bead b0i); the client's optimistic step is replaced by this frame. */
+function noteMoodUndo(ws: WebSocket): void {
+  const s = sess(ws);
+  if (s.tlTimer) { clearTimeout(s.tlTimer); s.tlTimer = undefined; }
+  noteTimeline(ws, { kind: "undo", label: "Back to normal" });
+}
+
 function handleTimelineRestore(ws: WebSocket, n: number): void {
   const s = sess(ws);
   const step = s.timeline?.get(n);
   if (!step) { send(ws, { kind: "say", text: "That step is no longer in the timeline." }); return; }
   s.manifest.clear();
   for (const m of step.mods) {
-    if (m.builtin !== true) s.manifest.set(m.id, { id: m.id, title: m.title, source: m.source, compiled: m.compiled, knobs: structuredClone(m.knobs), ...(m.art ? { art: m.art } : {}), ...(m.look ? { look: m.look } : {}) });
+    if (m.builtin !== true) s.manifest.set(m.id, { id: m.id, title: m.title, source: m.source, compiled: m.compiled, knobs: structuredClone(m.knobs), ...(m.art ? { art: m.art } : {}), ...(m.skinArt ? { skinArt: m.skinArt } : {}), ...(m.look ? { look: m.look } : {}) });
   }
   s.mood = step.mood;
   s.moodMods = step.mood ? new Set(s.manifest.keys()) : undefined;
@@ -740,6 +751,18 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     return;
   }
 
+  // "Change the background to medieval" is answered by the route rules alone (ADR 0068): no router call,
+  // so it is a second faster and still works when the router is down. Spark only designs an unknown theme.
+  const backdrop = forceEditModId ? null : detectBackdropCommand(command);
+  if (backdrop) {
+    routing?.catch(() => {});
+    console.log(`[route] backdrop ${backdrop} (no router call) for: ${command}`);
+    if (!spend(ws, "build")) return;
+    await handleMood(ws, backdrop, true);
+    send(ws, { kind: "timing", command, ms: { route: 0, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
+    return;
+  }
+
   stage(ws, { kind: "stage", stage: "routing", detail: "routing your command", command });
 
   // The player can stop this build while it runs (ADR 0060). Its command text keys the job -
@@ -795,7 +818,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     return;
   }
   if (route.action === "mood") {
-    await handleMood(ws, route.mood ?? detectMoodCommand(command) ?? command.replace(/^(make|turn|set|change)\s+(it|this|everything|the\s+\w+)\s+/i, ""));
+    await handleMood(ws, route.mood ?? detectMoodCommand(command) ?? command.replace(/^(make|turn|set|change)\s+(it|this|everything|the\s+\w+)\s+/i, ""), detectBackdropCommand(command) !== null);
     send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
     return;
   }
@@ -809,6 +832,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
       sess(ws).mood = undefined;
       sess(ws).restyled = undefined;
       send(ws, { kind: "mood", mood: null });
+      noteMoodUndo(ws);
       send(ws, { kind: "say", text: "Back to normal." });
       send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
       return;
@@ -1093,6 +1117,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     let art: { key: string; url: string; scenery?: boolean } | undefined;
     let artPending: string | undefined;
     let pendingArt: { subject: string; type: string; key: string; scenery: boolean; flying: boolean } | undefined;
+    let artsOrdered = 0;
     const artType = pickArtType(source);
     // Spark's visual kind (from the router call) decides the art path; word lists only cover a router miss (ADR 0015).
     const fb = route.visual ? undefined : fallbackVisual(`${command} ${artType ?? ""}`);
@@ -1108,13 +1133,24 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
         const cachedUrl = artCachedUrl(artType, flying ? "fly" : undefined);
         if (cachedUrl) {
           art = { key, url: cachedUrl, ...(scenery ? { scenery: true } : {}) };
-        } else if (spend(ws, "image")) {
+        } else if (artsOrdered < MAX_ART_PER_BUILD && spend(ws, "image")) {
+          artsOrdered++;
           artPending = key;
           pendingArt = { subject, type: artType, key, scenery, flying };
         }
       }
     }
-    const rec: ManifestRec = { id: def.id, title: def.title, source, compiled: first.js, knobs: def.knobs ?? {}, ...(art ? { art } : {}), ...(look ? { look } : {}) };
+    // A genre change re-skins the player (ADR 0066): its own sheet, cached or ordered like any other art.
+    let skinArt: { key: string; url: string } | undefined;
+    let skinPending: string | undefined;
+    const skin = pickSkin(source);
+    if (skin) {
+      const key = artKeyForType(skin, "skin");
+      const cachedUrl = artCachedUrl(skin, "skin");
+      if (cachedUrl) skinArt = { key, url: cachedUrl };
+      else if (artsOrdered < MAX_ART_PER_BUILD && spend(ws, "image")) { artsOrdered++; skinPending = key; }
+    }
+    const rec: ManifestRec = { id: def.id, title: def.title, source, compiled: first.js, knobs: def.knobs ?? {}, ...(art ? { art } : {}), ...(skinArt ? { skinArt } : {}), ...(look ? { look } : {}) };
     // The receipt (ADR 0065): the whole chain behind this mod, kept with it for "How was this made?".
     const receiptArt: ReceiptArt | undefined = look
       ? { model: "code", subject: artType ?? def.title, state: "code-drawn" }
@@ -1136,8 +1172,18 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     if (editRec && def.id !== editRec.id) { manifest.delete(editRec.id); send(ws, { kind: "removed", modId: editRec.id }); }
     manifest.set(def.id, rec);
     noteTouched(session.recent, def.id);
-    stage(ws, { kind: "stage", stage: "done", detail: `loaded ${def.id} (${SIM.healthFrames} frames OK)`, command });
-    send(ws, { kind: "mod", mod: { id: def.id, title: def.title, source, compiled: first.js, knobs: rec.knobs, ...(art ? { art } : {}), ...(artPending ? { artPending } : {}), ...(look ? { look } : {}) } });
+    const notes = genreWarnings(command, source);
+    stage(ws, { kind: "stage", stage: "done", detail: `loaded ${def.id} (${SIM.healthFrames} frames OK)${notes.length ? ` — note: ${notes.join("; ")}` : ""}`, command });
+    send(ws, { kind: "mod", mod: { id: def.id, title: def.title, source, compiled: first.js, knobs: rec.knobs, ...(art ? { art } : {}), ...(artPending ? { artPending } : {}), ...(skinArt ? { skinArt } : {}), ...(skinPending ? { skinPending } : {}), ...(look ? { look } : {}) } });
+    if (skinPending && skin) {
+      const skinKey = skinPending;
+      generateSubjectArt(skin.replace(/-/g, " "), skin, false, false, true).then((url) => {
+        if (!url) return;
+        rec.skinArt = { key: skinKey, url };
+        try { send(ws, { kind: "art", modId: def.id, art: { key: skinKey, url } }); } catch {}
+      }).catch(() => {});
+      send(ws, { kind: "say", text: `Drawing your ${skin.replace(/-/g, " ")}...` });
+    }
     if (pendingArt) {
       const { subject, type, key, scenery, flying } = pendingArt;
       const a0 = performance.now();
@@ -1147,6 +1193,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
         if (url) { rec.art = { key, url, ...(scenery ? { scenery: true } : {}) }; try { send(ws, { kind: "art", modId: def.id, art: { key, url, ...(scenery ? { scenery: true } : {}) } }); } catch {} } }).catch(() => {});
       send(ws, { kind: "say", text: `Drawing ${subject}...` });
     }
+    queueBuildReview({ ws, command, mod: rec, playtest: { ok: true, msPerFrame: first.res.msPerFrame }, worldMods: () => worldMods(ws), send });
     const files = saveModSources(sources, def.id);
     logBuild({ command, route: editRec ? "edit" : routeAction, outcome: editRec ? "edit" : "mod", modId: def.id, title: def.title, timings: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) }, verify: { ok: true, errors: [], msPerFrame: first.res.msPerFrame }, fixAttempted, ...agentInfo(), ...batchInfo, sourceFile: files[files.length - 1], sourceFiles: files });
   } else {
@@ -1188,12 +1235,15 @@ function spend(ws: WebSocket, kind: Kind): boolean {
 
 const BUILTIN_IDS: ReadonlySet<string> = new Set(BUILTINS.map((b) => b.id));
 
-/** "make it spooky": Spark routed here. Design the mood, tell the client to repaint, then it asks for the sprite edits (ADR 0017). */
-async function handleMood(ws: WebSocket, moodWords: string): Promise<void> {
+/**
+ * "make it spooky": Spark routed here. Design the mood, tell the client to repaint, then it asks for the sprite edits (ADR 0017).
+ * `background` ("change the background to medieval", ADR 0067) scopes it to the backdrop: no sprite edits.
+ */
+async function handleMood(ws: WebSocket, moodWords: string, background = false): Promise<void> {
   const t0 = performance.now();
   const words = moodWords.trim() || "spooky";
-  send(ws, { kind: "say", text: `Making it ${words}...` });
-  const spec = await moodSpecFor(words);
+  send(ws, { kind: "say", text: background ? `Painting a ${words} background...` : `Making it ${words}...` });
+  const spec = await moodSpecFor(words, { background });
   sess(ws).mood = spec;
   sess(ws).moodMods = new Set(sess(ws).manifest.keys()); // to tell whether the mood is still the latest change
   sess(ws).restyled = {};
@@ -1204,7 +1254,7 @@ async function handleMood(ws: WebSocket, moodWords: string): Promise<void> {
 /** Edit each sprite sheet the client lists toward the mood anchor, a few at a time; every image counts against the spend guard. */
 async function handleRestyle(ws: WebSocket, msg: Extract<ClientMsg, { kind: "restyle" }>): Promise<void> {
   const spec = sess(ws).mood;
-  if (!spec || spec.name !== moodKey(String(msg.mood))) return;
+  if (!spec || spec.name !== moodKey(String(msg.mood)) || spec.scope === "background") return;
   const keys = (Array.isArray(msg.keys) ? msg.keys : []).filter((k): k is string => typeof k === "string").slice(0, 12);
   await pool(keys, 4, async (key) => {
     if (sess(ws).mood !== spec) return;
@@ -1251,7 +1301,7 @@ function handleWorldLoad(ws: WebSocket, msg: Extract<ClientMsg, { kind: "worldLo
   const manifest = s.manifest;
   manifest.clear();
   for (const m of w.mods) {
-    if (m.builtin !== true) manifest.set(m.id, { id: m.id, title: m.title, source: m.source, compiled: m.compiled, knobs: structuredClone(m.knobs), ...(m.art ? { art: m.art } : {}), ...(m.look ? { look: m.look } : {}) });
+    if (m.builtin !== true) manifest.set(m.id, { id: m.id, title: m.title, source: m.source, compiled: m.compiled, knobs: structuredClone(m.knobs), ...(m.art ? { art: m.art } : {}), ...(m.skinArt ? { skinArt: m.skinArt } : {}), ...(m.look ? { look: m.look } : {}) });
   }
   s.mood = w.mood;
   s.moodMods = w.mood ? new Set(manifest.keys()) : undefined;
@@ -1432,6 +1482,7 @@ function dispatchClientMsg(ws: WebSocket, msg: ClientMsg): void {
     if (msg.modId === "mood") {
       sess(ws).mood = undefined;
       sess(ws).restyled = undefined;
+      noteMoodUndo(ws);
     } else if (manifest.has(msg.modId)) {
       manifest.delete(msg.modId);
       send(ws, { kind: "removed", modId: msg.modId });

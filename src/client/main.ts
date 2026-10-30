@@ -5,27 +5,29 @@ import { initExplain } from "./explain";
 import { initReceipt } from "./receipt";
 import { Application, Graphics, Sprite, Texture } from "pixi.js";
 import { pickWalkFrame } from "./walk-frame";
+import { healthBarColor, healthBarRect, rectBody, spriteBody, type DrawnBody } from "./health-bar";
 import { computePrimaries, framesFor, isProjectileType, loadSpriteSheet, loadSubjects } from "./sprites";
 import { startLateArt } from "./art-late";
 import chickenMod from "../mods/chicken";
 import { SIM } from "../contract";
 import { canUseSpriteSheet, entityKind } from "../ontology";
-import type { ClientMsg, Entity, KnobValue, ModDefinition, MoodSpec, ServerMsg } from "../contract";
+import type { ClientMsg, Entity, KnobValue, ModDefinition, MoodSpec, ServerMsg, ShapeName } from "../contract";
 import { initVoice } from "./voice";
 import { Fx } from "./fx";
 import { Feel } from "./feel";
 import { Sound, buildSfx } from "./sound";
 import { createTester } from "./tester";
 import { createOnboarding, createSoundButton, plainBuildMessage } from "./onboard";
+import { createMoodCard } from "./mood-card";
 import { Portal } from "./portal";
-import { localRelativeAsk } from "./local-asks";
+import { isMoodUndoAsk, localRelativeAsk } from "./local-asks";
 import { visualHeight } from "../sim/sockets";
-import { drawCliff, drawHoop, drawShape, drawTetherGear, isCliff, isTetherGear, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
+import { ASTEROID_RE, TARGET_RE, drawAsteroidRock, drawBullseyeTarget, drawCliff, drawHoop, drawShape, drawTetherGear, isCliff, isTetherGear, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
 import { celestialPos, computeDesiredCamY, depthFog, drawContactShadows, drawDistantMountains, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
-import { drawScenery } from "./scenery";
+import { drawBackdrop, drawScenery, skylineAmplitude } from "./scenery";
 import { isSetPiece, SetPieceLayer } from "./setpieces";
 import { drawDebris, drawDebrisParticle, isDebrisOrHazard } from "./debris";
-import { drawFluffyCloud, drawParallaxEntities, isParallaxOrSkyEntity, isSkyOrBackgroundEntity } from "./parallax";
+import { drawFluffyCloud, drawParallaxEntities, isCloudEntity, isParallaxOrSkyEntity, isSkyOrBackgroundEntity } from "./parallax";
 import { ModLoader } from "../sim/loader";
 import { isHoop } from "../sim/hoop";
 import { inputFromKeys, isGameKeyEvent, isTypingTarget } from "./keys";
@@ -38,6 +40,8 @@ import { createSpeech } from "./speech";
 import { createSketch } from "./sketch";
 import { CAMERA_LABEL, CAPTURE_LABEL, UPLOAD_LABEL, defaultAction, dialogCssVars, dialogLayout, fitInside, photoFindMessage, photoWorkSize, stageHint, wantsCameraStream } from "./camera-dialog";
 import type { DialogPhase } from "./camera-dialog";
+import { FINDER_IDLE, finderLine, finderNext } from "./camera-finder";
+import type { FinderEvent, FinderState } from "./camera-finder";
 import { compactPaperImage, paperImageSize, paperLevelMessage } from "./paper-image";
 import { matchPaperIntent, matchSketchIntent } from "./phrases";
 import { World } from "../sim/world";
@@ -187,6 +191,10 @@ const gfx = new Graphics();
 app.stage.addChild(gfx);
 app.stage.sortableChildren = true;
 gfx.zIndex = -100;
+const barGfx = new Graphics(); // health bars: above every sprite (max layer 9), below fx/feel
+barGfx.zIndex = 10.4;
+app.stage.addChild(barGfx);
+const drawnBodies = new Map<number, DrawnBody>(); // this frame's sprite bodies, for bar placement
 const fx = new Fx(app.stage);
 const urlFlags = parseUrlFlags(location.search, location.hash); // strangers' flags, decoded defensively (ADR 0037)
 // Synthesized WebAudio sound (bead 6d3): silent until the first gesture; ?mute starts muted, ?vol=0..1 sets master volume, M toggles mute.
@@ -239,7 +247,7 @@ $("#sketch-btn").addEventListener("click", () => sketch.open());
 };
 const layerOverride = new Map<number, number>();
 function subjectKeyFor(e: Entity): string | undefined {
-  const frames = framesFor(framesBySubject, e.type, e.type === "player");
+  const frames = framesFor(framesBySubject, e.type, e.type === "player", world.scene.playerSkin);
   if (frames.length < 1) return undefined;
   return Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0];
 }
@@ -296,13 +304,13 @@ function ridgeY(wx: number, seed: number): number {
     : Math.sin(wx * 0.011 + 4.0) * 20 + Math.sin(wx * 0.033) * 8;
 }
 
-function drawRidge(target: Graphics, pts: number[], camX: number, par: number, baseY: number, seed: number, color: number): void {
+function drawRidge(target: Graphics, pts: number[], camX: number, par: number, baseY: number, seed: number, color: number, amp = 1): void {
   const W = app.screen.width;
   const H = app.screen.height;
   pts.length = 0;
   const step = 32;
   for (let sx = -step; sx <= W + step; sx += step) {
-    pts.push(sx, baseY - ridgeY(sx + camX * par, seed));
+    pts.push(sx, baseY - ridgeY(sx + camX * par, seed) * amp);
   }
   const topCount = pts.length;
   pts.push(W + step, H, -step, H);
@@ -423,20 +431,12 @@ function drawDigitize(e: Entity, x: number, y: number): void {
   gfx.rect(x, y, e.w, e.h).stroke({ color: 0xc8f6ff, alpha: 0.25 + 0.35 * pulse, width: 1.5 });
 }
 
-function drawHealthBar(e: Entity, x: number, y: number): void {
-  const health = (e as { health?: number }).health;
-  if (typeof health !== "number" || health <= 0 || health >= 100) return;
-  gfx.rect(x, y - 9, e.w, 4).fill({ color: 0x0b0e13, alpha: 0.7 });
-  const color = health > 50 ? 0x3fd06a : health > 25 ? 0xffc94d : 0xff5a4d;
-  gfx.rect(x, y - 9, e.w * health / 100, 4).fill(color);
-}
-
 let lastPrimariesTick = -1;
 let cachedPrimaries = new Set<number>();
 function getActivePrimaries(): Set<number> {
   if (lastPrimariesTick !== world.tickCount) {
     lastPrimariesTick = world.tickCount;
-    cachedPrimaries = computePrimaries(world.entities, framesBySubject, (type) => !!kindOf(type));
+    cachedPrimaries = computePrimaries(world.entities, framesBySubject, (type) => !!kindOf(type), world.scene.playerSkin);
   }
   return cachedPrimaries;
 }
@@ -461,6 +461,11 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   if (isHoop(e)) { drawHoop(gfx, e, x, y); return; } // a goal is a structure, never a floating ring (bead z1d)
   const look = kindOf(t); // code-drawn shapes and engine effects never use sprites or the outline (ADR 0015)
   if (look) { if (look.kind === "shape") drawShape(gfx, e, x, y, look.shape); return; }
+  if (e.data?.visual === "shape" && t !== "coin" && !isProjectileType(t)) {
+    const shape = typeof e.data.shape === "string" ? (e.data.shape as ShapeName) : "circle";
+    drawShape(gfx, e, x, y, shape);
+    return;
+  }
   if (getActivePrimaries().has(e.id)) return; // sprite pass below
   if (t !== "player" && canUseSpriteSheet(e)) {
     for (const k of pendingArt) {
@@ -485,7 +490,11 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   gfx.rect(x - 1.5, y - 1.5, e.w + 3, e.h + 3).fill(OUTLINE); // rectangular looks below: outline is the rectangle
   if (t.indexOf("stair") >= 0 || t.indexOf("step") >= 0 || t.indexOf("wall") >= 0 || t.indexOf("block") >= 0 || t.indexOf("brick") >= 0 || t.indexOf("pillar") >= 0 || t.indexOf("ledge") >= 0 || t.indexOf("ramp") >= 0 || entityKind(e) === "terrain") { drawStair(e, x, y); return; }
   if (isProjectileType(t) || entityKind(e) === "projectile" || t.indexOf("arrow") >= 0 || t.indexOf("fire") >= 0) { drawShot(e, x, y); return; }
+  if (ASTEROID_RE.test(t)) { drawAsteroidRock(gfx, e, x, y); return; }
+  if (TARGET_RE.test(t)) { drawBullseyeTarget(gfx, e, x, y); return; }
   gfx.rect(x, y, e.w, e.h).fill(e.color);
+  gfx.rect(x, y, e.w, Math.max(1.5, e.h * 0.12)).fill({ color: scale(e.color, 1.3), alpha: 0.6 });
+  gfx.rect(x, y + e.h - Math.max(1.5, e.h * 0.12), e.w, Math.max(1.5, e.h * 0.12)).fill({ color: scale(e.color, 0.6), alpha: 0.6 });
 }
 
 // --- mood: one sentence restyles the whole world (ADR 0017) ------------------
@@ -493,6 +502,13 @@ let mood: MoodSpec | null = null;
 let moodModCount = 0; // mods loaded when the mood was applied; more later means the mood is no longer the latest change
 const origFrames = new Map<string, Texture[]>(); // sheets as they were before the mood, restored on undo
 const morph = new Map<string, number>(); // sprite key -> digitize-until (ms)
+
+/**
+ * The card that says which mood is on. It follows the palette update itself (`applyMood` calls
+ * `set`), so an undo, a redo or a reload updates it in the same step as the world's colours, with no
+ * call site to forget (bug bv4).
+ */
+const moodCard = createMoodCard(() => { send({ kind: "undo", modId: "mood" }); revertMood(); say("Back to normal.", "done"); });
 
 function mixC(a: number, b: number, t: number): number {
   const m = (s: number) => Math.round(((a >> s) & 255) * (1 - t) + ((b >> s) & 255) * t);
@@ -520,6 +536,7 @@ function restoreSheets(): void {
 }
 function applyMood(m: MoodSpec | null): void {
   mood = m;
+  moodCard.set(m); // the chip reads the mood through this one update, not through its callers (bug bv4)
   if (m) {
     pal.grass = m.grass; pal.soil = m.soil; pal.ridgeFar = m.ridgeFar; pal.ridgeNear = m.ridgeNear; pal.moon = m.moon; pal.star = m.star;
     setSky(m.skyTop, m.skyBottom);
@@ -533,14 +550,36 @@ function applyMood(m: MoodSpec | null): void {
   portal.setMood(m);
   sound.setMood(m);
 }
-function revertMood(): void {
+// --- scene backdrop: a genre change paints its own sky (ADR 0066), under any mood ---------------
+const SPACE_BACKDROP = { skyTop: 0x01020a, skyBottom: 0x0a1030, moon: 0x7f9ad0, star: 0xdfe8ff };
+let paintedBackdropKey = "";
+/** Repaint the code-drawn sky when the scene's backdrop (or the mood on top of it) changes; a mood always wins. */
+function syncBackdrop(): void {
+  const key = mood ? `mood:${mood.name}` : world.scene.backdrop ?? "";
+  if (key === paintedBackdropKey) return;
+  paintedBackdropKey = key;
+  if (mood) return; // applyMood painted it
+  if (world.scene.backdrop === "space") {
+    pal.moon = SPACE_BACKDROP.moon; pal.star = SPACE_BACKDROP.star;
+    setSky(SPACE_BACKDROP.skyTop, SPACE_BACKDROP.skyBottom);
+  } else {
+    applyMood(null); // back to the starter sky
+  }
+}
+/**
+ * Put the world back to no mood (ADR 0017). `local` is false when the server already said so with
+ * its own `mood: null` frame: that frame also makes the server record the world on the timeline
+ * strip. A mood the player undoes here is not echoed by the server (bug bv4), so the strip gets the
+ * loss of the mood straight away instead of waiting for the next action to record a step.
+ */
+function revertMood(local = true): void {
   restoreSheets();
   applyMood(null);
-  renderMods();
+  if (local) timelineView.localStep({ kind: "undo", label: "Back to normal", mods: loader.list().map((m) => ({ id: m.id, title: m.title })) });
 }
 /** Server designed a mood: repaint the code-drawn world now, then ask for each AI sheet to be edited toward it. */
 function onMood(m: MoodSpec | null): void {
-  if (!m) { revertMood(); say("Back to normal.", "done"); return; }
+  if (!m) { revertMood(false); say("Back to normal.", "done"); return; }
   if (mood && mood.name === m.name) return; // duplicate of the mood already on
   tester.mood(m.name);
   restoreSheets();
@@ -555,6 +594,8 @@ function onMood(m: MoodSpec | null): void {
     if (!mood || mood.name !== m.name) return; // superseded by a newer mood
     const used = new Set<string>();
     for (const e of world.entities) { const k = subjectKeyFor(e); if (k) used.add(k); }
+    // A new background alone (ADR 0067) leaves every sprite as it is: no sheet edits, no image spend.
+    if (m.scope === "background") { say(`New background: ${m.name.replace(/-/g, " ")}.`, "done"); return; }
     const keys = [...used].filter((k) => !k.startsWith("photo") && !origFrames.has(k) && (framesBySubject[k]?.length ?? 0) > 0);
     // The palette is already on screen, so the card says done now (bead inh). The sheet redraws
     // arrive later and show on their own (the digitize morph); a card line held open for them
@@ -630,7 +671,7 @@ function formatRadialLabel(type: string): string {
 const scaleOverride = new Map<number, number>();
 
 function hasDrawnArt(e: Entity): boolean {
-  return framesFor(framesBySubject, e.type, e.type === "player").length >= 1 && !kindOf(e.type);
+  return framesFor(framesBySubject, e.type, e.type === "player", world.scene.playerSkin).length >= 1 && !kindOf(e.type);
 }
 world.hasArt = hasDrawnArt; // gear sockets measure the body the eye sees (ADR 0061)
 
@@ -808,6 +849,8 @@ function render(): void {
     if (!target) closeRadialMenu();
     else positionRadialMenu(target, camX, camYSmooth);
   }
+  syncBackdrop();
+  const inSpace = world.scene.backdrop === "space";
   const isDaytime = isDaytimeSky(mood, world.entities, SKY[0]);
   const sunEntity = world.entities.find((e) => {
     const t = e.type.toLowerCase();
@@ -840,16 +883,25 @@ function render(): void {
   }
   // far hill silhouettes + parallax layers + atmospheric horizon mist (bead 1z7 & rm1)
   const horizon = H * 0.62 - camYSmooth * 0.1;
-  drawDistantMountains(bgGfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
+  // A themed backdrop (ADR 0067) brings its own skyline: farmland is flat, a medieval valley keeps the mountains.
+  // A genre scene in space (ADR 0066) hides the terrain and scenery, backdrop included.
+  const backdrop = inSpace ? undefined : mood?.backdrop;
+  const amp = skylineAmplitude(backdrop);
   const fog = depthFog(mood?.name);
-  drawRidge(bgGfx, ridgeFar, camX, 0.3, horizon, 0, mixC(pal.ridgeFar, SKY[SKY_BANDS - 1], fog.far));
-  drawRidge(bgGfx, ridgeNear, camX, 0.55, horizon + 34, 1, mixC(pal.ridgeNear, SKY[SKY_BANDS - 1], fog.near));
+  if (!inSpace) {
+    if (!backdrop || backdrop.skyline === "mountains") drawDistantMountains(bgGfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
+    drawRidge(bgGfx, ridgeFar, camX, 0.3, horizon, 0, mixC(pal.ridgeFar, SKY[SKY_BANDS - 1], fog.far), amp);
+    drawRidge(bgGfx, ridgeNear, camX, 0.55, horizon + 34, 1, mixC(pal.ridgeNear, SKY[SKY_BANDS - 1], fog.near), amp);
+  }
   // Starter-world scenery, unless a mod brings its own parallax backdrop (bead 5fl)
-  if (world.entities.some((e) => e.type === "ground") && !world.entities.some(isParallaxOrSkyEntity)) {
+  if (backdrop && world.entities.some((e) => e.type === "ground")) {
+    drawBackdrop(bgGfx, camX, camYSmooth, W, pal, SKY[SKY_BANDS - 1], fog.far, isDaytime, backdrop, mood?.name);
+  } else if (!inSpace && world.entities.some((e) => e.type === "ground") && !world.entities.some(isParallaxOrSkyEntity)) {
     drawScenery(bgGfx, camX, camYSmooth, W, pal, SKY[SKY_BANDS - 1], fog.far, isDaytime, mood?.name);
   }
-  drawParallaxEntities(bgGfx, world.entities, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1], grade);
-  drawHorizonMist(bgGfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
+  // The backdrop replaces a parallax mod's silhouettes; its clouds still drift.
+  drawParallaxEntities(bgGfx, backdrop ? world.entities.filter(isCloudEntity) : world.entities, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1], grade);
+  if (!inSpace) drawHorizonMist(bgGfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
   setPieceLayer.render(world.entities, camX, camYSmooth, framesBySubject);
   // solids-first, then contact shadows on solid surfaces, then dynamic entities
   order.length = 0;
@@ -875,7 +927,7 @@ function render(): void {
     const groups = new Map<string, { maxArea: number; items: { id: number; area: number }[] }>();
     for (const e of world.entities) {
       if (isParallaxOrSkyEntity(e)) continue;
-      const frames = framesFor(framesBySubject, e.type, e.type === "player");
+      const frames = framesFor(framesBySubject, e.type, e.type === "player", world.scene.playerSkin);
       if (frames.length < 1 || kindOf(e.type) || isTetherGear(e) || isSetPiece(e)) continue;
       const subject = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0] ?? e.type;
       const gk = `${e.owner}|${subject}`;
@@ -891,10 +943,11 @@ function render(): void {
       }
     }
   }
+  drawnBodies.clear();
   const spriteDraw: { e: Entity; frame: Texture; subjectKey: string | undefined; bob: number }[] = [];
   for (const e of world.entities) {
     if (isParallaxOrSkyEntity(e)) continue;
-    const frames = framesFor(framesBySubject, e.type, e.type === "player");
+    const frames = framesFor(framesBySubject, e.type, e.type === "player", world.scene.playerSkin);
     if (frames.length < 1 || !primaries.has(e.id) || kindOf(e.type) || (morph.size > 0 && isMorphing(e)) || isSetPiece(e)) continue;
     seen.add(e.id);
     const moving = Math.abs(e.vx) > 5;
@@ -919,6 +972,7 @@ function render(): void {
     s.position.set(e.x - camX + e.w / 2, e.y - camYSmooth + e.h + 2 - bob);
     s.zIndex = layerOf(e, subjectKey);
     s.visible = true;
+    drawnBodies.set(e.id, spriteBody(s.x, s.y, frame.width * Math.abs(s.scale.x), frame.height * Math.abs(s.scale.y)));
   }
   for (const [id, s] of spritePool) if (!seen.has(id)) { s.visible = false; scaleOverride.delete(id); }
   const nowMs = performance.now();
@@ -928,11 +982,15 @@ function render(): void {
   lastRenderAt = nowMs;
   app.stage.position.set(fx.shakeX, fx.shakeY);
   // health bars: single pass after rect and sprite passes (player included)
+  barGfx.clear();
   for (const e of world.entities) {
     const x = e.x - camX;
     const y = e.y - camYSmooth;
     if (x + e.w < -40 || x > W + 40 || y + e.h < -40 || y > H + 40) continue;
-    drawHealthBar(e, x, y);
+    const bar = healthBarRect(drawnBodies.get(e.id) ?? rectBody(x, y, e.w), (e as { health?: number }).health);
+    if (!bar) continue;
+    barGfx.rect(bar.x, bar.y, bar.w, bar.h).fill({ color: 0x0b0e13, alpha: 0.7 });
+    barGfx.rect(bar.x, bar.y, bar.fill, bar.h).fill(healthBarColor((e as { health: number }).health));
   }
   hud.render(world);
   speech.render(world, camX, camYSmooth, visualHeightOf);
@@ -1014,21 +1072,8 @@ function syncInput(): void {
 // --- mod cards -----------------------------------------------------------------
 function renderMods(): void {
   modsEl.innerHTML = "";
+  moodCard.mount(modsEl); // the card keeps its own text; this only re-homes it (bug bv4)
   const mods = loader.list();
-  if (mood) {
-    const li = document.createElement("li");
-    const head = document.createElement("div");
-    head.className = "title";
-    const name = document.createElement("span");
-    name.textContent = `Mood: ${mood.name}`;
-    const undo = document.createElement("button");
-    undo.className = "undo";
-    undo.textContent = "Undo";
-    undo.addEventListener("click", () => { send({ kind: "undo", modId: "mood" }); revertMood(); say("Back to normal.", "done"); });
-    head.append(name, undo);
-    li.appendChild(head);
-    modsEl.appendChild(li);
-  }
   if (mods.length === 0) {
     const li = document.createElement("li");
     li.textContent = "Empty world. The orb is waiting.";
@@ -1105,6 +1150,7 @@ function autoLoadStarterOnce(): void {
 }
 function handleLocal(text: string): boolean {
   const t = text.toLowerCase();
+  if (mood && isMoodUndoAsk(t, mood.name)) { send({ kind: "undo", modId: "mood" }); revertMood(); say("Back to normal.", "done"); return true; }
   if (t.includes("undo") || t.startsWith("remove")) {
     // A mood is the latest change until a mod is added after it (ADR 0017): bare "undo" puts the world back first.
     if (mood && t.includes("undo") && loader.list().length === moodModCount) { send({ kind: "undo", modId: "mood" }); revertMood(); say("Back to normal.", "done"); return true; }
@@ -1262,6 +1308,19 @@ function setCameraPhase(phase: DialogPhase, note?: string): void {
 function setCameraStatus(text: string): void {
   cameraStatus.textContent = text;
 }
+// The find-the-object line is the one the panel got wrong (bead q4u): "Couldn't find it" outlived
+// the photo that produced it and survived a close. ./camera-finder owns which line is true now;
+// these two functions are the only way the finder writes to the strip.
+let finder: FinderState = FINDER_IDLE;
+function cameraFinder(ev: FinderEvent): void {
+  finder = finderNext(finder, ev);
+  const line = finderLine(finder);
+  if (line !== null) setCameraStatus(line);
+}
+/** True when there is no builder to ask, so the panel has to say the AI is offline. */
+function builderOffline(): boolean {
+  return ws?.readyState !== WebSocket.OPEN;
+}
 function updateCameraConfirm(): void {
   if (cameraPaper?.checked) {
     cameraConfirm.textContent = "Build this level";
@@ -1382,6 +1441,8 @@ function computeDiff(): void {
   }
   updateCameraConfirm();
   if (diffComponents.length > 0) {
+    // The person already has a cut to click: that line outranks anything the finder waits for.
+    cameraFinder({ kind: "covered" });
     setCameraStatus(`Found ${diffComponents.length} new thing(s). Click yours if I picked wrong, then Bring it in.`);
   }
 }
@@ -1445,6 +1506,8 @@ function computeWand(fx: number, fy: number): void {
   if (count < 300) {
     setCameraStatus("That highlighted almost nothing — try the background method: capture the empty scene first." + tip);
   } else {
+    // A usable highlight of their own: keep its line even if a late SAM answer arrives.
+    cameraFinder({ kind: "covered" });
     setCameraStatus("Highlighted your object — Bring it in, or click again to retry." + tip);
   }
   updateCameraConfirm();
@@ -1495,6 +1558,8 @@ function closeCameraModal(clearBg = true): void {
   stopCamera();
   cameraModal.hidden = true;
   if (clearBg) bgCanvas = null;
+  // The line goes with the panel: reopening starts blank instead of showing the last photo's answer.
+  cameraFinder({ kind: "close" });
 }
 function pixelateCut(cut: HTMLCanvasElement): { canvas: HTMLCanvasElement; pixelInfo: string } {
   const pixelOn = (cameraPixel?.checked ?? (document.querySelector("#camera-pixel") as HTMLInputElement | null)?.checked) !== false;
@@ -1572,7 +1637,7 @@ async function openCameraModal(paperMode = false): Promise<void> {
   currentKey = null;
   bgCanvas = null;
   clearDetection();
-  setCameraStatus("");
+  cameraFinder({ kind: "open" });
   cameraLabel.value = "";
   cameraPreview.width = 1; cameraPreview.height = 1;
   cameraPreview.getContext("2d")?.clearRect(0, 0, 1, 1);
@@ -1627,12 +1692,9 @@ function setPendingCapture(source: CanvasImageSource, sw: number, sh: number): v
     setCameraStatus("Drawing photo ready! Click 'Build this level' to make it playable.");
     return;
   }
+  // A fresh look starts here, so any earlier "Couldn't find it" goes with the old photo.
+  cameraFinder({ kind: "attempt", offline: builderOffline() });
   if (bgCanvas) computeDiff();
-  if (diffComponents.length === 0) {
-    // With no builder connected the SAM box never arrives: say so and point at the cut that works offline.
-    const offline = ws?.readyState !== WebSocket.OPEN;
-    setCameraStatus(offline ? "The AI is offline — click your object in the photo to cut it out yourself." : "Looking for it...");
-  }
   send(photoFindMessage(currentKey, dataUrl, currentPrompt()));
 }
 function cutoutTexture(key: string, src: HTMLCanvasElement, box: SegmentBox): HTMLCanvasElement | null {
@@ -1713,7 +1775,7 @@ function handleSegment(key: string, rawBox: unknown): void {
   if (box === null) {
     foundBox = null;
     cameraBoxEl.hidden = true;
-    if (diffComponents.length === 0 && !wandMask) setCameraStatus("Couldn't find it. Get closer, use a plain background, or click the object in the photo.");
+    cameraFinder({ kind: "missed" });
     updateCameraConfirm();
     return;
   }
@@ -1723,12 +1785,14 @@ function handleSegment(key: string, rawBox: unknown): void {
   cameraBoxEl.style.width = `${box.w / 16}%`;
   cameraBoxEl.style.height = `${box.h / 16}%`;
   cameraBoxEl.hidden = false;
-  if (diffComponents.length === 0 && !wandMask) setCameraStatus("Found it — the green box is what enters the game.");
+  cameraFinder({ kind: "found" });
   updateCameraConfirm();
 }
 cameraPaper?.addEventListener("change", () => {
   if (cameraPaper.checked) {
     cameraLabel.placeholder = "Level name (optional, e.g. Sky Castle)";
+    // A drawing is read whole (ADR 0040): there is no finder answer to wait for on this photo.
+    cameraFinder({ kind: "covered" });
     if (pendingCapture) { cameraConfirm.disabled = false; setCameraStatus("Drawing photo ready! Click 'Build this level' to make it playable."); }
     else setCameraStatus("Level drawing mode: upload or capture your paper drawing.");
   } else {
@@ -1765,7 +1829,7 @@ cameraUpload.addEventListener("change", () => {
 });
 cameraFind.addEventListener("click", () => {
   if (!currentKey || !pendingCapture) return;
-  setCameraStatus("Looking for it...");
+  cameraFinder({ kind: "attempt", offline: builderOffline() });
   sendPhotoFind();
 });
 cameraBg.addEventListener("click", () => {
@@ -1778,6 +1842,8 @@ cameraBg.addEventListener("click", () => {
   foundBox = null; clickPoint = null; cameraBoxEl.hidden = true; cameraDot.hidden = true;
   redrawPreview();
   updateCameraConfirm();
+  // Clear the masks and let this hint own the strip; a late answer about the old photo stays out.
+  cameraFinder({ kind: "covered" });
   setCameraStatus(cameraStream ? "Background remembered. Hold the object up and press Capture again." : "Background remembered — pick the photo with the object in it.");
 });
 wandSensEl?.addEventListener("input", () => {
@@ -1899,6 +1965,9 @@ async function importMod(compiled: string): Promise<ModDefinition> {
 /** Replace the running world with a saved one: built-ins from the bundle, AI mods from their verified compiled source. */
 async function applyWorld(msg: Extract<ServerMsg, { kind: "world" }>): Promise<void> {
   restoreSheets();
+  // A whole new world supersedes any step this client guessed locally (bug bv4); the server's own
+  // timeline frame (a restore) or a fresh session (a link) is the truth from here.
+  timelineView.clearLocal();
   applyMood(msg.mood ?? null);
   for (const m of loader.list()) loader.unload(m.id);
   let loaded = 0;
@@ -1912,6 +1981,7 @@ async function applyWorld(msg: Extract<ServerMsg, { kind: "world" }>): Promise<v
         registerLook(m.look);
         loader.load(await importMod(m.compiled), m.values);
         if (m.art) { pendingArt.add(m.art.key); loadArtWithRetry(m.art.key, m.art.url, m.art.scenery === true); }
+        if (m.skinArt) { pendingArt.add(m.skinArt.key); loadArtWithRetry(m.skinArt.key, m.skinArt.url, false); }
       }
       loaded++;
     } catch { /* one bad mod must not stop the rest of the world loading */ }
@@ -2092,6 +2162,10 @@ function connect(): void {
           pendingArt.add(art.key);
           loadArtWithRetry(art.key, art.url, (art as { scenery?: boolean }).scenery === true);
         }
+        const skinArt = (msg.mod as { skinArt?: { key: string; url: string } }).skinArt;
+        if (skinArt) { pendingArt.add(skinArt.key); loadArtWithRetry(skinArt.key, skinArt.url, false); }
+        const skinPending = (msg.mod as { skinPending?: string }).skinPending;
+        if (skinPending) pendingArt.add(skinPending);
       } catch (err) {
         say(`That build failed to load here: ${err instanceof Error ? err.message : String(err)}`, "failed");
       }

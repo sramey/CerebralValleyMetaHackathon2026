@@ -80,6 +80,53 @@ export function metExpectation(row: Pick<RehearsalRow, "outcome" | "rejectedThen
   return row.outcome === "landed";
 }
 
+/** Everything one command's run knows about the world so far, after the messages seen so far. */
+export interface CommandState {
+  /** The command changed the world: a mod landed, a knob moved, a mod was removed, or a mood came or went. */
+  landed: boolean;
+  /** The verifier turned a draft away (the "rejected then fixed" demo beat). */
+  rejected: boolean;
+  autoFixRounds: number;
+  /** The server's end-of-command marker for this command, in ms; undefined while it is still running. */
+  doneMs?: number;
+  seen: Observed;
+}
+
+export const emptyCommandState = (): CommandState => ({ landed: false, rejected: false, autoFixRounds: 0, seen: { moods: [], sources: [], arts: [] } });
+
+/**
+ * Pure step from a server message to the command's state. Only messages for this command move the
+ * stages or finish it, so a sub-build's own timing in a compound command cannot end the whole one.
+ * A mood message counts as a landing whether it applies a mood or clears one: clearing is what
+ * "undo" sends (demo beat 6), and the world visibly changed.
+ */
+export function applyServerMsg(state: CommandState, msg: ServerMsg, command: string): CommandState {
+  switch (msg.kind) {
+    case "mood": {
+      const moods = msg.mood ? [...state.seen.moods, msg.mood.name] : state.seen.moods;
+      return { ...state, landed: true, seen: { ...state.seen, moods } };
+    }
+    case "art":
+      return { ...state, seen: { ...state.seen, arts: [...state.seen.arts, msg.art.key] } };
+    case "mod": {
+      const arts = msg.mod.art ? [...state.seen.arts, msg.mod.art.key] : state.seen.arts;
+      return { ...state, landed: true, seen: { sources: [...state.seen.sources, msg.mod.source], moods: state.seen.moods, arts } };
+    }
+    case "tweak":
+    case "removed":
+      return { ...state, landed: true };
+    case "stage":
+      if (msg.command !== command) return state;
+      if (msg.stage === "rejected") return { ...state, rejected: true };
+      if (msg.stage === "fixing") return { ...state, autoFixRounds: state.autoFixRounds + 1 };
+      return state;
+    case "timing":
+      return msg.command === command ? { ...state, doneMs: msg.ms.total } : state;
+    default:
+      return state;
+  }
+}
+
 export function percentile(values: readonly number[], p: number): number {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
@@ -206,24 +253,21 @@ function runCommand(ws: WebSocket, world: WorldMod[], spec: RehearsalSpec, run: 
   const command = spec.cmd;
   return new Promise((resolveCommand) => {
     const started = performance.now();
-    let landed = false;
-    let rejected = false;
-    let autoFixRounds = 0;
-    const seen: Observed = { moods: [], sources: [], arts: [] };
+    let cmdState = emptyCommandState();
 
     const done = (totalMs: number): void => {
       clearTimeout(timer);
       ws.off("message", onMessage);
-      const outcome: Outcome = landed ? "landed" : rejected ? "rejected" : "failed";
-      const rejectedThenFixed = rejected && landed;
-      const miss = awareMiss(spec, seen);
+      const outcome: Outcome = cmdState.landed ? "landed" : cmdState.rejected ? "rejected" : "failed";
+      const rejectedThenFixed = cmdState.rejected && cmdState.landed;
+      const miss = awareMiss(spec, cmdState.seen);
       const hasChecks = spec.mood !== undefined || spec.source !== undefined || spec.notSource !== undefined || spec.noArt === true;
       const base: RehearsalRow = {
         run,
         command,
         outcome,
         totalMs,
-        autoFixRounds,
+        autoFixRounds: cmdState.autoFixRounds,
         rejectedThenFixed,
         ...(spec.expect || hasChecks ? { expect: spec.expect ?? "landed", metExpect: metExpectation({ outcome, rejectedThenFixed, awareMiss: miss }, spec.expect ?? "landed") } : {}),
         ...(miss ? { awareMiss: miss } : {}),
@@ -242,34 +286,22 @@ function runCommand(ws: WebSocket, world: WorldMod[], spec: RehearsalSpec, run: 
       } catch {
         return;
       }
-      if (msg.kind === "mood") {
-        if (msg.mood) { landed = true; seen.moods.push(msg.mood.name); }
-      } else if (msg.kind === "art") {
-        seen.arts.push(msg.art.key);
-      } else if (msg.kind === "mod") {
-        landed = true;
-        seen.sources.push(msg.mod.source);
-        if (msg.mod.art) seen.arts.push(msg.mod.art.key);
+      cmdState = applyServerMsg(cmdState, msg, command);
+      if (msg.kind === "mod") {
         const values = Object.fromEntries(Object.entries(msg.mod.knobs).map(([knob, def]) => [knob, def.value]));
         const index = world.findIndex((mod) => mod.id === msg.mod.id);
         if (index < 0) world.push({ id: msg.mod.id, values });
         else world[index] = { id: msg.mod.id, values };
       } else if (msg.kind === "tweak") {
-        landed = true;
         const mod = world.find((candidate) => candidate.id === msg.modId);
         if (mod) mod.values[msg.knob] = msg.value;
       } else if (msg.kind === "removed") {
-        landed = true;
         const index = world.findIndex((mod) => mod.id === msg.modId);
         if (index >= 0) world.splice(index, 1);
-      } else if (msg.kind === "stage" && msg.command === command) {
-        if (msg.stage === "rejected") rejected = true;
-        else if (msg.stage === "fixing") autoFixRounds++;
-      } else if (msg.kind === "timing" && msg.command === command) {
-        // Timing is the server's end-of-command marker. Its total excludes
-        // harness overhead and matches logs/builds.jsonl.
-        done(msg.ms.total);
       }
+      // Timing is the server's end-of-command marker. Its total excludes
+      // harness overhead and matches logs/builds.jsonl.
+      if (cmdState.doneMs !== undefined) done(cmdState.doneMs);
     };
 
     ws.on("message", onMessage);

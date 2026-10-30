@@ -5,7 +5,7 @@
 // inlined in handleSingle between side effects, so their order could not be tested.
 import type { CreatureOrder, KnobDefs, KnobValue, ShapeName } from "../src/contract";
 import { CREATURE_ORDERS } from "../src/contract";
-import { detectMoodCommand, isPlayerAbilityCommand, isPlayerCommand } from "../src/ontology";
+import { artPlanFor, detectBackdropCommand, detectMoodCommand, isPlayerAbilityCommand, isPlayerCommand } from "../src/ontology";
 import type { Recent } from "./context";
 import { resolvePronoun } from "./context";
 import { parseRelativeAsk, pronounAskMeansRecent, relativeTweak, stemOf } from "./relative-tweak";
@@ -159,6 +159,13 @@ const RULES: [string, Rule][] = [
     note("fallback to new");
     return { action: "new" };
   }],
+  // "Change the background to medieval" is a backdrop whatever Spark made of it (a tweak of the parallax mod, a build), unless it is an undo (ADR 0067).
+  ["backdrop", (r, ctx, note) => {
+    const words = detectBackdropCommand(ctx.command);
+    if (!words || r?.action === "undo" || (r?.action === "mood" && r.mood)) return r;
+    note(`backdrop ${words}`);
+    return { action: "mood", mood: words };
+  }],
   // A whole-world mood phrase Spark routed as a build is still a mood (ADR 0017).
   ["mood", (r, ctx, note) => {
     const word = detectMoodCommand(ctx.command);
@@ -196,6 +203,21 @@ const RULES: [string, Rule][] = [
     if (resolvePronoun(ctx.command, ctx.recent) && r.action === "tweak") return r;
     note(`coerced ${r.action} -> new`);
     return { action: "new" };
+  }],
+  // Visual kind matches the ontology (ADR 0015, ADR 0031): if Spark mistakenly routed a creature or prop as "shape",
+  // restore its rightful visual kind so it receives sprite art instead of flat code squares.
+  ["visual-ontology", (r, ctx, note) => {
+    if (!r || r.visual !== "shape") return r;
+    const plan = artPlanFor(ctx.command);
+    if (plan === "sheet") {
+      note("shape -> creature");
+      return { ...r, visual: "creature", shape: undefined };
+    }
+    if (plan === "held-item" || plan === "scenery") {
+      note("shape -> prop");
+      return { ...r, visual: "prop", shape: undefined };
+    }
+    return r;
   }],
   // Pronoun memory (ADR 0016): "it"/"them" with no target means the mod touched last.
   ["pronoun-target", (r, ctx) => {

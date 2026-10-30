@@ -3,7 +3,7 @@
 - **Status:** Draft
 - **Date:** 2026-10-29
 - **Context:** The hackathon has a bonus for using Meta's open-weights models served by a
-  partner. Muse Spark Open (`meta-models/muse-spark-open-1026`) is the open-weights sibling
+  partner. Muse Spark Open (`meta-models/muse-spark-open`) is the open-weights sibling
   of the hosted Muse Spark we already use, and Baseten serves it on an OpenAI-compatible
   endpoint. The command router is the best job to give it: one short, structured call on
   every command, easy to compare for latency, and a failure is cheap because the hosted
@@ -28,3 +28,9 @@
   - The Baseten slug and `reasoning_effort` acceptance are unverified until the key exists;
     the fallback keeps the product working either way.
   - Wonder (mod writing) stays on hosted Wonder; moving it is a separate decision.
+  - **Benchmark results** (30 runs each across 10 fixed commands):
+    | model | ok | p50 | p95 | bad replies/errors |
+    |---|---|---|---|---|
+    | muse-spark-1.2 (hosted) | 30 | 1151 ms | 3487 ms | 0 |
+    | meta-models/muse-spark-open (Baseten) | 30 | 918 ms | 2547 ms | 0 |
+    Muse Spark Open on Baseten achieved 100% accuracy with ~20% faster latency than hosted Spark.
