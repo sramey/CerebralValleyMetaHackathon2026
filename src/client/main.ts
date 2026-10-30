@@ -5,6 +5,7 @@ import { initExplain } from "./explain";
 import { initReceipt } from "./receipt";
 import { Application, Graphics, Sprite, Texture } from "pixi.js";
 import { pickWalkFrame } from "./walk-frame";
+import { healthBarColor, healthBarRect, rectBody, spriteBody, type DrawnBody } from "./health-bar";
 import { computePrimaries, framesFor, isProjectileType, loadSpriteSheet, loadSubjects } from "./sprites";
 import { startLateArt } from "./art-late";
 import chickenMod from "../mods/chicken";
@@ -182,6 +183,10 @@ const gfx = new Graphics();
 app.stage.addChild(gfx);
 app.stage.sortableChildren = true;
 gfx.zIndex = -100;
+const barGfx = new Graphics(); // health bars: above every sprite (max layer 9), below fx/feel
+barGfx.zIndex = 10.4;
+app.stage.addChild(barGfx);
+const drawnBodies = new Map<number, DrawnBody>(); // this frame's sprite bodies, for bar placement
 const fx = new Fx(app.stage);
 const urlFlags = parseUrlFlags(location.search, location.hash); // strangers' flags, decoded defensively (ADR 0037)
 // Synthesized WebAudio sound (bead 6d3): silent until the first gesture; ?mute starts muted, ?vol=0..1 sets master volume, M toggles mute.
@@ -416,14 +421,6 @@ function drawDigitize(e: Entity, x: number, y: number): void {
     }
   }
   gfx.rect(x, y, e.w, e.h).stroke({ color: 0xc8f6ff, alpha: 0.25 + 0.35 * pulse, width: 1.5 });
-}
-
-function drawHealthBar(e: Entity, x: number, y: number): void {
-  const health = (e as { health?: number }).health;
-  if (typeof health !== "number" || health <= 0 || health >= 100) return;
-  gfx.rect(x, y - 9, e.w, 4).fill({ color: 0x0b0e13, alpha: 0.7 });
-  const color = health > 50 ? 0x3fd06a : health > 25 ? 0xffc94d : 0xff5a4d;
-  gfx.rect(x, y - 9, e.w * health / 100, 4).fill(color);
 }
 
 let lastPrimariesTick = -1;
@@ -902,6 +899,7 @@ function render(): void {
       }
     }
   }
+  drawnBodies.clear();
   const spriteDraw: { e: Entity; frame: Texture; subjectKey: string | undefined; bob: number }[] = [];
   for (const e of world.entities) {
     if (isParallaxOrSkyEntity(e)) continue;
@@ -930,6 +928,7 @@ function render(): void {
     s.position.set(e.x - camX + e.w / 2, e.y - camYSmooth + e.h + 2 - bob);
     s.zIndex = layerOf(e, subjectKey);
     s.visible = true;
+    drawnBodies.set(e.id, spriteBody(s.x, s.y, frame.width * Math.abs(s.scale.x), frame.height * Math.abs(s.scale.y)));
   }
   for (const [id, s] of spritePool) if (!seen.has(id)) { s.visible = false; scaleOverride.delete(id); }
   const nowMs = performance.now();
@@ -939,11 +938,15 @@ function render(): void {
   lastRenderAt = nowMs;
   app.stage.position.set(fx.shakeX, fx.shakeY);
   // health bars: single pass after rect and sprite passes (player included)
+  barGfx.clear();
   for (const e of world.entities) {
     const x = e.x - camX;
     const y = e.y - camYSmooth;
     if (x + e.w < -40 || x > W + 40 || y + e.h < -40 || y > H + 40) continue;
-    drawHealthBar(e, x, y);
+    const bar = healthBarRect(drawnBodies.get(e.id) ?? rectBody(x, y, e.w), (e as { health?: number }).health);
+    if (!bar) continue;
+    barGfx.rect(bar.x, bar.y, bar.w, bar.h).fill({ color: 0x0b0e13, alpha: 0.7 });
+    barGfx.rect(bar.x, bar.y, bar.fill, bar.h).fill(healthBarColor((e as { health: number }).health));
   }
   hud.render(world);
   speech.render(world, camX, camYSmooth, visualHeightOf);
