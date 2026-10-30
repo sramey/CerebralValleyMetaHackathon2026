@@ -41,6 +41,14 @@ export function lineDelta(a: string, b: string): { added: number; removed: numbe
   return { added, removed };
 }
 
+/** A verifier error as one plain sentence plus the technical detail, when it has both
+ *  ("playtest: <plain> (<detail>)" from the playtest bot). */
+export function splitReason(err: string): { plain: string; detail: string } {
+  const m = /^playtest:\s*([\s\S]*?)\s*\(([\s\S]*)\)?\s*$/.exec(err);
+  if (m && m[2]) return { plain: `Playtest: ${m[1]}`, detail: m[2].replace(/\)$/, "") };
+  return { plain: err.replace(/^playtest:\s*/, "Playtest: "), detail: "" };
+}
+
 /** One line for the fix step: how much of the draft changed, then the re-run. */
 export function fixLine(d: { added: number; removed: number }): string {
   const n = Math.max(d.added, d.removed);
@@ -91,9 +99,13 @@ export function receiptSteps(r: BuildReceipt): ReceiptStep[] {
   }
 
   if (r.versions.length > 1) {
-    const why = r.versions[0].rejected ?? [];
-    const d = lineDelta(r.versions[0].source, live);
-    steps.push({ tone: "rejected", title: "Rejected before you ever saw it", by: "verifier", lines: why.length > 0 ? why.map((w) => w.replace(/^playtest:\s*/, "Playtest: ")) : ["The first draft failed verification."] });
+    const away = r.versions.slice(0, -1);
+    const reasons = away.flatMap((v) => v.rejected ?? []).map(splitReason);
+    const why = [...new Set(reasons.map((x) => x.plain))];
+    const detail = [...new Set(reasons.map((x) => x.detail).filter(Boolean))].join("\n\n");
+    const d = lineDelta(away[away.length - 1].source, live);
+    const title = away.length === 1 ? "Rejected before you ever saw it" : `${away.length} drafts rejected before you ever saw one`;
+    steps.push({ tone: "rejected", title, by: "verifier", lines: why.length > 0 ? why : ["The draft failed verification."], ...(detail ? { code: { label: "Show what the playtest bot saw", text: detail } } : {}) });
     steps.push({ tone: "model", title: "Fixed itself", by: "Muse Wonder (agent)", lines: [fixLine(d)], code: { label: "Show the fixed code", text: live } });
   }
 

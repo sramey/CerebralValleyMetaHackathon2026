@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { aiReceipt, extractTest, plainReceipt, testChecks } from "../server/receipt";
-import { fixLine, lineDelta, modelName, receiptSteps, timeSegments } from "../src/client/receipt-model";
+import { fixLine, lineDelta, splitReason, modelName, receiptSteps, timeSegments } from "../src/client/receipt-model";
 
 const MOD = `export default {
   id: "slime",
@@ -71,7 +71,7 @@ describe("aiReceipt", () => {
   const fixed = MOD.replace("max: 400", "max: 300");
 
   it("keeps every version, marks the turned-away draft with its reason, and reads the live test", () => {
-    const r = aiReceipt({ modId: "slime", title: "Bouncing Slime", command: "add a bouncing green slime", route, sources: ["draft", fixed], firstErrors: ["playtest: You'd be too big to fit through the gap. (detail)"], tools: [{ name: "run_playtest", ms: 4, ok: false }, { name: "run_playtest", ms: 3, ok: true }], turns: 3, playtests: 2, msPerFrame: 0.004, timings });
+    const r = aiReceipt({ modId: "slime", title: "Bouncing Slime", command: "add a bouncing green slime", route, source: fixed, rejected: [{ source: "draft", errors: ["playtest: You'd be too big to fit through the gap. (detail)"] }], tools: [{ name: "run_playtest", ms: 4, ok: false }, { name: "run_playtest", ms: 3, ok: true }], turns: 3, playtests: 2, msPerFrame: 0.004, timings });
     expect(r.origin).toBe("ai");
     expect(r.versions).toHaveLength(2);
     expect(r.versions[0].rejected?.[0]).toContain("too big");
@@ -80,8 +80,23 @@ describe("aiReceipt", () => {
     expect(r.proof).toMatchObject({ healthFrames: 600, playtestSeeds: 3, playtests: 2, fixed: true });
   });
 
+  it("keeps drafts Wonder's own playtest turned away, drops repeats and the live source", () => {
+    const r = aiReceipt({ modId: "p", title: "Player", command: "make me huge", route, source: fixed, rejected: [
+      { source: "huge v1", errors: ["playtest: You'd be too big to fit through the gap."] },
+      { source: "huge v1 ", errors: ["playtest: again"] },
+      { source: fixed, errors: ["never shown"] },
+      { source: "huge v2", errors: ["test: player spawns"] },
+    ], tools: [], turns: 2, playtests: 3, msPerFrame: 0.004, timings });
+    expect(r.versions.map((v) => v.source)).toEqual(["huge v1", "huge v2", fixed]);
+    expect(r.proof.fixed).toBe(true);
+    const steps = receiptSteps(r);
+    const rej = steps.find((s) => s.tone === "rejected")!;
+    expect(rej.title).toBe("2 drafts rejected before you ever saw one");
+    expect(rej.lines).toEqual(["Playtest: You'd be too big to fit through the gap.", "test: player spawns"]);
+  });
+
   it("a first-try build has one version and is not marked fixed", () => {
-    const r = aiReceipt({ modId: "slime", title: "Bouncing Slime", command: "add a slime", route, sources: [MOD], firstErrors: [], tools: [], turns: 1, playtests: 1, msPerFrame: 0.002, timings });
+    const r = aiReceipt({ modId: "slime", title: "Bouncing Slime", command: "add a slime", route, source: MOD, rejected: [], tools: [], turns: 1, playtests: 1, msPerFrame: 0.002, timings });
     expect(r.versions).toHaveLength(1);
     expect(r.proof.fixed).toBe(false);
   });
@@ -92,8 +107,8 @@ describe("receiptSteps", () => {
 
   it("tells the whole chain for a fixed AI build: words, route, draft, rejection, fix, proof, art, live", () => {
     const r = aiReceipt({
-      modId: "slime", title: "Bouncing Slime", command: "make me huge", route, sources: [MOD, MOD.replace("w: 24", "w: 20")],
-      firstErrors: ["playtest: You'd be too big to fit through the gap."], tools: [{ name: "inspect_world", ms: 2 }, { name: "run_playtest", ms: 4, ok: true }],
+      modId: "slime", title: "Bouncing Slime", command: "make me huge", route, source: MOD.replace("w: 24", "w: 20"),
+      rejected: [{ source: MOD, errors: ["playtest: You'd be too big to fit through the gap."] }], tools: [{ name: "inspect_world", ms: 2 }, { name: "run_playtest", ms: 4, ok: true }],
       turns: 2, playtests: 2, msPerFrame: 0.004, timings,
       art: { model: "muse-image-1.0", subject: "slime", prompt: "Pixel art game sprite sheet…", url: "/art/gen/slime.webp", state: "drawn", ms: 8100 },
     });
@@ -112,7 +127,7 @@ describe("receiptSteps", () => {
   });
 
   it("names the open-weights router when it answered", () => {
-    const r = aiReceipt({ modId: "a", title: "A", command: "add a", route: { ...route, open: true }, sources: [MOD], firstErrors: [], tools: [], turns: 1, playtests: 0, msPerFrame: 0, timings });
+    const r = aiReceipt({ modId: "a", title: "A", command: "add a", route: { ...route, open: true }, source: MOD, rejected: [], tools: [], turns: 1, playtests: 0, msPerFrame: 0, timings });
     expect(receiptSteps(r)[1].by).toBe("Muse Spark Open (open weights)");
   });
 
@@ -124,7 +139,7 @@ describe("receiptSteps", () => {
   });
 
   it("code-drawn art makes no image claim", () => {
-    const r = aiReceipt({ modId: "b", title: "Ball", command: "add a ball", route, sources: [MOD], firstErrors: [], tools: [], turns: 1, playtests: 1, msPerFrame: 0.001, timings, art: { model: "code", subject: "ball", state: "code-drawn" } });
+    const r = aiReceipt({ modId: "b", title: "Ball", command: "add a ball", route, source: MOD, rejected: [], tools: [], turns: 1, playtests: 1, msPerFrame: 0.001, timings, art: { model: "code", subject: "ball", state: "code-drawn" } });
     const art = receiptSteps(r).find((s) => s.tone === "art")!;
     expect(art.by).toBe("engine");
     expect(art.code).toBeUndefined();
@@ -135,6 +150,12 @@ describe("helpers", () => {
   it("lineDelta counts changed lines as multisets", () => {
     expect(lineDelta("a\nb\nc", "a\nb\nd\ne")).toEqual({ added: 2, removed: 1 });
     expect(lineDelta("a", "a")).toEqual({ added: 0, removed: 0 });
+  });
+
+  it("splitReason keeps the plain sentence and moves the bot's detail aside", () => {
+    expect(splitReason("playtest: You'd be too big to fit through the gap. (playtest (seed 11): stuck at x=950)")).toEqual({ plain: "Playtest: You'd be too big to fit through the gap.", detail: "playtest (seed 11): stuck at x=950" });
+    expect(splitReason("test: player spawns")).toEqual({ plain: "test: player spawns", detail: "" });
+    expect(splitReason("playtest: It crashed.")).toEqual({ plain: "Playtest: It crashed.", detail: "" });
   });
 
   it("fixLine reads naturally for no change, one and many", () => {

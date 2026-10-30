@@ -63,10 +63,11 @@ export interface AiReceiptInput {
   title: string;
   command: string;
   route: ReceiptRoute;
-  /** Every source Wonder wrote for this build, first draft first; the last one is live. */
-  sources: string[];
-  /** Why the first draft was turned away, when it was (empty when it landed first try). */
-  firstErrors: string[];
+  /** The live source. */
+  source: string;
+  /** Drafts the verifier or playtest turned away, in order, with why: inside Wonder's own
+   *  tool loop (run_playtest said no) or before the fix round. Empty when it landed first try. */
+  rejected: { source: string; errors: string[] }[];
   tools: ReceiptTool[];
   turns: number;
   playtests: number;
@@ -78,9 +79,11 @@ export interface AiReceiptInput {
 
 /** The receipt for a build Wonder wrote and the verifier passed. */
 export function aiReceipt(i: AiReceiptInput): BuildReceipt {
-  const live = i.sources[i.sources.length - 1] ?? "";
+  const live = i.source;
   const test = extractTest(live);
-  const versions = i.sources.map((source, n) => (n < i.sources.length - 1 ? { source, rejected: i.firstErrors.slice(0, 4).map((e) => e.slice(0, 300)) } : { source }));
+  const seen = new Set<string>([live.trim()]);
+  const turnedAway = i.rejected.filter((d) => !seen.has(d.source.trim()) && seen.add(d.source.trim())).slice(-4);
+  const versions = [...turnedAway.map((d) => ({ source: d.source, rejected: d.errors.slice(0, 4).map((e) => e.slice(0, 700)) })), { source: live }];
   return {
     modId: i.modId,
     title: i.title,

@@ -940,6 +940,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
   const others = [...session.inflight].filter((c) => c !== command);
   const context = [recentText(session.recent), others.length > 0 ? `Other builds running right now for this player (do not duplicate them; choose a different mod id): ${others.map((c) => `"${c}"`).join("; ")}.` : ""].filter(Boolean).join("\n");
   const agentTrace: AgentTrace[] = [];
+  const rejectedDrafts: { source: string; errors: string[] }[] = [];
   let agentTurns = 0;
   const agentInfo = () => {
     if (agentTurns === 0) return {};
@@ -989,7 +990,10 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
   const tools = () => [
     inspectTool(() => inspectWorld(worldMods(ws), Object.fromEntries([...manifest.values()].map((m) => [m.id, m.title])))),
     playtestTool(async (src) => {
-      const r = await attempt(keepId(stripFences(src)));
+      const draft = keepId(stripFences(src));
+      const r = await attempt(draft);
+      // A draft Wonder's own playtest turned away is part of the receipt (ADR 0065).
+      if (!r.ok) rejectedDrafts.push({ source: draft, errors: r.errors });
       return { ok: r.ok, message: r.ok ? "passed: it works and the player can still play" : r.errors.join("; ").slice(0, 700) };
     }),
   ];
@@ -1036,6 +1040,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
   let first = await attempt(source);
   const badSource = source;
   const firstErrors = first.ok ? [] : first.errors;
+  if (!first.ok) rejectedDrafts.push({ source: badSource, errors: firstErrors });
   if (!first.ok) {
     // ONE auto-fix round.
     stage(ws, { kind: "stage", stage: "fixing", detail: "fixing the mod", command });
@@ -1121,7 +1126,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     rec.receipt = aiReceipt({
       modId: def.id, title: def.title, command,
       route: routed ?? { action: route.action, model: SPARK, open: false, fellBack: false, ms: routeMs, rules: [] },
-      sources, firstErrors, tools: agentTrace.map((t) => ({ name: t.name, ms: t.ms, ...(t.ok === undefined ? {} : { ok: t.ok }) })), turns: agentTurns,
+      source, rejected: rejectedDrafts, tools: agentTrace.map((t) => ({ name: t.name, ms: t.ms, ...(t.ok === undefined ? {} : { ok: t.ok }) })), turns: agentTurns,
       playtests, msPerFrame: first.res.msPerFrame,
       timings: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) },
       ...(receiptArt ? { art: receiptArt } : {}),
