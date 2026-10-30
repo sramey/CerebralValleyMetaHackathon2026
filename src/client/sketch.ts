@@ -39,6 +39,7 @@ export const MAX_POINTS = 300;
 export const SKETCH_WATCHDOG_MS = 30_000;
 /** Screen -> world is a translation (the sim has no zoom); x/y grow right/down in both. */
 const MIN_EXTENT = 4;
+const TAP_EXTENT = 6; // a stroke smaller than this on both axes is a tap
 
 export interface RawStroke { tag: SketchTag; color: string; points: SketchPoint[] }
 
@@ -67,8 +68,34 @@ export function thinPoints(points: readonly SketchPoint[], max = MAX_POINTS): Sk
   return out;
 }
 
+/** A stroke that never left its starting spot: a tap, not a drag. */
+export function isTap(points: readonly SketchPoint[]): boolean {
+  const b = strokeBbox(points, { x: 0, y: 0 });
+  return b.w < TAP_EXTENT && b.h < TAP_EXTENT;
+}
+
+/** How big a tapped mark is, by what the brush means (world px). Dragging still sizes by the stroke. */
+const TAP_SIZE: Record<SketchTag, { w: number; h: number }> = {
+  coin: { w: 20, h: 20 },
+  hazard: { w: 30, h: 30 },
+  bouncer: { w: 48, h: 14 },
+  terrain: { w: 64, h: 16 },
+  freehand: { w: 20, h: 20 },
+};
+
 /** One drawn stroke as the wire contract wants it: screen points plus the exact world box. */
 export function toWorldStroke(stroke: RawStroke, camera: SketchCamera): SketchStroke {
+  if (stroke.points.length > 0 && isTap(stroke.points)) {
+    // A tap is one mark centered on the finger, sized for its brush, so both the vision reader and the stroke-box fallback see a real thing.
+    const c = stroke.points[0];
+    const t = TAP_SIZE[stroke.tag] ?? TAP_SIZE.freehand;
+    return {
+      color: stroke.color,
+      tag: stroke.tag,
+      points: [{ x: c.x, y: c.y }],
+      bbox: { x: Math.round(c.x + camera.x - t.w / 2), y: Math.round(c.y + camera.y - t.h / 2), w: t.w, h: t.h },
+    };
+  }
   const points = thinPoints(stroke.points);
   const bbox = strokeBbox(points, camera);
   return {
@@ -331,6 +358,14 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
     c.shadowColor = s.color;
     c.shadowBlur = 14;
     c.beginPath();
+    if (isTap(s.points)) {
+      // A tap has no length to stroke: show it as a dot so the player sees the mark land.
+      c.fillStyle = s.color;
+      c.arc(s.points[0].x, s.points[0].y, 8, 0, Math.PI * 2);
+      c.fill();
+      c.restore();
+      return;
+    }
     c.moveTo(s.points[0].x, s.points[0].y);
     for (let i = 1; i < s.points.length; i++) c.lineTo(s.points[i].x, s.points[i].y);
     if (s.points.length === 1) c.lineTo(s.points[0].x + 0.5, s.points[0].y + 0.5);

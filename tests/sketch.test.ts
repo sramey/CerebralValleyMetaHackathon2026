@@ -42,7 +42,28 @@ describe("sketch strokes (client geometry)", () => {
     expect(box).toEqual({ x: 1010, y: -30, w: 100, h: 40 });
     const s = toWorldStroke({ tag: "terrain", color: "#3fd06a", points: [{ x: 10, y: 20 }] }, cam);
     expect(s.tag).toBe("terrain");
-    expect(s.bbox).toEqual({ x: 1010, y: -30, w: 4, h: 4 }); // a dot still gets a buildable box
+    expect(s.bbox).toEqual({ x: 1010 - 32, y: -30 - 8, w: 64, h: 16 }); // a tap becomes a brush-sized mark centered on the point
+  });
+
+  it("a tap with the coin or enemy brush is a centered, brush-sized mark; a drag keeps its own box", () => {
+    const cam = { x: 100, y: 0 };
+    const coin = toWorldStroke({ tag: "coin", color: "#f5c542", points: [{ x: 300, y: 200 }, { x: 300, y: 200 }] }, cam);
+    expect(coin.bbox).toEqual({ x: 390, y: 190, w: 20, h: 20 });
+    const foe = toWorldStroke({ tag: "hazard", color: "#ff5a5a", points: [{ x: 300, y: 200 }, { x: 301, y: 201 }] }, cam);
+    expect(foe.bbox).toEqual({ x: 385, y: 185, w: 30, h: 30 });
+    const drag = toWorldStroke({ tag: "coin", color: "#f5c542", points: [{ x: 300, y: 200 }, { x: 380, y: 200 }] }, cam);
+    expect(drag.bbox).toEqual({ x: 400, y: 200, w: 80, h: 4 });
+  });
+
+  it("the stroke-box fallback builds a coin and an enemy from taps", () => {
+    const cam = { x: 0, y: 0 };
+    const strokes = [
+      toWorldStroke({ tag: "coin", color: "#f5c542", points: [{ x: 300, y: 300 }, { x: 300, y: 300 }] }, cam),
+      toWorldStroke({ tag: "hazard", color: "#ff5a5a", points: [{ x: 500, y: 380 }, { x: 500, y: 380 }] }, cam),
+    ];
+    const level = levelFromStrokes(strokes);
+    expect(level.coins.length).toBe(1);
+    expect(level.enemies.length).toBe(1);
   });
 
   it("thins long polylines but keeps both ends", () => {
