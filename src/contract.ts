@@ -40,6 +40,10 @@ export interface Entity {
   health: number;
   /** Owning mod id, or "engine" for built-ins. Set by the loader. */
   owner: string;
+  /** Free-form, wire-safe mod data. A few keys are engine contracts: `collectible`
+   *  (true | points | a HUD id) makes the engine collect this entity into one shared
+   *  score HUD on player touch (ADR 0055), and `bounce` sets landing restitution
+   *  (ADR 0053). */
   data: Record<string, number | string | boolean>;
 }
 

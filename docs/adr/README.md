@@ -82,3 +82,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0053](0053-compound-splitting-one-subject-one-build.md) | Spark splits compound commands; a guard keeps one subject with its behaviors in one build; flying creatures and dropped pickups | Draft |
 | [0054](0054-bounded-sketch-build.md) | Bounded sketch build: compact JPEG, 15 s vision ceiling, instant stroke-box fallback | Draft |
 | [0052](0052-wave-spawner-and-swarm-archetype.md) | Wave spawner: multi-angle offscreen spawns, anti-clumping, kill-paced level-ups; built-in swarm mod | Draft |
+| [0055](0055-engine-owned-collectibles.md) | Engine-owned collectibles: data.collectible auto-collects into one shared score HUD | Draft |

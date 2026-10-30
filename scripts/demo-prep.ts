@@ -23,7 +23,7 @@ const GLOBAL_VAR: Record<Kind, string> = { build: "BUDGET_GLOBAL_BUILDS", image:
 const KINDS: Kind[] = ["build", "image", "sam", "voice", "explain"];
 
 /** Sheets worth pre-warming for the demo, in priority order. */
-export const PREWARM_KEYS = ["ninja", "dragon", "slime", "chicken", "bird", "cat"];
+export const PREWARM_KEYS = ["ninja", "dragon-fly", "slime", "chicken", "bird-fly", "cat"]; // fliers use "<base>-fly" sheets (ADR 0053)
 export const MAX_PREWARM = 6;
 
 const env = (k: Kind, scope: "session" | "global", v: number): string =>
