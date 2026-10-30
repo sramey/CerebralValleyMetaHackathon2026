@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { kindOf } from "../src/client/shapes";
 import { type ArtPlan, artPlanFor, canUseSpriteSheet, entityKind } from "../src/ontology";
 import { LEGACY_PURGE_KEYS, artKeyForType, isScenerySubject, isSkippedType, pickArtType } from "../server/art";
 
@@ -109,6 +110,35 @@ describe("art plan comes from the ontology (ADR 0031)", () => {
     for (const key of LEGACY_PURGE_KEYS) {
       expect(artKeyForType(key), `purge key ${key} must never be valid art`).toBe("");
       expect(artPlanFor(key), key).toBe("none");
+    }
+  });
+  it("classifies <thing> rival/player/opponent/guard/kid as creatures with character art, never procedural ball shapes", () => {
+    const phrasings = [
+      "basketball-rival",
+      "basketball rival",
+      "basketball-player",
+      "basketball player",
+      "basketball-opponent",
+      "basketball opponent",
+      "basketball-guard",
+      "basketball guard",
+      "basketball-kid",
+      "basketball kid",
+      "soccer-player",
+      "soccer player",
+      "tennis-rival",
+      "tennis rival",
+      "football-opponent",
+      "football opponent",
+    ];
+    for (const t of phrasings) {
+      expect(entityKind(t), `entityKind(${t})`).toBe("creature");
+      expect(artPlanFor(t), `artPlanFor(${t})`).toBe("sheet");
+      expect(canUseSpriteSheet(t), `canUseSpriteSheet(${t})`).toBe(true);
+      expect(isSkippedType(t), `isSkippedType(${t})`).toBe(false);
+      expect(isScenerySubject(t), `isScenerySubject(${t})`).toBe(false);
+      expect(kindOf(t), `kindOf(${t}) should never be a procedural shape`).toBeUndefined();
+      expect(artKeyForType(t), `artKeyForType(${t})`).not.toBe("");
     }
   });
 });

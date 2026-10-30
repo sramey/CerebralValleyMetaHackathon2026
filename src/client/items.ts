@@ -4,8 +4,9 @@
 import type { Entity, ModDefinition } from "../contract";
 import gunMod from "../mods/gun";
 import basketballMod from "../mods/basketball";
+import jetpackMod from "../mods/jetpack";
 
-export { gunMod, basketballMod };
+export { gunMod, basketballMod, jetpackMod };
 
 export const ITEM_USE_KEYS = ["KeyB", "KeyF", "KeyE", "KeyX", "KeyJ"] as const;
 
@@ -44,6 +45,16 @@ export function resolveItemMod(command: string): ModDefinition | undefined {
     n === "laser gun"
   ) {
     return gunMod;
+  }
+
+  if (
+    n === "jetpack" ||
+    n === "jet pack" ||
+    n === "rocket pack" ||
+    n === "rocketpack" ||
+    n === "jump pack"
+  ) {
+    return jetpackMod;
   }
 
   return undefined;

@@ -2,6 +2,7 @@
 import type { Graphics } from "pixi.js";
 import type { Entity, Look, ShapeName } from "../contract";
 import { HOOP, isHoopType } from "../sim/hoop";
+import { entityKind } from "../ontology";
 import { isSetPieceSubject } from "./setpieces";
 
 const OUTLINE = 0x0b0e13;
@@ -26,6 +27,7 @@ const SHAPE_WORDS: [ShapeName, RegExp][] = [
   ["triangle", /triangle|cone|wedge/],
   ["diamond", /diamond|rhombus/],
   ["star", /^star$|-star$|^star-/],
+  ["pill", /pill|capsule|meter|gauge/],
   ["circle", /ball|orb|bubble|sphere|circle|marble|pearl|bomb/],
 ];
 const EFFECT_RE = /rain|fog|mist|haze|smoke|snow|explosion|blast|shockwave|spark|ember/;
@@ -43,6 +45,8 @@ export function kindOf(type: string): Kind | undefined {
   const t = type.toLowerCase();
   if (t === "player" || t === "ground" || t.includes("platform") || t.includes("coin") || PROJECTILE_RE.test(t) || isSetPieceSubject(t)) return undefined;
   if (isHoopType(t)) return undefined; // a goal has its own structure (drawHoop), never a ring or a ball
+  const k = entityKind(t);
+  if (k === "creature" || k === "player") return undefined;
   for (const l of looks) {
     if (l.types.some((x) => t.includes(x))) return l.visual === "effect" ? { kind: "effect" } : { kind: "shape", shape: l.shape ?? "circle" };
   }

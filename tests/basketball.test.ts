@@ -144,4 +144,71 @@ describe("basketball & hoop (bead z1d)", () => {
     expect(w.entities).toHaveLength(0);
     expect(w.hudList()).toHaveLength(0);
   });
+  it("supports 2K-style shot meter: charges meter while held, green zone swishes, early/late misses", () => {
+    const w = new World(42);
+    const l = new ModLoader(w);
+    l.load(basketballMod);
+
+    const ball = w.entities.find((e) => e.type === "basketball")!;
+    const p = w.spawn({ type: "player", x: ball.x - 20, y: 400 - 34, w: 26, h: 34, color: 0xffffff, solid: false, gravityScale: 0 }, "player");
+    p.facing = 1;
+
+    // Pick up ball
+    w.input = { left: false, right: false, jump: false, shoot: true, use: true };
+    w.step();
+    w.input = { left: false, right: false, jump: false, shoot: false, use: false };
+    w.step();
+    expect(w.hud.get("hoop-ball")?.value).toBe("B to shoot");
+
+    // Hold shoot for 10 frames: shot meter appears and charges
+    w.input = { left: false, right: false, jump: false, shoot: true, use: true };
+    for (let i = 0; i < 10; i++) w.step();
+    let meter = w.hud.get("shot-meter");
+    expect(meter).toBeDefined();
+    expect(meter?.kind).toBe("bar");
+    expect((meter as any)?.value).toBeGreaterThan(10);
+    expect((meter as any)?.value).toBeLessThan(25);
+
+    // Continue holding until 45 frames total (~75% -> green zone)
+    for (let i = 0; i < 35; i++) w.step();
+    meter = w.hud.get("shot-meter");
+    expect((meter as any)?.value).toBeGreaterThanOrEqual(65);
+    expect((meter as any)?.value).toBeLessThanOrEqual(85);
+
+    // Release in green zone: perfect release banner, meter removed, swish scores
+    w.input = { left: false, right: false, jump: false, shoot: false, use: false };
+    w.step();
+    expect(w.hud.get("shot-meter")).toBeUndefined();
+    expect(w.hud.get("hoop-swish")?.text).toContain("PERFECT RELEASE");
+
+    // Step through flight: drops through rim and scores +2
+    for (let i = 0; i < 60; i++) w.step();
+    expect(w.hud.get("hoop-score")?.value).toBe(2);
+  });
+
+  it("misses short on early release and misses long on late release", () => {
+    const w = new World(42);
+    const l = new ModLoader(w);
+    l.load(basketballMod);
+
+    const ball = w.entities.find((e) => e.type === "basketball")!;
+    const p = w.spawn({ type: "player", x: ball.x - 20, y: 400 - 34, w: 26, h: 34, color: 0xffffff, solid: false, gravityScale: 0 }, "player");
+    p.facing = 1;
+
+    // Pick up ball
+    w.input = { left: false, right: false, jump: false, shoot: true, use: true };
+    w.step();
+    w.input = { left: false, right: false, jump: false, shoot: false, use: false };
+    w.step();
+
+    // Early release: hold for 15 frames (~25%), then release
+    w.input = { left: false, right: false, jump: false, shoot: true, use: true };
+    for (let i = 0; i < 15; i++) w.step();
+    w.input = { left: false, right: false, jump: false, shoot: false, use: false };
+    w.step();
+    expect(w.hud.get("hoop-swish")?.text).toContain("TOO EARLY");
+    for (let i = 0; i < 60; i++) w.step();
+    // Misses: does not score
+    expect(w.hud.get("hoop-score")?.value).toBe(0);
+  });
 });
