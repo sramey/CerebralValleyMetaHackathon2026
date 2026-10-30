@@ -100,6 +100,18 @@ describe("grappling hook (ADR 0050)", () => {
     expect(w.entities.some((e) => e.type === "grapple-hook")).toBe(false); // released on arrival
   });
 
+  it("the hook is not stopped by the wall before it can latch", () => {
+    const { w } = world();
+    for (let i = 0; i < 30; i++) w.step();
+    w.input = { ...emptyInput(), shoot: true, pointerX: 430, pointerY: 300 };
+    w.step();
+    w.input = { ...emptyInput(), pointerX: 430, pointerY: 300 };
+    for (let i = 0; i < 14; i++) w.step();
+    const hook = w.entities.find((e) => e.type === "grapple-hook")!;
+    expect(hook.x).toBeGreaterThan(380);
+    expect(hook.x).toBeLessThan(470);
+  });
+
   it("jump while anchored vaults and releases the hook", () => {
     const { w, p } = world();
     for (let i = 0; i < 30; i++) w.step();

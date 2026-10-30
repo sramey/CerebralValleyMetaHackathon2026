@@ -204,6 +204,7 @@ export class World {
       // Static solids (gravityScale 0) never move. A solid with gravity still
       // gets physics: it collides with other solids, it just also blocks them.
       if (e.solid && e.gravityScale === 0) continue;
+      if (e.data.tetherTo !== undefined) { e.x += e.vx * dt; e.y += e.vy * dt; continue; } // grappling gear flies free; the mod latches it by raycast (ADR 0050)
       if (typeof e.data.parallax === "number" || /^(cloud|sky|day-sky|night-sky|background|parallax)/i.test(e.type)) {
         e.x += e.vx * dt;
         e.y += e.vy * dt;
