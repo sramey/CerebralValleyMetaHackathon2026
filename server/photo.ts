@@ -4,13 +4,25 @@ import { loadEnv } from "./meta";
 
 const BOX_RE = /box;x1=(\d+);y1=(\d+);x2=(\d+);y2=(\d+);w=(\d+);h=(\d+)/;
 
-type Box = { x: number; y: number; w: number; h: number };
+export type Box = { x: number; y: number; w: number; h: number };
 
-function candidatePrompts(prompt: string): string[] {
+export function candidatePrompts(prompt: string): string[] {
   const trimmed = typeof prompt === "string" ? prompt.trim() : "";
-  const words = trimmed ? trimmed.split(/\s+/) : [];
+  const lower = trimmed.toLowerCase();
+  const words = lower ? lower.split(/\s+/) : [];
   const last = words.length > 0 ? words[words.length - 1] : "";
-  const raw = [trimmed, last, "object"];
+  const raw: string[] = [];
+  if (trimmed) raw.push(trimmed);
+  if (last && last !== lower) raw.push(last);
+
+  // If prompt suggests person/body/face/hair, include relevant visual terms
+  if (/\b(hair|head|face|person|portrait|selfie|guy|girl|man|woman|kid|boy|human|me|my)\b/.test(lower)) {
+    raw.push("head", "person", "face", "hair");
+  }
+
+  // Broad semantic fallbacks for objects / figures
+  raw.push("object", "person", "item", "subject", "foreground");
+
   const seen = new Set<string>();
   const out: string[] = [];
   for (const c of raw) {
