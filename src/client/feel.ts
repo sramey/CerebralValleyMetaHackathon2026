@@ -2,7 +2,9 @@
 // world: it only reads entities each frame, keys its own state by entity id, and draws into its own Graphics.
 import { Graphics } from "pixi.js";
 import type { Container } from "pixi.js";
+import { SIM } from "../contract";
 import type { Entity } from "../contract";
+import { HURT_INVULN_TICKS } from "../sim/hurt";
 import { isProjectileOrAttachment } from "./portal";
 
 /** Things that happened this frame, for sound (bead 6d3). Observed from the world, never fed back into it. */
@@ -66,6 +68,10 @@ interface Track {
   svx: number;
   svy: number;
   flash: number;
+  /** Seconds of the player's red "that hurt" tint left (bead r8n). */
+  hurt: number;
+  /** Seconds of the player's invulnerability blink left; matches the sim window. */
+  invuln: number;
 }
 
 /** kind: 0 dust puff, 1 spark, 2 ring */
@@ -83,6 +89,26 @@ interface Particle {
 
 const MAX_PARTICLES = 160;
 const FLASH_TIME = 0.14;
+/** How long a hit on the player stays red, and how long the screen edges flash (bead r8n). */
+export const PLAYER_HURT_TIME = 0.4;
+/** The sim's invulnerability window in seconds: the blink and the i-frames end together. */
+export const INVULN_SECONDS = HURT_INVULN_TICKS * SIM.dt;
+/** Red tint of a player who was just hit. */
+export const HURT_TINT = 0xff6b5a;
+/** Blinks per second while invulnerable. */
+export const BLINK_HZ = 12;
+
+/** Alpha of a blinking player: on and off, `left` seconds still to go (1 = solid, 0 = gone). */
+export function blinkAlpha(left: number): number {
+  if (!(left > 0)) return 1;
+  return Math.floor(left * BLINK_HZ) % 2 === 0 ? 1 : 0.32;
+}
+
+/** Strength (0..1) of the red screen-edge flash for a pulse timer that is counting down from 1. */
+export function hurtFlashAlpha(pulse: number): number {
+  return Math.max(0, Math.min(1, pulse));
+}
+
 const REST = { sx: 1, sy: 1 };
 const TRACKED_MAX_W = 160;
 const STRIDE_PX = 46;
@@ -98,6 +124,8 @@ export class Feel {
   private g = new Graphics();
   private shots = new Set<number>();
   private shotsPrimed = false;
+  /** Red screen-edge pulse left after the player was hit (bead r8n), 0..1. */
+  private hurtPulse = 0;
   /** Last frame's player and projectile positions: something that vanishes next to one of them was knocked out. */
   private hitters: { x: number; y: number }[] = [];
 
@@ -113,7 +141,15 @@ export class Feel {
 
   tintOf(id: number): number {
     const t = this.tracks.get(id);
-    return t && t.flash > 0 ? 0xff8f8f : 0xffffff;
+    if (!t) return 0xffffff;
+    if (t.hurt > 0) return HURT_TINT;
+    return t.flash > 0 ? 0xff8f8f : 0xffffff;
+  }
+
+  /** Sprite alpha: blinking while the sim's invulnerability window is open (bead r8n). */
+  alphaOf(id: number): number {
+    const t = this.tracks.get(id);
+    return t ? blinkAlpha(t.invuln) : 1;
   }
 
   private spawn(p: Particle): void {
@@ -160,7 +196,7 @@ export class Feel {
       if (e.solid || e.gravityScale <= 0 || e.w > TRACKED_MAX_W) continue;
       let t = this.tracks.get(e.id);
       if (!t) {
-        t = { seen: f, type, x: e.x, y: e.y, w: e.w, h: e.h, vy: e.vy, onGround: e.onGround, health: e.health, stride: 0, sx: 1, sy: 1, svx: 0, svy: 0, flash: 0 };
+        t = { seen: f, type, x: e.x, y: e.y, w: e.w, h: e.h, vy: e.vy, onGround: e.onGround, health: e.health, stride: 0, sx: 1, sy: 1, svx: 0, svy: 0, flash: 0, hurt: 0, invuln: 0 };
         this.tracks.set(e.id, t);
         continue;
       }
@@ -187,15 +223,25 @@ export class Feel {
         if (t.stride >= STRIDE_PX) { t.stride -= STRIDE_PX; this.emit({ kind: "step" }); }
       } else t.stride = 0;
       if (e.health < t.health - 0.5) {
-        this.emit({ kind: "hit", damage: t.health - e.health, self: type === "player" });
+        const damage = t.health - e.health;
+        this.emit({ kind: "hit", damage, self: type === "player" });
         t.flash = FLASH_TIME;
-        if (t.health - e.health >= 20 && this.shakeOn) this.kick(1.6);
+        if (type === "player") {
+          // Getting hurt has to be obvious (bead r8n): a red player, a red screen edge, a blink,
+          // and the sim knocked them back (ADR 0070).
+          t.hurt = PLAYER_HURT_TIME;
+          t.invuln = INVULN_SECONDS;
+          this.hurtPulse = 1;
+        }
+        if (damage >= 20 && this.shakeOn) this.kick(1.6);
       }
       // Damped spring back to rest (a little overshoot reads as bounce).
       const k = 260, c = 18;
       t.svx += ((1 - t.sx) * k - t.svx * c) * dt; t.sx += t.svx * dt;
       t.svy += ((1 - t.sy) * k - t.svy * c) * dt; t.sy += t.svy * dt;
       t.flash = Math.max(0, t.flash - dt);
+      t.hurt = Math.max(0, t.hurt - dt);
+      t.invuln = Math.max(0, t.invuln - dt);
       t.x = e.x; t.y = e.y; t.w = e.w; t.h = e.h; t.vy = e.vy; t.onGround = e.onGround; t.health = e.health; t.seen = f;
     }
     // Coins that vanished near the player were collected: pop them.
@@ -231,6 +277,7 @@ export class Feel {
       if (p.kind === 0) { p.vx *= Math.exp(-dt * 5); p.vy *= Math.exp(-dt * 3); }
       else if (p.kind === 1) p.vy += 260 * dt;
     }
+    this.hurtPulse = Math.max(0, this.hurtPulse - dt / PLAYER_HURT_TIME);
   }
 
   /** A projectile that first appears next to the player was fired by them. A world load (many at once) is not a volley. */
@@ -249,7 +296,7 @@ export class Feel {
   }
 
   /** Draw the particles and hit flashes in screen space. */
-  draw(camX: number, camY: number): void {
+  draw(camX: number, camY: number, viewW = 0, viewH = 0): void {
     const g = this.g;
     g.clear();
     for (const t of this.tracks.values()) {
@@ -264,6 +311,24 @@ export class Feel {
         const s = p.size * (1 - q * 0.5);
         g.poly([x, y - s * 1.6, x + s * 0.6, y, x, y + s * 1.6, x - s * 0.6, y]).fill({ color: p.color, alpha: 1 - q * q });
       } else g.circle(x, y, p.size * (0.3 + q)).stroke({ width: 2, color: p.color, alpha: 0.9 * (1 - q) });
+    }
+    // The player was hit: a red wash plus edge bands across the whole view, so a hit reads even
+    // when the player is small on screen (bead r8n). Drawn last, over everything.
+    if (this.hurtPulse > 0) {
+      const a = hurtFlashAlpha(this.hurtPulse);
+      if (viewW > 0 && viewH > 0) {
+        g.rect(0, 0, viewW, viewH).fill({ color: 0xff2d20, alpha: 0.09 * a });
+        const band = Math.max(18, Math.min(viewW, viewH) * 0.14);
+        for (let i = 0; i < 3; i++) {
+          const thick = band / 3;
+          const alpha = 0.3 * a * (1 - i / 3);
+          const off = i * thick;
+          g.rect(0, off, viewW, thick).fill({ color: 0xff2d20, alpha });
+          g.rect(0, viewH - off - thick, viewW, thick).fill({ color: 0xff2d20, alpha });
+          g.rect(off, 0, thick, viewH).fill({ color: 0xff2d20, alpha });
+          g.rect(viewW - off - thick, 0, thick, viewH).fill({ color: 0xff2d20, alpha });
+        }
+      }
     }
   }
 }
