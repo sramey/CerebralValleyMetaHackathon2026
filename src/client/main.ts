@@ -1582,6 +1582,12 @@ function setPendingCapture(source: CanvasImageSource, sw: number, sh: number): v
   cameraConfirm.disabled = true;
   setCameraPhase("preview");
   redrawPreview();
+  // A level drawing is read whole by Wonder (ADR 0040): no SAM cut-out, so no SAM call and no box.
+  if (cameraPaper?.checked) {
+    cameraConfirm.disabled = false;
+    setCameraStatus("Drawing photo ready! Click 'Build this level' to make it playable.");
+    return;
+  }
   if (bgCanvas) computeDiff();
   if (diffComponents.length === 0) {
     // With no builder connected the SAM box never arrives: say so and point at the cut that works offline.
@@ -1684,7 +1690,7 @@ function handleSegment(key: string, rawBox: unknown): void {
 cameraPaper?.addEventListener("change", () => {
   if (cameraPaper.checked) {
     cameraLabel.placeholder = "Level name (optional, e.g. Sky Castle)";
-    if (pendingCapture) setCameraStatus("Drawing photo ready! Click 'Build this level' to make it playable.");
+    if (pendingCapture) { cameraConfirm.disabled = false; setCameraStatus("Drawing photo ready! Click 'Build this level' to make it playable."); }
     else setCameraStatus("Level drawing mode: upload or capture your paper drawing.");
   } else {
     cameraLabel.placeholder = "What are you holding? e.g. coffee mug";
