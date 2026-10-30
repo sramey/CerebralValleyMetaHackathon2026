@@ -18,6 +18,13 @@ For whoever sits next to the tester. You do not need to know how Metabuild works
 
 If they finish early, say: "Ask for anything else you would want in a game."
 
+## Object import (if tester clicks "Bring an object in")
+- Testers may upload a photo of an object, pet, or drawing (or use camera).
+- Clicking any part of an object (e.g. hair, mug, figure) selects the whole connected object with generous region growing and segment merging (e.g. selecting hair captures the whole head).
+- Clicking again adds or removes parts so the selection is easily adjusted.
+- "Find object (AI)" uses Meta SAM 3.1 to detect and outline the object named in the box.
+- The facilitator should let the tester click to select or adjust without prompting.
+
 ## What NOT to help with
 - Do **not** tell them what to type or say, point at buttons, or read the on-screen text to them. The on-screen guide is part of what we are testing.
 - Do **not** say "try this" or "no, like this". If they ask "what do I do?", answer: "What do you think you should do?"

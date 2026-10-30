@@ -45,6 +45,8 @@ import { CAMERA_LABEL, CAPTURE_LABEL, UPLOAD_LABEL, defaultAction, dialogCssVars
 import type { DialogPhase } from "./camera-dialog";
 import { FINDER_IDLE, finderLine, finderNext } from "./camera-finder";
 import type { FinderEvent, FinderState } from "./camera-finder";
+import { isPointInBox, segmentImage, toggleSelectionAtPoint } from "./camera-selection";
+import type { SegmentationResult, SelectionState } from "./camera-selection";
 import { compactPaperImage, paperImageSize, paperLevelMessage } from "./paper-image";
 import { matchPaperIntent, matchSketchIntent } from "./phrases";
 import { World } from "../sim/world";
@@ -1286,6 +1288,10 @@ let cameraPhase: DialogPhase = "idle";
 let pendingCapture: { canvas: HTMLCanvasElement; dataUrl: string } | null = null;
 let currentKey: string | null = null;
 let foundBox: SegmentBox | null = null;
+let cachedSamBox: SegmentBox | null = null;
+let samBoxActive = false;
+let currentSegmentation: SegmentationResult | null = null;
+let activeSelection: SelectionState | null = null;
 let clickPoint: { fx: number; fy: number } | null = null;
 let bgCanvas: HTMLCanvasElement | null = null;
 type MaskInfo = { mask: Uint8Array; w: number; h: number; count: number };
@@ -1358,12 +1364,17 @@ function updateCameraConfirm(): void {
   cameraConfirm.textContent = "Bring it into the game";
   cameraConfirm.disabled = !(
     (diffComponents.length > 0 && selectedComponent >= 0) ||
+    (activeSelection !== null && activeSelection.count > 0) ||
     (wandMask !== null && wandMask.count >= 300) ||
     foundBox !== null || clickPoint !== null
   );
 }
 function clearDetection(): void {
   foundBox = null;
+  cachedSamBox = null;
+  samBoxActive = false;
+  currentSegmentation = null;
+  activeSelection = null;
   clickPoint = null;
   diffComponents = [];
   selectedComponent = -1;
@@ -1401,6 +1412,8 @@ function redrawPreview(): void {
   };
   if (diffComponents.length > 0) {
     for (let i = 0; i < diffComponents.length; i++) drawTint(diffComponents[i], i === selectedComponent ? 0.65 : 0.45);
+  } else if (activeSelection && activeSelection.count > 0 && currentSegmentation) {
+    drawTint({ w: currentSegmentation.w, h: currentSegmentation.h, mask: activeSelection.mask, count: activeSelection.count }, 0.45);
   } else if (wandMask) {
     drawTint(wandMask, 0.45);
   }
@@ -1630,7 +1643,7 @@ function storeCutTexture(key: string, cut: HTMLCanvasElement, texCanvas: HTMLCan
   pendingPhotos.delete(key);
   log(`photo object in game: ${key}`);
 }
-function maskCutTexture(key: string, src: HTMLCanvasElement, m: MaskInfo, mode: "diff" | "wand"): HTMLCanvasElement | null {
+function maskCutTexture(key: string, src: HTMLCanvasElement, m: MaskInfo, mode: "diff" | "wand" | "click"): HTMLCanvasElement | null {
   let minX = m.w, minY = m.h, maxX = -1, maxY = -1;
   for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) if (m.mask[y * m.w + x]) {
     if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
@@ -1802,12 +1815,16 @@ function handleSegment(key: string, rawBox: unknown): void {
   const box = rawBox === null ? null : normalizeBox(rawBox);
   if (box === null) {
     foundBox = null;
+    cachedSamBox = null;
+    samBoxActive = false;
     cameraBoxEl.hidden = true;
     cameraFinder({ kind: "missed" });
     updateCameraConfirm();
     return;
   }
   foundBox = box;
+  cachedSamBox = box;
+  samBoxActive = true;
   cameraBoxEl.style.left = `${box.x / 16}%`;
   cameraBoxEl.style.top = `${box.y / 16}%`;
   cameraBoxEl.style.width = `${box.w / 16}%`;
@@ -1895,6 +1912,58 @@ cameraPreview.addEventListener("click", (e) => {
     }
     return;
   }
+  if (cachedSamBox !== null && isPointInBox(fx, fy, cachedSamBox)) {
+    if (samBoxActive) {
+      samBoxActive = false;
+      foundBox = null;
+      cameraBoxEl.hidden = true;
+      cameraFinder({ kind: "covered" });
+      setCameraStatus("Removed detection box — click object to select, or click again to restore.");
+      redrawPreview();
+      updateCameraConfirm();
+      return;
+    } else {
+      samBoxActive = true;
+      foundBox = cachedSamBox;
+      activeSelection = null;
+      cameraBoxEl.style.left = `${foundBox.x / 16}%`;
+      cameraBoxEl.style.top = `${foundBox.y / 16}%`;
+      cameraBoxEl.style.width = `${foundBox.w / 16}%`;
+      cameraBoxEl.style.height = `${foundBox.h / 16}%`;
+      cameraBoxEl.hidden = false;
+      cameraFinder({ kind: "covered" });
+      setCameraStatus("Selected object (AI box) — Bring it in, or click to adjust.");
+      redrawPreview();
+      updateCameraConfirm();
+      return;
+    }
+  }
+  if (!currentSegmentation) {
+    const img = workImage(pendingCapture.canvas, 384);
+    if (img) currentSegmentation = segmentImage(img);
+  }
+  if (currentSegmentation) {
+    activeSelection = toggleSelectionAtPoint(currentSegmentation, fx, fy, activeSelection?.activeSegments);
+    foundBox = null;
+    samBoxActive = false;
+    if (activeSelection.count > 0 && activeSelection.box1600) {
+      const b = activeSelection.box1600;
+      cameraBoxEl.style.left = `${b.x / 16}%`;
+      cameraBoxEl.style.top = `${b.y / 16}%`;
+      cameraBoxEl.style.width = `${b.w / 16}%`;
+      cameraBoxEl.style.height = `${b.h / 16}%`;
+      cameraBoxEl.hidden = false;
+      cameraFinder({ kind: "covered" });
+      setCameraStatus("Selected object — Bring it in, or click again to add/remove parts.");
+    } else {
+      cameraBoxEl.hidden = true;
+      cameraFinder({ kind: "covered" });
+      setCameraStatus("Selection cleared — click your object to select it.");
+    }
+    redrawPreview();
+    updateCameraConfirm();
+    return;
+  }
   computeWand(fx, fy);
 });
 cameraConfirm.addEventListener("click", () => {
@@ -1920,6 +1989,19 @@ cameraConfirm.addEventListener("click", () => {
   const canvas = pendingPhotos.get(key) ?? pendingCapture.canvas;
   if (diffComponents.length > 0 && selectedComponent >= 0) {
     const cut = maskCutTexture(key, canvas, diffComponents[selectedComponent], "diff");
+    if (!cut) { setCameraStatus("That spot cut out empty — try clicking the middle of the object."); return; }
+    pendingArt.add(key);
+    send({ kind: "photoBringLocal", key, prompt: currentPrompt(), aspect: cut.width / cut.height } as unknown as ClientMsg);
+    closeCameraModal(false);
+    return;
+  }
+  if (activeSelection !== null && activeSelection.count > 0 && currentSegmentation) {
+    const cut = maskCutTexture(key, canvas, {
+      mask: activeSelection.mask,
+      w: currentSegmentation.w,
+      h: currentSegmentation.h,
+      count: activeSelection.count,
+    }, "click");
     if (!cut) { setCameraStatus("That spot cut out empty — try clicking the middle of the object."); return; }
     pendingArt.add(key);
     send({ kind: "photoBringLocal", key, prompt: currentPrompt(), aspect: cut.width / cut.height } as unknown as ClientMsg);
