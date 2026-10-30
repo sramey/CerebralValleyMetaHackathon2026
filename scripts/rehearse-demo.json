@@ -1,0 +1,10 @@
+[
+  { "cmd": "add a bouncing green slime", "source": "slime" },
+  { "cmd": "make them faster" },
+  { "cmd": "add a dragon, some coins, and make it rain" },
+  { "cmd": "make it so my character can double jump", "source": "api[.]player[(]" },
+  { "cmd": "let me shoot fireballs", "source": "api[.]player[(]|input", "noArt": true },
+  { "cmd": "make me huge", "expect": "rejected-then-fixed" },
+  { "cmd": "make it spooky", "mood": "spooky" },
+  { "cmd": "undo" }
+]
