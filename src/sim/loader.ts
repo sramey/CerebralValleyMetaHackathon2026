@@ -2,6 +2,7 @@ import type { KnobDefs, KnobValues, ModApi, ModDefinition, TestApi } from "../co
 import { emptyInput } from "../contract";
 import { checkProjectileHitAndDamage } from "./combat";
 import { touches } from "./reach";
+import { applySwarmSeparation, createWaveController, spawnWaveUnit } from "./waves";
 import { World } from "./world";
 
 export interface LoadedMod { id: string; title: string; knobDefs: KnobDefs; values: KnobValues; def: ModDefinition }
@@ -33,6 +34,19 @@ export class ModLoader {
       hud: (id) => w.hud.get(id),
       hudList: () => w.hudList(),
       damageHit: (proj, opts) => checkProjectileHitAndDamage(this.apiFor(owner), proj, opts),
+      camera: () => {
+        const p = w.entities.find((e) => e.type === "player");
+        if (p) {
+          return {
+            x: p.x + p.w / 2 - 480,
+            y: Math.min(0, p.y + p.h / 2 - 270),
+          };
+        }
+        return { x: w.camera.x, y: w.camera.y };
+      },
+      spawnWaveUnit: (opts) => spawnWaveUnit(this.apiFor(owner), opts),
+      applySeparation: (entities, opts) => applySwarmSeparation(entities, opts),
+      createWaveController: (opts) => createWaveController(this.apiFor(owner), opts),
     };
   }
 
@@ -98,6 +112,19 @@ export function runModTest(def: ModDefinition): { ok: boolean; errors: string[] 
           hud: (hid) => world.hud.get(hid),
           hudList: () => world.hudList(),
           damageHit: (proj, opts) => checkProjectileHitAndDamage(t.api, proj, opts),
+          camera: () => {
+            const p = world.entities.find((e) => e.type === "player");
+            if (p) {
+              return {
+                x: p.x + p.w / 2 - 480,
+                y: Math.min(0, p.y + p.h / 2 - 270),
+              };
+            }
+            return { x: world.camera.x, y: world.camera.y };
+          },
+          spawnWaveUnit: (opts) => spawnWaveUnit(t.api, opts),
+          applySeparation: (entities, opts) => applySwarmSeparation(entities, opts),
+          createWaveController: (opts) => createWaveController(t.api, opts),
         },
         step: (n, input) => {
           const prev = world.input;
