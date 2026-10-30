@@ -23,7 +23,7 @@ async function startMock(handler: (res: import("node:http").ServerResponse) => v
 
 beforeEach(() => {
   process.env.MODEL_API_KEY = "test-key-not-real";
-  delete process.env.BASETEN_API_KEY;
+  process.env.BASETEN_API_KEY = "";
   delete process.env.BASETEN_BASE_URL;
   delete process.env.BASETEN_MODEL;
   delete process.env.BASETEN_TIMEOUT_MS;
@@ -65,9 +65,9 @@ describe("router model (ADR 0032)", () => {
     process.env.BASETEN_API_KEY = "baseten-test";
     const hosted = stubHosted();
     const r = await routerChat(MSGS);
-    expect(r).toMatchObject({ text: '{"action":"new"}', model: "muse-spark-open-1026", open: true, fellBack: false });
+    expect(r).toMatchObject({ text: '{"action":"new"}', model: "muse-spark-open", open: true, fellBack: false });
     expect(seen.auth).toBe("Bearer baseten-test");
-    expect(seen.body.model).toBe("meta-models/muse-spark-open-1026");
+    expect(seen.body.model).toBe("meta-models/muse-spark-open");
     expect(seen.body.reasoning_effort).toBe("minimal");
     expect(hosted.calls).toBe(0);
   });

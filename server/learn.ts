@@ -15,7 +15,7 @@ export interface LearnedRule {
   id: string;
   subsystem: RuleSubsystem;
   rule: string;
-  source: "feedback" | "autofix" | "seed";
+  source: "feedback" | "autofix" | "seed" | "review";
   modId?: string;
   command?: string;
   note?: string;
@@ -179,7 +179,7 @@ export function loadRules(dir?: string): LearnedRule[] {
         id: typeof r.id === "string" && r.id ? r.id : `rule-${Date.now()}`,
         subsystem: r.subsystem === "router" || r.subsystem === "art" ? r.subsystem : "wonder",
         rule: r.rule.trim(),
-        source: r.source === "feedback" || r.source === "autofix" || r.source === "seed" ? r.source : "feedback",
+        source: r.source === "feedback" || r.source === "autofix" || r.source === "seed" || r.source === "review" ? r.source : "feedback",
         ...(r.modId ? { modId: r.modId } : {}),
         ...(r.command ? { command: r.command } : {}),
         ...(r.note ? { note: r.note } : {}),
@@ -630,4 +630,35 @@ export function formatLearnedBlock(subsystem: RuleSubsystem, command = "", dir?:
   }
 
   return parts.join("\n\n");
+}
+
+/**
+ * Turn an accepted review fix into a persistent learned rule so future Wonder
+ * builds stop repeating that mistake (ADR 0067).
+ */
+export function learnRuleFromReview(
+  modId: string,
+  issue: string,
+  command?: string,
+  subsystem: RuleSubsystem = "wonder",
+  dir?: string,
+): LearnedRule | null {
+  if (learningFrozen()) return null;
+  const ruleText = cleanOneLine(issue, 150);
+  if (!ruleText) return null;
+  const entry: LearnedRule = {
+    id: "review-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+    subsystem,
+    rule: ruleText,
+    source: "review",
+    modId,
+    ...(command ? { command } : {}),
+    note: issue,
+    createdAt: new Date().toISOString(),
+  };
+  const existing = loadRules(dir);
+  const updated = dedupAndCapRules(existing, entry);
+  saveRules(updated, dir);
+  logLearn({ event: "review-rule", rule: entry.rule, modId, command, issue });
+  return entry;
 }

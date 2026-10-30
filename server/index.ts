@@ -43,6 +43,7 @@ import { isWorldId, restyledForWorld, snapshotWorld, WorldStore } from "./worlds
 import { generateExportHtml } from "./export";
 import { createStaticHandler } from "./static";
 import { createVoiceHub } from "./voice";
+import { queueBuildReview } from "./reviewer";
 import { appendTester, sanitizeTester } from "./testers";
 import { runSketchBuild } from "./sketch";
 import { runPaperBuild } from "./paper";
@@ -1192,6 +1193,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
         if (url) { rec.art = { key, url, ...(scenery ? { scenery: true } : {}) }; try { send(ws, { kind: "art", modId: def.id, art: { key, url, ...(scenery ? { scenery: true } : {}) } }); } catch {} } }).catch(() => {});
       send(ws, { kind: "say", text: `Drawing ${subject}...` });
     }
+    queueBuildReview({ ws, command, mod: rec, playtest: { ok: true, msPerFrame: first.res.msPerFrame }, worldMods: () => worldMods(ws), send });
     const files = saveModSources(sources, def.id);
     logBuild({ command, route: editRec ? "edit" : routeAction, outcome: editRec ? "edit" : "mod", modId: def.id, title: def.title, timings: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) }, verify: { ok: true, errors: [], msPerFrame: first.res.msPerFrame }, fixAttempted, ...agentInfo(), ...batchInfo, sourceFile: files[files.length - 1], sourceFiles: files });
   } else {

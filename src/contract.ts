@@ -519,6 +519,14 @@ export interface ReceiptArt {
   ms?: number;
 }
 /** "How was this made?" (ADR 0065): the chain from words to a verified, playable mod. */
+export interface ReceiptReview {
+  model: string;
+  verdict: "ok" | "fix";
+  issues: string[];
+  accepted: boolean;
+  ms: number;
+}
+
 export interface BuildReceipt {
   modId: string;
   title: string;
@@ -534,6 +542,7 @@ export interface BuildReceipt {
   /** What the verifier ran before this could load. */
   proof: { healthFrames: number; msBudget: number; msPerFrame: number; playtestSeeds: number; playtests: number; fixed: boolean };
   art?: ReceiptArt;
+  review?: ReceiptReview;
   timings?: { route: number; write: number; compile: number; verify: number; total: number };
   at?: string;
 }
