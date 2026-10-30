@@ -7,9 +7,14 @@ import { dirname } from "node:path";
 export type Kind = "build" | "image" | "sam" | "voice" | "explain";
 export type Limits = Record<Kind, number>;
 
-/** Voice is counted in seconds of Meta session time (standby + live); the env vars are minutes. */
-export const DEFAULT_SESSION: Limits = { build: 20, image: 24, sam: 6, voice: 8 * 60, explain: 40 };
-export const DEFAULT_GLOBAL: Limits = { build: 400, image: 300, sam: 100, voice: 120 * 60, explain: 800 };
+/**
+ * Unlimited by default (owner 2026-10-30): there is no public page and every player brings
+ * their own Meta key, so a local build is never capped. A host can still set any `BUDGET_*`
+ * env var (listed in `.env.example`) and `AI_KILL_SWITCH` still stops every call at once.
+ * Voice is counted in seconds of Meta session time (standby + live); the env vars are minutes.
+ */
+export const DEFAULT_SESSION: Limits = { build: Infinity, image: Infinity, sam: Infinity, voice: Infinity, explain: Infinity };
+export const DEFAULT_GLOBAL: Limits = { build: Infinity, image: Infinity, sam: Infinity, voice: Infinity, explain: Infinity };
 
 export type Verdict =
   | { ok: true }
