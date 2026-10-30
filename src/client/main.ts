@@ -116,7 +116,8 @@ orbState.after(modelChip);
 function routedBy(msg: Extract<ServerMsg, { kind: "routed" }>): void {
   modelChip.textContent = `routed by ${msg.model}${msg.open ? " (open weights)" : ""}${msg.fellBack ? " (open timed out)" : ""} · ${msg.ms} ms`;
 }
-const builds = createBuilds(orbSay.parentElement ?? document.body, () => {});
+// A running chip's x stops that one build (ADR 0060); the server answers with a failed stage.
+const builds = createBuilds(orbSay.parentElement ?? document.body, () => {}, (command) => send({ kind: "cancel", command }));
 const feedback = initFeedback({
   send: (msg) => send(msg),
   sendWorldState: () => send({ kind: "worldState", mods: loader.list().map((m) => ({ id: m.id, values: m.values })) }),
