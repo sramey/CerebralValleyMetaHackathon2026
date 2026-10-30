@@ -524,14 +524,21 @@ function applyMood(m: MoodSpec | null): void {
   portal.setMood(m);
   sound.setMood(m);
 }
-function revertMood(): void {
+/**
+ * Put the world back to no mood (ADR 0017). `local` is false when the server already said so with
+ * its own `mood: null` frame: that frame also makes the server record the world on the timeline
+ * strip. A mood the player undoes here is not echoed by the server (bug bv4), so the strip gets the
+ * loss of the mood straight away instead of waiting for the next action to record a step.
+ */
+function revertMood(local = true): void {
   restoreSheets();
   applyMood(null);
   renderMods();
+  if (local) timelineView.localStep({ kind: "undo", label: "Back to normal", mods: loader.list().map((m) => ({ id: m.id, title: m.title })) });
 }
 /** Server designed a mood: repaint the code-drawn world now, then ask for each AI sheet to be edited toward it. */
 function onMood(m: MoodSpec | null): void {
-  if (!m) { revertMood(); say("Back to normal.", "done"); return; }
+  if (!m) { revertMood(false); say("Back to normal.", "done"); return; }
   if (mood && mood.name === m.name) return; // duplicate of the mood already on
   tester.mood(m.name);
   restoreSheets();
@@ -1888,6 +1895,9 @@ async function importMod(compiled: string): Promise<ModDefinition> {
 /** Replace the running world with a saved one: built-ins from the bundle, AI mods from their verified compiled source. */
 async function applyWorld(msg: Extract<ServerMsg, { kind: "world" }>): Promise<void> {
   restoreSheets();
+  // A whole new world supersedes any step this client guessed locally (bug bv4); the server's own
+  // timeline frame (a restore) or a fresh session (a link) is the truth from here.
+  timelineView.clearLocal();
   applyMood(msg.mood ?? null);
   for (const m of loader.list()) loader.unload(m.id);
   let loaded = 0;
