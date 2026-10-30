@@ -58,6 +58,7 @@ import parallaxMod from "../mods/parallax";
 import basketballMod from "../mods/basketball";
 import swarmMod from "../mods/swarm";
 import { resolveItemMod, gunMod } from "./items";
+import { browserStorage, createAutosave, homeSlot, nextHomeSlot, resumeSlotId } from "./home-world";
 import { parseUrlFlags, shareIssueMessage, urlWithoutWorld } from "./url-flags";
 import type { ShareIssue } from "./url-flags";
 
@@ -1140,6 +1141,7 @@ function renderMods(): void {
         out.textContent = range.value;
         loader.setKnob(mod.id, knob, Number(range.value));
         send({ kind: "knob", modId: mod.id, knob, value: Number(range.value) });
+        autosaveTouch();
       });
       row.append(label, range, out);
       li.appendChild(row);
@@ -1151,10 +1153,16 @@ function renderMods(): void {
 const timelineView = mountTimeline($("#timeline"), (n) => send({ kind: "timelineRestore", n }));
 
 // --- commands -------------------------------------------------------------------
-function sendWorldState(): void {
+/**
+ * Tell the server which mods are loaded. Every local change reports its world through here, so this
+ * is also where a change becomes an autosave (ADR 0070). `reset` clears the server's own copy of the
+ * mods too: "New world" leaves nothing behind for edits or playtests to find.
+ */
+function sendWorldState(reset = false): void {
   if (ws?.readyState === WebSocket.OPEN) {
-    send({ kind: "worldState", mods: loader.list().map((m) => ({ id: m.id, values: m.values })) });
+    send({ kind: "worldState", mods: worldList(), ...(reset ? { reset: true } : {}) });
   }
+  autosaveTouch();
 }
 
 function loadLocal(def: ModDefinition): void {
@@ -1189,6 +1197,8 @@ function handleLocal(text: string): boolean {
   let n = t.trim().replace(/[.!?,;:]+$/, "").trim().replace(/\s+/g, " ");
   n = n.replace(/^(?:add|make|create|spawn|build|give|put)\s+/, "");
   while (/^(?:a|an|the)\s+/.test(n)) n = n.replace(/^(?:a|an|the)\s+/, "");
+  // A blank start is one click or one phrase (ADR 0070); it is local, so it works with no server.
+  if (/^(?:new|fresh|blank|clean)\s+(?:world|game|start|level)$/.test(n) || n === "start over" || n === "start again" || n === "reset world") { startNewWorld(); return true; }
   // Exact matches only: anything with extra descriptive words falls through to the server.
   // Extra aliases are the normalized forms of the index.html chip commands, which must keep working:
   // "add some ground" -> "some ground", "make it rain" -> "it rain", "shoot fire arrows" (unchanged).
@@ -1216,7 +1226,7 @@ function handleLocal(text: string): boolean {
   return false;
 }
 function tweak(modId: string, knob: string, value: KnobValue, message: string): void {
-  if (loader.setKnob(modId, knob, value)) { say(message, "done"); renderMods(); }
+  if (loader.setKnob(modId, knob, value)) { say(message, "done"); renderMods(); autosaveTouch(); }
   else say(`Add that mod first, then I can tweak it.`);
 }
 
@@ -1967,6 +1977,35 @@ const worldParam = urlFlags.worldId;
 let worldRequested = false;
 let worldFallbackTimer = 0;
 
+// --- the world survives a reload (ADR 0070) -----------------------------------
+// One autosaved world per browser. The slot id lives in this browser's own storage, the file lives
+// on the server as `home-*.json`, and every change rewrites that one file: no account, no share
+// link, nothing announced. "New world" swaps in a fresh slot, so a blank start is one click.
+const homeStorage = browserStorage();
+const home = homeSlot(homeStorage);
+/** The saved world to ask for back, unless this page is already showing a linked one. */
+const resumeOf = resumeSlotId({ slot: home, worldParam, shareIssue: urlFlags.shareIssue !== null });
+let resumeAsked = false;
+let resumeFallbackTimer = 0;
+
+function worldList(): { id: string; values: Record<string, KnobValue> }[] {
+  return loader.list().map((m) => ({ id: m.id, values: m.values }));
+}
+
+const autosave = createAutosave({
+  send: () => {
+    if (ws?.readyState !== WebSocket.OPEN) return;
+    send({ kind: "worldSave", mods: worldList(), slot: home.id });
+  },
+});
+/** Something in the world changed: one save once it goes quiet (a compound command lands in bursts). */
+function autosaveTouch(): void {
+  autosave.touch();
+}
+// The tab may close inside the debounce window: save on the way out instead of losing the last build.
+addEventListener("pagehide", () => autosave.flush());
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") autosave.flush(); });
+
 /** A link we could not open: say so in plain words, drop it from the URL, and load the starter instead. */
 function openStarterAfterBadLink(issue: ShareIssue): void {
   log(`share link not opened: ${issue}`);
@@ -2023,10 +2062,36 @@ async function applyWorld(msg: Extract<ServerMsg, { kind: "world" }>): Promise<v
     }
   }
   renderMods();
+  if (msg.resumed) {
+    // The browser's own last world (ADR 0070): nothing was opened, so the URL stays as it is.
+    say(`Your world is back: ${loaded} ${loaded === 1 ? "thing" : "things"}.`, "done");
+    log(`resumed your world (${loaded} mods)`);
+    return;
+  }
   if (!msg.id) { say(`Restored a world of ${loaded} mods. The steps before it are still on the timeline.`, "done"); return; } // timeline restore (ADR 0041)
   history.replaceState(null, "", `?w=${msg.id}`);
   say(`Opened a world with ${loaded} mods. Keep building to remix it.`, "done");
 }
+
+/**
+ * "New world" (ADR 0070): one click to a blank start. Everything loaded goes, a fresh autosave slot
+ * takes over, and the old world's file is left untouched on the disk for an hour or a fortnight,
+ * so a mis-click never destroys anything the player cannot get back from the timeline.
+ */
+function startNewWorld(): void {
+  autosave.cancel(); // nothing pending from the old world may land on the new slot
+  if (mood) { send({ kind: "undo", modId: "mood" }); revertMood(); }
+  for (const m of loader.list()) loader.unload(m.id);
+  restoreSheets();
+  home.id = nextHomeSlot(homeStorage).id;
+  loader.load(playerMod);
+  loader.load(groundMod);
+  renderMods();
+  sendWorldState(true); // `reset`: the server drops the old mods too, so edits and playtests see the blank world
+  log("new world");
+  say("New world. Everything before it is still on the timeline.", "done");
+}
+$("#new-world-btn")?.addEventListener("click", () => startNewWorld());
 
 function showDemos(demos: { id: string; title: string; blurb: string }[]): void {
   const box = $("#demo-worlds");
@@ -2080,7 +2145,13 @@ function connect(): void {
     // this file, so it waits for the module to finish evaluating (cold start, bead q2s).
     serverStatus.textContent = `Server: connected on ${WS_URL}`;
     await boot.ready;
-    voice.onOpen(); tester.onOpen(); sendWorldState();
+    voice.onOpen(); tester.onOpen();
+    if (resumeOf && !resumeAsked) {
+      // Ask for this browser's own last world (ADR 0070), once: `worldMissing` falls back to a fresh start.
+      resumeAsked = true;
+      say("Getting your world back…", "building");
+      send({ kind: "worldResume", id: resumeOf });
+    } else sendWorldState();
     if (worldParam && !worldRequested) {
       worldRequested = true;
       say("Opening the world from that link…");
@@ -2105,11 +2176,25 @@ function connect(): void {
     theater.onMsg(msg);
     sketch.onServerMsg(msg);
     if (voice.onServerMsg(msg)) return;
-    if (msg.kind === "world") { clearTimeout(worldFallbackTimer); await applyWorld(msg); return; }
-    if (msg.kind === "mood") { onMood(msg.mood); return; }
+    if (msg.kind === "world") {
+      clearTimeout(worldFallbackTimer);
+      clearTimeout(resumeFallbackTimer);
+      await applyWorld(msg);
+      if (!msg.id) autosaveTouch(); // a timeline restore is a change of the current world (ADR 0041/0070)
+      return;
+    }
+    if (msg.kind === "worldMissing") {
+      // A saved world this browser had is gone (a fresh data folder, a pruned slot): start fresh.
+      clearTimeout(resumeFallbackTimer);
+      autoLoadStarterOnce();
+      say("This server doesn't have your last world, so here's a fresh start — say something to build.", "done");
+      return;
+    }
+    if (msg.kind === "mood") { onMood(msg.mood); autosaveTouch(); return; }
     if (msg.kind === "restyled") { await onRestyled(msg); return; }
     if (msg.kind === "visitor") { showDemos(msg.demos); return; }
     if (msg.kind === "worldSaved") {
+      if (msg.slot) return; // the browser's own autosave (ADR 0070): nothing to announce
       const url = shareUrl(msg.id);
       history.replaceState(null, "", `?w=${msg.id}`);
       navigator.clipboard?.writeText(url).catch(() => {});
@@ -2169,7 +2254,7 @@ function connect(): void {
     else if (msg.kind === "timeline") timelineView.update(msg.steps, msg.current);
     else if (msg.kind === "explainResult") explain.onMsg(msg);
     else if (msg.kind === "receiptResult") receipt.onMsg(msg);
-    else if (msg.kind === "removed") { loader.unload(msg.modId); renderMods(); }
+    else if (msg.kind === "removed") { loader.unload(msg.modId); renderMods(); autosaveTouch(); }
     else if (msg.kind === "mod") {
       try {
         await ghost.idle(); // let the playtest replay finish before the mod lands
@@ -2195,6 +2280,7 @@ function connect(): void {
         if (skinArt) { pendingArt.add(skinArt.key); loadArtWithRetry(skinArt.key, skinArt.url, false); }
         const skinPending = (msg.mod as { skinPending?: string }).skinPending;
         if (skinPending) pendingArt.add(skinPending);
+        autosaveTouch(); // a landed build is the most expensive thing here: save it (ADR 0070)
       } catch (err) {
         say(`That build failed to load here: ${err instanceof Error ? err.message : String(err)}`, "failed");
       }
@@ -2267,7 +2353,10 @@ const onboarding = createOnboarding({ inputMode: () => inputMode, submit: (t) =>
 // A share link we could not decode (corrupted, truncated, oversized, old version) never reaches the
 // server: say so and give the visitor the starter world. Works offline, too (ADR 0037).
 if (urlFlags.shareIssue) openStarterAfterBadLink(urlFlags.shareIssue);
-else if (!worldParam) autoLoadStarterOnce();
+else if (!worldParam && !resumeOf) autoLoadStarterOnce();
+// A world this browser built before (ADR 0070) is asked for on connect; if the server never answers
+// (offline, restarted mid-flight) the starter world stands in, and the next connect still resumes.
+else if (resumeOf) resumeFallbackTimer = window.setTimeout(() => { if (loader.list().length === 0) autoLoadStarterOnce(); }, 2500);
 
 // Test hooks: deterministic stepping + text view of the world (no DOM reads needed to playtest).
 // QA flag (?tester): what the URL decoder made of this page's flags, so a script can assert it.
