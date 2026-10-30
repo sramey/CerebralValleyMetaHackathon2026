@@ -1,4 +1,4 @@
-// Live check for the open-weights reviewer (ADR 0067).
+// Live check for the open-weights reviewer (ADR 0068).
 // Runs the 3 commands against the live server:
 // 1. "add a bouncing green slime"
 // 2. "build a volcano"
@@ -145,7 +145,7 @@ async function runLiveCheck(): Promise<void> {
   ws.close();
 
   console.log("\n========================================");
-  console.log("LIVE CHECK SUMMARY (ADR 0067)");
+  console.log("LIVE CHECK SUMMARY (ADR 0068)");
   console.log("========================================");
   console.log("| Command | Mod ID | Review Latency | Verdict | Fix Accepted | Issues / Notes |");
   console.log("|---|---|---|---|---|---|");

@@ -1,4 +1,4 @@
-// Open-weights build reviewer (ADR 0067). Muse Spark Open on Baseten reviews
+// Open-weights build reviewer (ADR 0068). Muse Spark Open on Baseten reviews
 // full Wonder generations asynchronously after they land and are live.
 // If it finds real bugs or improvements and provides a valid patch that passes
 // the exact compile + verify + playtest gates, it hot-swaps the mod in and

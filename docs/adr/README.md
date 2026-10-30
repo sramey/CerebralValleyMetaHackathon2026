@@ -95,3 +95,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0065](0065-how-was-this-made-receipt.md) | "How was this made?": a receipt for every creation, from words to verified playable mod | Draft |
 | [0066](0066-genre-change-set-scene.md) | Genre change: `api.setScene` hides terrain and scenery, sets a backdrop and player skin, and undo restores it all | Proposed |
 | [0067](0067-themed-parallax-backdrops.md) | Themed parallax backdrops: "change the background to medieval" is a background-scoped mood carrying code-drawn scenery motifs | Draft |
+| [0068](0068-open-weights-build-reviewer.md) | Open-weights build reviewer: Muse Spark Open on Baseten reviews each finished build, hot-swaps a fix only if it passes the verify gates, and learns a rule | Proposed |

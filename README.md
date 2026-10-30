@@ -38,7 +38,7 @@ Entry for the Meta Global AI Developer Hackathon (solo, Indie track). **Deadline
 | **Muse Image** (`muse-image-1.0`) | Draws sprite sheets on demand and redraws the world in a new mood (edit from an anchor) | Each new creature or prop, async |
 | **SAM 3.1** | Finds the object you hold up to the webcam so it can be cut out and dropped into the game | Camera import, about 1.2 s |
 | **Muse Voice Transcribe** | Hold Shift and talk. Live partials appear under the orb | Voice, about 130 ms after release |
-| **Muse Spark Open** (open weights, via Baseten) | Optional router. Falls back to hosted Spark automatically | When `BASETEN_API_KEY` is set |
+| **Muse Spark Open** (open weights, via Baseten) | Optional router, plus a background reviewer that checks every finished build, swaps in a fix only if it passes the same verify gates, and learns a rule from it (ADR 0068). Without the key both are simply off and hosted Spark routes as before | When `BASETEN_API_KEY` is set (optional) |
 
 ## See it in action
 

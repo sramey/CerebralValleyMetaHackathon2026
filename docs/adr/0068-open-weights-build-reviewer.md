@@ -1,4 +1,4 @@
-# ADR 0067: Open-weights build reviewer on Muse Spark Open via Baseten
+# ADR 0068: Open-weights build reviewer on Muse Spark Open via Baseten
 
 - **Status:** Proposed
 - **Date:** 2026-10-30

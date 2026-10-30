@@ -152,7 +152,7 @@ export function logMood(rec: { mood: string; ms?: number }): void {
 }
 
 /**
- * Append one open-weights review record (ADR 0067) to the same JSONL file. Never throws.
+ * Append one open-weights review record (ADR 0068) to the same JSONL file. Never throws.
  */
 export function logReview(rec: {
   modId: string;

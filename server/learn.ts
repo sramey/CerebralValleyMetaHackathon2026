@@ -634,7 +634,7 @@ export function formatLearnedBlock(subsystem: RuleSubsystem, command = "", dir?:
 
 /**
  * Turn an accepted review fix into a persistent learned rule so future Wonder
- * builds stop repeating that mistake (ADR 0067).
+ * builds stop repeating that mistake (ADR 0068).
  */
 export function learnRuleFromReview(
   modId: string,

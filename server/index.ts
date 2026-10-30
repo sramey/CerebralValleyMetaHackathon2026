@@ -751,7 +751,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     return;
   }
 
-  // "Change the background to medieval" is answered by the route rules alone (ADR 0067): no router call,
+  // "Change the background to medieval" is answered by the route rules alone (ADR 0068): no router call,
   // so it is a second faster and still works when the router is down. Spark only designs an unknown theme.
   const backdrop = forceEditModId ? null : detectBackdropCommand(command);
   if (backdrop) {
