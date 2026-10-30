@@ -148,6 +148,15 @@ const EFFECT_TOKENS: ReadonlySet<string> = new Set([
 ]);
 
 const PROJECTILE_TOKENS: ReadonlySet<string> = new Set([
+  // grappling gear is a tool in flight, never a character (ADR 0050)
+  "hook",
+  "hooks",
+  "grapple",
+  "grappling",
+  "tether",
+  "tethers",
+  "cable",
+  "cables",
   "projectile",
   "projectiles",
   "bullet",

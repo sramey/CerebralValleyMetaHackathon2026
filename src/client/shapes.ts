@@ -333,3 +333,37 @@ export function drawCliff(g: Graphics, e: Entity, x: number, y: number): void {
     g.rect(vx, lintelY + 1, 2.5, vh).fill({ color: k(vine), alpha: 0.65 });
   }
 }
+
+/** True for grappling gear: a hook claw or anything carrying data.tetherTo. Drawn in code, never as a sprite (ADR 0050). */
+export function isTetherGear(e: Entity): boolean {
+  return e.data?.tetherTo !== undefined || /hook|grappl|tether/i.test(e.type);
+}
+
+/** A taut rope from the entity to the one it is tethered to (data.tetherTo = entity id, or "player"), then the steel claw on top. */
+export function drawTetherGear(g: Graphics, e: Entity, x: number, y: number, target: Entity | undefined, camX: number, camY: number): void {
+  const hx = x + e.w / 2, hy = y + e.h / 2;
+  if (target) {
+    const tx = target.x + target.w / 2 - camX, ty = target.y + target.h / 2 - camY;
+    const dist = Math.hypot(hx - tx, hy - ty);
+    const sag = Math.max(0, 14 - dist * 0.04) * (e.data.slack === true ? 1 : 0.35);
+    const mx = (hx + tx) / 2, my = (hy + ty) / 2 + sag;
+    const seg = 14;
+    const pts: number[] = [];
+    for (let i = 0; i <= seg; i++) {
+      const t = i / seg, u = 1 - t;
+      pts.push(u * u * tx + 2 * u * t * mx + t * t * hx, u * u * ty + 2 * u * t * my + t * t * hy);
+    }
+    g.poly(pts, false).stroke({ width: 5, color: OUTLINE, alpha: 0.85 });
+    g.poly(pts, false).stroke({ width: 3, color: gradeFn(0xc9a46a) });
+    for (let i = 1; i < seg; i += 2) g.circle(pts[i * 2], pts[i * 2 + 1], 1.2).fill(gradeFn(0x8a6a3a)); // twist marks
+  }
+  // the claw: three curved prongs around a steel ring, pointing along the rope's pull
+  const ang = target ? Math.atan2(hy - (target.y + target.h / 2 - camY), hx - (target.x + target.w / 2 - camX)) : 0;
+  const r = Math.max(5, Math.min(e.w, e.h) / 2);
+  for (const off of [-0.7, 0, 0.7]) {
+    const a = ang + off;
+    const tipX = hx + Math.cos(a) * r * 1.6, tipY = hy + Math.sin(a) * r * 1.6;
+    g.poly([hx, hy, hx + Math.cos(a + 0.5) * r, hy + Math.sin(a + 0.5) * r, tipX, tipY], true).fill(gradeFn(0xb8c4d0)).stroke({ width: 1.5, color: OUTLINE });
+  }
+  g.circle(hx, hy, r * 0.6).fill(gradeFn(0x6f7c8a)).stroke({ width: 1.5, color: OUTLINE });
+}

@@ -9,6 +9,11 @@ export interface InputState {
   shoot: boolean;
   /** Primary item/weapon action or use key (e.g. F / E / X / J). */
   use?: boolean;
+  /** Mouse/touch aim in WORLD coordinates (ADR 0050). Absent with a keyboard-only player: aim along facing instead. */
+  pointerX?: number;
+  pointerY?: number;
+  /** Primary mouse button / touch is held. */
+  pointerDown?: boolean;
 }
 
 export const emptyInput = (): InputState => ({ left: false, right: false, jump: false, shoot: false, use: false });
@@ -156,6 +161,13 @@ export interface ModApi {
   hudList(): readonly HudWidget[];
   /** Optional helper: check projectile collision against hostile entities/solids and damage on hit. ADR 0023. */
   damageHit?: (projectile: Entity, options?: ProjectileDamageOptions) => Entity | undefined;
+  /** Grappling/tether helpers (ADR 0050). raycast: walk from (x,y) along the direction (dx,dy) up to `maxDist` px and return the first
+   *  point inside a solid entity (not the player, not `ignore`), or undefined. */
+  raycast?: (x: number, y: number, dx: number, dy: number, maxDist: number, ignore?: Entity) => { x: number; y: number; entity: Entity } | undefined;
+  /** winch: steer `e` toward (ax,ay) at `speed` px/s with smooth acceleration, cancelling gravity; returns the distance left. */
+  winch?: (e: Entity, ax: number, ay: number, speed: number) => number;
+  /** aim: unit direction from `from` toward the pointer, or along its facing (up while jump is held) when there is no pointer. */
+  aim?: (from: Entity) => { x: number; y: number };
 }
 
 export type KnobValue = number | string | boolean;

@@ -282,7 +282,7 @@ export class World {
     }
 
     // Post-step 2: Universal projectile collision & enemy combat (bead 578)
-    const projectiles = this.entities.filter((e) => e.data.visual === "projectile" || entityKind(e) === "projectile" || /^(bullet|projectile|laser|arrow|fireball|plasma|shot)$/i.test(e.type));
+    const projectiles = this.entities.filter((e) => e.data.tetherTo === undefined && !/hook|grappl|tether/i.test(e.type) && (e.data.visual === "projectile" || entityKind(e) === "projectile" || /^(bullet|projectile|laser|arrow|fireball|plasma|shot)$/i.test(e.type))); // grappling gear latches instead (ADR 0050)
     for (const proj of projectiles) {
       if ((proj as any).dead) continue;
       const damage = typeof proj.data.damage === "number" ? proj.data.damage : 25;
