@@ -1,6 +1,6 @@
-# 0070 — Hostile identity: stomping, pet friendly fire, no sinking and steady facing
+# 0071 — Hostile identity: stomping, pet friendly fire, no sinking and steady facing
 
-- **Status:** Draft
+- **Status:** Proposed
 - **Date:** 2026-10-30
 - **Context:** Playtest 2026-10-30 (bead 49d). A first-time player hand-drew a level with five
   enemies: none of them could fight. The level compiler spawned them as `sketch-walker` with

@@ -1,6 +1,6 @@
 # Playtest 2026-10-30 — hostiles and pets (bead 49d)
 
-What tester 1 hit, what caused it, and what now stops it. Engine rules: **ADR 0070**.
+What tester 1 hit, what caused it, and what now stops it. Engine rules: **ADR 0071**.
 
 ## 1. Enemies drawn with "Draw a level" could not be fought
 
