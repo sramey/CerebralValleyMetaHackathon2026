@@ -23,7 +23,7 @@ import { drawScenery } from "./scenery";
 import { drawFluffyCloud, drawParallaxEntities, isParallaxOrSkyEntity, isSkyOrBackgroundEntity } from "./parallax";
 import { ModLoader } from "../sim/loader";
 import { isHoop } from "../sim/hoop";
-import { inputFromKeys } from "./keys";
+import { inputFromKeys, isGameKeyEvent, isTypingTarget } from "./keys";
 import { createGhost } from "./ghost";
 import { mountTimeline } from "./timeline";
 import { createPipeline } from "./pipeline";
@@ -965,7 +965,9 @@ requestAnimationFrame(frame);
 // --- input -------------------------------------------------------------------
 const keys = new Set<string>();
 addEventListener("keydown", (e) => {
-  if (e.target === inputEl || e.target === orbInputEl || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+  // Typing a command is not a game command (bead wgt): a text box keeps every key it gets,
+  // including M (mute), B/X/J/F (fire), brackets (volume) and P (pipeline).
+  if (!isGameKeyEvent(e)) return;
   if (e.code === "KeyM" && !e.repeat) { log(sound.toggleMute() ? "sound muted (M)" : "sound on (M)"); syncSoundButton(); return; }
   if (["KeyA", "KeyD", "KeyW", "Space", "ArrowLeft", "ArrowRight", "ArrowUp"].includes(e.code)) onboarding.event("move");
   if (e.code === "BracketLeft" || e.code === "BracketRight") sound.setVolume(sound.volume + (e.code === "BracketRight" ? 0.1 : -0.1));
@@ -973,7 +975,12 @@ addEventListener("keydown", (e) => {
   syncInput();
   if (["ArrowUp", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
 });
+// A keyup always clears its code, whatever the target: losing a release can only stop an action.
 addEventListener("keyup", (e) => { keys.delete(e.code); syncInput(); });
+// A text field taking focus (or the window losing it mid-hold) drops every held game key, so a
+// key pressed in the game never keeps the player running while the person types a command.
+addEventListener("focusin", (e) => { if (isTypingTarget(e.target) && keys.size > 0) { keys.clear(); syncInput(); } });
+addEventListener("blur", () => { if (keys.size > 0) { keys.clear(); syncInput(); } });
 function syncInput(): void {
   // One pure mapping for every key (src/client/keys.ts, ADR 0046): B is an action key, so
   // "pick it up and shoot with B" works without a special case per prompt.

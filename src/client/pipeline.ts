@@ -9,6 +9,7 @@ import { isLiveBuildMsg } from "./stats-refresh";
 import { chain, stepLine } from "./agent-steps";
 import type { AgentStepMsg } from "./agent-steps";
 import { ON_DEMAND, ranNode } from "./pipeline-ran";
+import { isGameKeyEvent } from "./keys";
 
 type NodeId = "voice" | "spark" | "wonder" | "esbuild" | "verifier" | "live" | "image" | "sam";
 type Slot = "route" | "write" | "compile" | "verify";
@@ -294,9 +295,9 @@ export function createPipeline(host: HTMLElement): Pipeline {
 
   btn.addEventListener("click", () => toggle());
   addEventListener("keydown", (e) => {
-    const t = e.target as HTMLElement | null;
-    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
-    if (e.code === "KeyP" && !e.ctrlKey && !e.metaKey && !e.altKey) toggle();
+    // P opens the pipeline, but never while a command is being typed (bead wgt).
+    if (!isGameKeyEvent(e)) return;
+    if (e.code === "KeyP") toggle();
     else if (e.code === "Escape" && open) toggle(false);
   });
   paint();
