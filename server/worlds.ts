@@ -2,15 +2,18 @@
 // named by a random id that goes in the share URL; curated demo worlds ship in the repo's
 // worlds/ directory (ids start with "demo-"). The server only saves mods from its own verified
 // session manifest, so opening a link never runs code a visitor uploaded.
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
-import { sheetsOf } from "../src/contract";
+import { HOME_WORLD_PREFIX, isHomeWorldId, sheetsOf } from "../src/contract";
 import type { ArtSheet, DemoWorld, KnobDefs, Look, KnobValue, KnobValues, MoodSpec, WorldMod } from "../src/contract";
+import { scrubWorld } from "./hygiene";
 import { moodKey, parseBackdrop, restyledUrl } from "./mood";
 
 export const MAX_WORLD_MODS = 40;
 export const MAX_WORLD_BYTES = 600_000;
+/** How long a browser's autosaved world is kept after it stops being used (ADR 0070). */
+export const HOME_SLOT_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 export interface StoredWorld {
   v: 1;
@@ -173,8 +176,37 @@ export function snapshotWorld(
   return mods;
 }
 
-/** Defensive parse of a stored file (a hand-edited or truncated file must not crash the server). */
-export function parseWorld(text: string): StoredWorld | null {
+/**
+ * The mods an autosave should write (ADR 0070): the session's own verified records, plus — for any id
+ * the client still has loaded but this server no longer holds — the record the slot file already had.
+ *
+ * A restarted server (or any reconnect: sessions are per socket) forgets its manifest, while the page
+ * still shows the world. Without this, the very next autosave would write a file containing only the
+ * built-ins and the player's AI mods would be gone at the next reload. The reused record comes from
+ * the server's own previously verified file, never from the client, so the trust model is unchanged.
+ */
+export function reuseStoredMods(
+  requested: readonly { id: string }[],
+  mods: readonly WorldMod[],
+  previous: StoredWorld | null,
+): WorldMod[] {
+  if (!previous || previous.mods.length === 0) return [...mods];
+  const byId = new Map(mods.map((m) => [m.id, m]));
+  const stored = new Map(previous.mods.map((m) => [m.id, m]));
+  const out: WorldMod[] = [];
+  const seen = new Set<string>();
+  for (const r of requested) {
+    if (!r || typeof r.id !== "string" || seen.has(r.id)) continue;
+    seen.add(r.id);
+    const fresh = byId.get(r.id);
+    if (fresh) { out.push(fresh); continue; }
+    const kept = stored.get(r.id);
+    if (kept) out.push(kept);
+  }
+  return out;
+}
+
+/** Defensive parse of a stored file (a hand-edited or truncated file must not crash the server). */export function parseWorld(text: string): StoredWorld | null {
   try {
     const w = JSON.parse(text) as Partial<StoredWorld>;
     if (!w || w.v !== 1 || !isWorldId(w.id) || !Array.isArray(w.mods)) return null;
@@ -209,9 +241,24 @@ export class WorldStore {
   save(mods: WorldMod[], mood?: MoodSpec, restyled?: Record<string, string>): StoredWorld | { error: string } {
     if (mods.length === 0) return { error: "There's nothing in this world to share yet." };
     const id = randomBytes(6).toString("base64url");
+    return this.write(id, mods, mood, restyled, false);
+  }
+
+  /**
+   * The browser's own autosave (ADR 0070): the same file every time, titled by the client's slot id.
+   * Unlike `save` (the share button), an empty world is a real answer here: if the player undid
+   * everything, the next reload must come back empty instead of raising the old world.
+   */
+  saveSlot(slot: string, mods: WorldMod[], mood?: MoodSpec, restyled?: Record<string, string>): StoredWorld | { error: string } {
+    if (!isHomeWorldId(slot)) return { error: "That isn't one of this browser's own worlds." };
+    return this.write(slot, mods.slice(0, MAX_WORLD_MODS), mood, restyled, true);
+  }
+
+  private write(id: string, mods: WorldMod[], mood: MoodSpec | undefined, restyled: Record<string, string> | undefined, allowEmpty: boolean): StoredWorld | { error: string } {
+    if (!allowEmpty && mods.length === 0) return { error: "There's nothing in this world to share yet." };
     const cleanMood = sanitizeMood(mood);
     const cleanRestyled = cleanMood ? sanitizeRestyled(restyled, cleanMood.name) : undefined;
-    const world: StoredWorld = {
+    const draft: StoredWorld = {
       v: 1,
       id,
       createdAt: new Date().toISOString(),
@@ -219,11 +266,32 @@ export class WorldStore {
       ...(cleanMood ? { mood: cleanMood } : {}),
       ...(cleanRestyled ? { restyled: cleanRestyled } : {}),
     };
+    // A world file is a file: no key and no personal detail goes in it (ADR 0070).
+    const world = scrubWorld(draft);
     const text = JSON.stringify(world);
-    if (text.length > MAX_WORLD_BYTES) return { error: "This world is too big to share." };
+    if (text.length > MAX_WORLD_BYTES) return { error: allowEmpty ? "This world has grown too big to save." : "This world is too big to share." };
     mkdirSync(this.userDir, { recursive: true });
     writeFileSync(join(this.userDir, `${id}.json`), text);
     return world;
+  }
+
+  /**
+   * Drop autosaved worlds nobody has opened for `ttlMs` (ADR 0070). Only `home-*` files are ever
+   * deleted: a shared world or a curated demo is never touched, whatever its age.
+   */
+  pruneSlots(now = Date.now(), ttlMs = HOME_SLOT_TTL_MS): number {
+    if (!existsSync(this.userDir)) return 0;
+    let removed = 0;
+    for (const f of readdirSync(this.userDir)) {
+      if (!f.startsWith(HOME_WORLD_PREFIX) || !f.endsWith(".json")) continue;
+      const file = join(this.userDir, f);
+      try {
+        if (now - statSync(file).mtimeMs < ttlMs) continue;
+        unlinkSync(file);
+        removed++;
+      } catch { /* another process is using it: leave it */ }
+    }
+    return removed;
   }
 
   get(id: string): StoredWorld | null {
