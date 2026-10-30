@@ -1,6 +1,6 @@
 # Orchestration: leases, worktrees, merges
 
-Replaces `docs/WORKERS.md` (kept as the spike-era record).
+Replaces `docs/process/WORKERS.md` (kept as the spike-era record).
 
 ## Roles
 - **Orchestrator** (the `main` session, senior engineer): owns `main`, decides priorities, triages beads, leases worktrees, reviews, merges, cleans up. Pings the owner only for things the owner must decide or know (see below).

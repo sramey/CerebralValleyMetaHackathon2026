@@ -1,7 +1,7 @@
 @AGENTS.md
 
 ## How we work now (from 2026-10-29)
-- One orchestrator chat owns `main`; two worker windows (top, bottom) each work in a leased git worktree. Protocol: `docs/ORCHESTRATION.md`. The orchestrator talks to the windows directly and all work is tracked as beads (`BEADS_DIR=<workspace>\metabuild-ideation\.beads`). If you are a worker: claim your bead, stay inside your worktree and branch, and message `main` when done.
+- One orchestrator chat owns `main`; two worker windows (top, bottom) each work in a leased git worktree. Protocol: `docs/process/ORCHESTRATION.md`. The orchestrator talks to the windows directly and all work is tracked as beads (`BEADS_DIR=<workspace>\metabuild-ideation\.beads`). If you are a worker: claim your bead, stay inside your worktree and branch, and message `main` when done.
 - Win plan and remaining schedule: `docs/WINPLAN.md`. Every lease must move a line in it; anything else waits.
 
 ## Hard rule: Meta inside the product

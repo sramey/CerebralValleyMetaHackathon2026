@@ -1,6 +1,6 @@
 # Worker coordination — spike build
 
-> **Superseded 2026-10-29 by `docs/ORCHESTRATION.md`.** Kept as the spike-era record.
+> **Superseded 2026-10-29 by `docs/process/ORCHESTRATION.md`.** Kept as the spike-era record.
 
 Orchestrator = main chat. worker1 / worker2 = separate chat windows in this same repo.
 Share work **only through files in this repo**. Read this file + `src/contract.ts` before starting.

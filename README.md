@@ -141,7 +141,7 @@ See [docs/DESIGN.md](docs/DESIGN.md) for all locked product and architecture dec
 
 ## Current milestone: the win plan
 
-The spike passed its go/no-go early (10/10). The remaining plan, in priority order, is in [docs/WINPLAN.md](docs/WINPLAN.md): voice (done), a deploy-ready server with share links (done), the visible verifier with a ghost playtest (done), visual kinds and effects (done), parallel agent builds (done), then a non-coder user test and rehearsal. Work runs in parallel git worktrees ([docs/ORCHESTRATION.md](docs/ORCHESTRATION.md)).
+The spike passed its go/no-go early (10/10). The remaining plan, in priority order, is in [docs/WINPLAN.md](docs/WINPLAN.md): voice (done), a deploy-ready server with share links (done), the visible verifier with a ghost playtest (done), visual kinds and effects (done), parallel agent builds (done), then a non-coder user test and rehearsal. Work runs in parallel git worktrees ([docs/process/ORCHESTRATION.md](docs/process/ORCHESTRATION.md)).
 
 ## Hackathon
 
@@ -177,6 +177,10 @@ powershell scripts/voice-synth.ps1; npx tsx scripts/voice-check.ts 10   # live v
 **Production (one port):** `npm run build && npm start` serves the game and its WebSocket on one port (`PORT`, default 8787; `HOST=0.0.0.0` to expose). **Share this world** copies a `/?w=<id>` link that reopens the exact world for anyone to remix. Per-visitor and global spend caps plus curated demo worlds keep a public URL playable without burning Meta credit; `AI_KILL_SWITCH=1` turns all AI off. A `Dockerfile` is included (`docker run -p 8787:8787 -e MODEL_API_KEY=... -v metabuild-data:/app/data metabuild`). Env vars are listed in `.env.example`; details in [ADR 0014](docs/adr/0014-deploy-share-spend-visitor.md).
 
 Never commit keys. `.env` is gitignored.
+
+## License
+
+[MIT](LICENSE). How the work was organized during the event (orchestrator and AI worker sessions in git worktrees) is recorded in [docs/process/](docs/process/README.md).
 
 ## Status (2026-10-30)
 
