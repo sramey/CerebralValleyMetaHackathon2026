@@ -1,6 +1,7 @@
 // Pure, deterministic wave spawner and swarm archetype (ADR 0052).
 // Provides off-screen multi-angle spawning (40% left, 40% right, 20% airborne flyers),
 // anti-clumping boid separation, and kill-paced level progression.
+import { entityKind } from "../ontology";
 import type {
   Entity,
   ModApi,
@@ -9,6 +10,7 @@ import type {
   WaveControllerOptions,
   WaveSpawnOptions,
 } from "../contract";
+import { faceToward, type FacingClock } from "./facing";
 
 export interface WaveSpawnPosition {
   x: number;
@@ -218,6 +220,8 @@ export class WaveController implements IWaveController {
   private spawnedThisWave = 0;
   private bannerAnnouncedLevel = 0;
   private trackedEnemies = new Map<number, Entity>();
+  /** When each enemy last flipped its sprite, so the sprite never strobes (ADR 0070). */
+  private facingClock: FacingClock = new Map();
   private disposed = false;
   private onLevelUpCallbacks: Array<(level: number) => void> = [];
 
@@ -422,9 +426,14 @@ export class WaveController implements IWaveController {
       if (!isFlyer) {
         if (player) {
           const dx = (player.x + player.w / 2) - (enemy.x + enemy.w / 2);
-          enemy.facing = dx >= 0 ? 1 : -1;
+          // Velocity follows the player; only the SPRITE lags, so it cannot strobe when the
+          // player stands on the enemy's centre (ADR 0070).
+          const dir = dx >= 0 ? 1 : -1;
+          faceToward(enemy, dir, this.facingClock, tick);
+          enemy.vx = dir * this.currentSpeed;
+        } else {
+          enemy.vx = enemy.facing * this.currentSpeed;
         }
-        enemy.vx = enemy.facing * this.currentSpeed;
       } else {
         if (player) {
           const dx = (player.x + player.w / 2) - (enemy.x + enemy.w / 2);
@@ -434,7 +443,7 @@ export class WaveController implements IWaveController {
           const targetVy = dy > 0 ? Math.min(120, dy * 0.8) : -40 + wobble;
           enemy.vx += (targetVx - enemy.vx) * 0.12;
           enemy.vy += (targetVy - enemy.vy) * 0.12;
-          enemy.facing = enemy.vx >= 0 ? 1 : -1;
+          faceToward(enemy, enemy.vx >= 0 ? 1 : -1, this.facingClock, tick);
         } else {
           enemy.vx = enemy.facing * this.currentSpeed * 0.6;
         }
@@ -448,6 +457,7 @@ export class WaveController implements IWaveController {
       this.api.despawn(id);
     }
     this.trackedEnemies.clear();
+    this.facingClock.clear();
     this.api.removeHud("wave");
     this.api.removeHud("wave-level");
     this.api.removeHud("wave-kills");
