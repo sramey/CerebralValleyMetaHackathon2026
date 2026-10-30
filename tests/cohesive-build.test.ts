@@ -1,7 +1,7 @@
 // ADR 0053 / bead 2yt: the prompt and art half of "one cohesive flying companion".
 // Wonder is told a request may be ONE subject with several behaviors, the flying archetype
-// is named, dropped pickups follow the engine's settle + reach + shared-score contract, and
-// Muse Image is asked for airborne poses instead of a walk cycle.
+// is named, dropped pickups follow the engine's settle + collectible-tag + shared-score
+// contract (ADR 0055), and Muse Image is asked for airborne poses instead of a walk cycle.
 import { describe, expect, it } from "vitest";
 import { buildWonderPrompt, WONDER_SYSTEM } from "../server/prompt";
 import { isFlyingRequest, artKeyForType, spritePrompt } from "../server/art";
@@ -19,12 +19,17 @@ describe("Wonder guidance for the cohesive build (ADR 0053)", () => {
     expect(WONDER_SYSTEM).toMatch(/Math\.sin\(api\.tick\(\)/);
   });
 
-  it("names the dropped-pickup contract: gravity, engine bounce, reach, one score HUD", () => {
+  it("names the dropped-pickup contract: gravity, engine bounce, tagged auto-collect, one score HUD", () => {
     expect(WONDER_SYSTEM).toContain("DROPPED PICKUPS");
-    expect(WONDER_SYSTEM).toMatch(/data: \{ bounce: 0\.45 \}/);
-    expect(WONDER_SYSTEM).toMatch(/api\.touches\(player, drop\)/);
-    expect(WONDER_SYSTEM).toContain('api.setHud("score"');
+    expect(WONDER_SYSTEM).toMatch(/data: \{ bounce: 0\.45, collectible: true \}/);
+    expect(WONDER_SYSTEM).toContain("ENGINE-OWNED PICKUPS");
     expect(WONDER_SYSTEM).toContain("gravityScale: 1");
+    // The engine owns the pickup (ADR 0055): Wonder is told to tag, never to hand-roll
+    // the contact test, the despawn, the burst or its own score counter.
+    expect(WONDER_SYSTEM).toContain("data: { collectible: true }");
+    expect(WONDER_SYSTEM).toMatch(/never write your own contact test/);
+    expect(WONDER_SYSTEM).not.toContain("api.touches(player, drop)");
+    expect(WONDER_SYSTEM).not.toContain('api.setHud("score"');
   });
 
   it("keeps the superhero-cat request as one Wonder prompt", () => {
