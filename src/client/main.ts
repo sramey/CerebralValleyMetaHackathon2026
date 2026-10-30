@@ -4,6 +4,7 @@ import { initFeedback } from "./feedback";
 import { initExplain } from "./explain";
 import { initReceipt } from "./receipt";
 import { Application, Graphics, Sprite, Texture } from "pixi.js";
+import { pickWalkFrame } from "./walk-frame";
 import { computePrimaries, framesFor, isProjectileType, loadSpriteSheet, loadSubjects } from "./sprites";
 import { startLateArt } from "./art-late";
 import chickenMod from "../mods/chicken";
@@ -879,7 +880,7 @@ function render(): void {
       }
     }
   }
-  const spriteDraw: { e: Entity; frame: Texture; subjectKey: string | undefined }[] = [];
+  const spriteDraw: { e: Entity; frame: Texture; subjectKey: string | undefined; bob: number }[] = [];
   for (const e of world.entities) {
     if (isParallaxOrSkyEntity(e)) continue;
     const frames = framesFor(framesBySubject, e.type, e.type === "player");
@@ -887,16 +888,16 @@ function render(): void {
     seen.add(e.id);
     const moving = Math.abs(e.vx) > 5;
     const subjectKey = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0];
+    const pick = pickWalkFrame({ frameCount: frames.length, tick: world.tickCount, moving, onGround: e.onGround });
+    const bobbing = e.onGround && entityKind(e) !== "prop" && !(subjectKey !== undefined && scenerySubjects.has(subjectKey));
     const frame = frames.length === 1 ? frames[0]
       : (subjectKey !== undefined && scenerySubjects.has(subjectKey)) || entityKind(e) === "prop" ? frames[e.id % frames.length]
       : !e.solid && !e.onGround && e.gravityScale === 0 && frames.length >= 2 ? frames[Math.floor(world.tickCount / 5) % frames.length]
-      : frames.length >= 4 && !e.onGround ? frames[3]
-      : moving ? frames[1 + Math.floor(world.tickCount / 8) % Math.min(2, frames.length - 1)]
-      : frames[0];
-    spriteDraw.push({ e, frame, subjectKey });
+      : frames[pick.index];
+    spriteDraw.push({ e, frame, subjectKey, bob: bobbing ? pick.bob : 0 });
   }
   spriteDraw.sort((a, b) => layerOf(a.e, a.subjectKey) - layerOf(b.e, b.subjectKey));
-  for (const { e, frame, subjectKey } of spriteDraw) {
+  for (const { e, frame, subjectKey, bob } of spriteDraw) {
     const s = spriteFor(e.id);
     const targetH = visualHeightOf(e);
     const scale = targetH / frame.height;
@@ -904,7 +905,7 @@ function render(): void {
     const sq = feel.scaleOf(e.id);
     s.scale.set(scale * e.facing * sq.sx, scale * sq.sy);
     s.tint = feel.tintOf(e.id);
-    s.position.set(e.x - camX + e.w / 2, e.y - camYSmooth + e.h + 2);
+    s.position.set(e.x - camX + e.w / 2, e.y - camYSmooth + e.h + 2 - bob);
     s.zIndex = layerOf(e, subjectKey);
     s.visible = true;
   }

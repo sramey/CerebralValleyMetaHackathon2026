@@ -163,7 +163,7 @@ export function spritePrompt(cleanSubject: string, form: { held: boolean; scener
       `Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
   }
   return `Pixel art game sprite sheet of ${cleanSubject} for a 2D side-scrolling platformer, side view strictly facing right: ` +
-    `exactly 4 action poses in 1 single horizontal row from left to right: idle standing facing right, running forward stride facing right, running forward stride facing right, jumping mid-air leap pose facing right. ` +
+    `exactly 4 action poses in 1 single horizontal row from left to right: idle standing facing right, running forward stride with the FRONT leg stretched forward and the back leg trailing (contact pose), running forward stride with the legs crossing under the body and one foot lifted off the ground (passing pose) — the two stride poses MUST look clearly different from each other and from idle, jumping mid-air leap pose facing right. ` +
     `Orientation: every pose MUST face right in side profile — NEVER face backwards or away from the camera (no rear view, no back of character facing away), NEVER front-facing (no RPG turnaround), no top-down angles, NEVER multiple rows or a 2D grid. ` +
     `Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
 }
