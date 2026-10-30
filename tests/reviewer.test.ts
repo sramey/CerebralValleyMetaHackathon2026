@@ -383,7 +383,7 @@ describe("gate protection", () => {
 describe("reviewer prompt (bead 4t7)", () => {
   it("carries the game's checklist, worked examples and the engine facts that stop false alarms", async () => {
     const { REVIEWER_SYSTEM } = await import("../server/reviewer-prompt");
-    for (const word of ["LOOK:", "LANDMARKS:", "LEAKS:", "DISPOSE:", "PLACEMENT:", "ITEMS:", "HOSTILES:", "MATH:", "TEST:", "Example 1", "Example 3", "plain numbers"]) expect(REVIEWER_SYSTEM).toContain(word);
+    for (const word of ["LOOK:", "LANDMARKS:", "LEAKS:", "DISPOSE:", "PLACEMENT:", "ITEMS:", "HOSTILES:", "PETS:", "MATH:", "TEST:", "Example 1", "Example 3", "plain numbers"]) expect(REVIEWER_SYSTEM).toContain(word);
     expect(REVIEWER_SYSTEM).toContain("Real bugs only");
     // Worked answers must themselves parse as reviewer JSON.
     const answers = REVIEWER_SYSTEM.split("\n").filter((l) => l.startsWith("ANSWER: ")).map((l) => parseReviewJson(l.slice(8)));

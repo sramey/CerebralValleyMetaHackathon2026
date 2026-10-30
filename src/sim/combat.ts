@@ -29,12 +29,29 @@ const NON_TARGET_TYPES = new Set([
 
 const HOSTILE_NAME_RE = /^(enemy|walker|turtle|boss|monster|zombie|goblin|creature|slime|spider|bat|skeleton|ghost|drone|robot|demon|orc|beast|minion|bug|critter|dragon|alien)/i;
 
+/** Types that are a companion by name alone (a pet that the mod forgot to flag). */
+const PET_NAME_RE = /^(pet|pets|companion|ally|friend|friendly|buddy|pal|puppy|kitten|dog|cat|chicken|mount|steed|npc)\b/i;
+
+/**
+ * A companion / pet / hero the player brought to life (ADR 0071). Pets are identified even when
+ * the mod also marked them hostile (a T-Rex pet that stomps zombies), because a companion that
+ * hurts its owner is never what anyone asked for.
+ */
+export function isPet(e: Entity): boolean {
+  if (e.type === "player") return false;
+  if (e.data.pet === true || e.data.companion === true || e.data.ally === true) return true;
+  if (typeof e.data.interact === "string" && /^pet$/i.test(e.data.interact.trim())) return true;
+  return PET_NAME_RE.test(e.type.toLowerCase());
+}
+
 /**
  * True when an entity is explicitly or nominally a friendly / ally / companion,
  * never harmed by player projectiles or friendly fire.
  */
 export function isFriendly(e: Entity): boolean {
   if (e.type === "player") return true;
+  // An explicit hostile flag wins over a casual/hero tag: a "casual" hunter is still a hunter.
+  if (e.data.hostile === true || e.data.enemy === true) return false;
   if (e.data.friendly === true || e.data.hostile === false || e.data.casual === true || e.data.hero === true) return true;
   if (e.data.pet === true || e.data.companion === true || e.data.ally === true || e.data.fromPlayer === true) return true;
   const tLow = e.type.toLowerCase();
@@ -79,15 +96,21 @@ export function isDamageableTarget(
   const isPlayerProj = projectile.data.fromPlayer === true || projectile.type.includes("player");
 
   if (isPlayerProj) {
-    // Player projectile cannot harm player or friendlies - ONLY enemies!
-    if (isFriendly(target)) return false;
+    // Player projectile cannot harm player, friendlies or the player's own companions - ONLY enemies!
+    if (isFriendly(target) || isPet(target)) return false;
     if (isHostileEnemy(target)) return true;
-  } else {
+  } else if (isEnemyFire(projectile)) {
     // Projectile from enemy: can hit player or friendlies/heroes, never other hostiles
     if (target.type === "player") return true;
     if (target.data.fromPlayer === true) return false;
     if (isHostileEnemy(target)) return false;
-    if (isEnemyFire(projectile)) return isFriendly(target);
+    return isFriendly(target) || isPet(target);
+  } else {
+    // Any other shot — a pet's, an ally's, a turret the player built, or a hazard that forgot
+    // its flag — is on the player's side (ADR 0071): it may finish hostiles, never the player
+    // or an ally. Friendly fire from a companion is not a thing a request can produce.
+    if (target.type === "player") return false;
+    if (isFriendly(target) || isPet(target)) return false;
   }
 
   // Anything else that is a creature by tag or has health is fair game, so a Wonder-built

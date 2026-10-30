@@ -295,10 +295,18 @@ export interface ArtOrder {
  * Every sheet a build should order, deduped by art key (so "dragon" and
  * "fire-dragon" share one). `visual` is the router's hint for the whole command;
  * the ontology still wins per type (a chest is scenery even in a creature build).
+ * When modifying an existing mod without an art change request, existing art
+ * keys (like flying sheets) are preserved.
  */
-export function planArtOrders(source: string, command: string, visual?: string): ArtOrder[] {
+export function planArtOrders(
+  source: string,
+  command: string,
+  visual?: string,
+  existingArts?: readonly { key: string; url?: string }[],
+): ArtOrder[] {
   const orders: ArtOrder[] = [];
   const seen = new Set<string>();
+  const isArtChange = isArtChangeRequest(command);
   for (const type of artTypesForSource(source)) {
     const subject = deriveSubjectForType(command, type);
     const scenery =
@@ -308,13 +316,28 @@ export function planArtOrders(source: string, command: string, visual?: string):
       entityKind(type) === "prop" ||
       (visual !== "creature" && (isScenerySubject(subject) || isScenerySubject(type)));
     // A flying request gets airborne poses, not the walk cycle (ADR 0053).
-    const flying = isFlyingRequest(`${command} ${subject}`, type) && !scenery;
-    const key = artKeyForType(type, flying ? "fly" : undefined);
+    // When modifying a mod without requesting an art change, preserve existing flying status or art key.
+    const existing = !isArtChange && existingArts ? existingArts.find((a) => {
+      const base = a.key.toLowerCase().replace(/-fly$/, "");
+      const t = type.toLowerCase();
+      return t === base || t.includes(base) || base.includes(t);
+    }) : undefined;
+    const flying = (existing?.key.endsWith("-fly") ?? false) || (isFlyingRequest(`${command} ${subject}`, type) && !scenery);
+    const key = existing?.key ?? artKeyForType(type, flying ? "fly" : undefined);
     if (!key || seen.has(key)) continue;
     seen.add(key);
     orders.push({ type, subject, key, scenery, flying });
   }
   return orders;
+}
+
+/**
+ * True when a command explicitly asks to change or redraw the visual appearance / art / skin of an entity,
+ * rather than modifying gameplay/abilities/behavior.
+ */
+export function isArtChangeRequest(command: string): boolean {
+  const c = command.toLowerCase();
+  return /\b(reskin|re-skin|retheme|re-theme|redraw|change\s+(?:the\s+)?(?:\w+\s+)?(?:art|look|skin|sprite|color|appearance)|turn\s+(?:it|the\s+\w+)\s+into\s+a\b|make\s+(?:it|the\s+\w+)\s+look\s+like|paint\s+it)\b/i.test(c);
 }
 
 /** The skin a mod asks for with api.setScene({ playerSkin: "spaceship" }), or null. */

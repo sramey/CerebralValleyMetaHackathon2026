@@ -1,6 +1,8 @@
 import { SIM, emptyInput } from "../contract";
 import { entityKind } from "../ontology";
-import { DEFAULT_PROJECTILE_DAMAGE, isDamageableTarget } from "./combat";
+import { DEFAULT_PROJECTILE_DAMAGE, isDamageableTarget, isFriendly, isPet } from "./combat";
+import { stompableBy, stompBounce, stompDamage } from "./stomp";
+import { faceToward, type FacingClock } from "./facing";
 import type { CreatureOrder, Entity, SceneOptions, SceneState, HudDef, HudWidget, InputState, KnobValue, ModEvent, ModEventName, Particle, SpawnDef, Speech } from "../contract";
 import { SolidGrid } from "./grid";
 import { createRng } from "./rng";
@@ -403,6 +405,8 @@ export class World {
     this.hopCooldown.delete(id);
     this.turning.delete(id);
     this.clearOfPlayer.delete(id);
+    this.facingClock.delete(id);
+    this.stomped.delete(id);
     this.speech.delete(id);
     this.touching.delete(id);
     this.orders.delete(id);
@@ -413,6 +417,10 @@ export class World {
   private hopCooldown = new Map<number, number>();
   /** Non-player projectiles that have been clear of the player at least once (they may hit the player from then on). */
   private clearOfPlayer = new Set<number>();
+  /** Hostiles the player landed on this tick: their body cannot also hurt the player (ADR 0071). */
+  private stomped = new Set<number>();
+  /** When each creature last flipped its sprite, so facing never flips every frame (ADR 0071). */
+  private facingClock: FacingClock = new Map();
 
   /** Creatures told to walk the other way: direction and the tick the order lapses (ADR 0051). */
   private turning = new Map<number, { dir: number; until: number }>();
@@ -420,7 +428,7 @@ export class World {
   /** Make a mover head `dir` for the next `ticks` ticks, whatever sign its own code gives vx. */
   private turnAway(e: Entity, dir: number, ticks: number): void {
     this.turning.set(e.id, { dir, until: this.tickCount + ticks });
-    e.facing = dir > 0 ? 1 : -1;
+    faceToward(e, dir, this.facingClock, this.tickCount);
   }
 
   /** A creature grinding into an obstacle hops it, then turns around if that fails. Fliers just turn: they cannot hop. */
@@ -544,8 +552,13 @@ export class World {
           const dir = e.vx > 0 ? 1 : -1;
           if (this.ledgeAhead(e, solids, dir)) {
             e.vx = 0;
-            if (e.data.hostile !== true) this.turnAway(e, -dir, 40);
-            else e.facing = dir > 0 ? 1 : -1;
+            // A narrow perch has a drop on BOTH sides. Turning round every tick made a big pet
+            // spin left-right in place and never move (ADR 0071): stand still and keep facing.
+            const trapped = this.ledgeAhead(e, solids, -dir);
+            if (!trapped) {
+              if (e.data.hostile !== true) this.turnAway(e, -dir, 40);
+              else faceToward(e, dir, this.facingClock, this.tickCount);
+            }
           }
         }
       }
@@ -597,7 +610,16 @@ export class World {
         const s = solids[si];
         if (s !== e && overlap(e, s) && !(s.data.oneWay && !(e.vy > 0 && prevBottom <= s.y + 0.5))) {
           if (!e.solid && isGroundSlab(s)) { e.y = s.y - e.h; e.onGround = true; } else if (e.vy > 0) { e.y = s.y - e.h; e.onGround = true; }
-          else if (e.vy < 0) e.y = s.y + s.h;
+          else if (e.vy < 0) {
+            // Rising into a ceiling pushes a body DOWN. But a body that was already inside the
+            // solid (a pet that hopped or was placed into it) used to be shoved out of its
+            // underside, straight through the floor (ADR 0071). When the head is above the
+            // solid's top it is a body standing on it, not a head bump: put it back on top.
+            const ceiling = s.y + s.h;
+            const cameFromBelow = prevBottom - e.h >= ceiling - 0.5;
+            if (cameFromBelow || e.y >= s.y) e.y = ceiling;
+            else { e.y = s.y - e.h; e.onGround = true; }
+          }
           else if (e.y + e.h / 2 < s.y + s.h / 2) { e.y = s.y - e.h; e.onGround = true; }
           else e.y = s.y + s.h;
           e.vy = fallSpeed > 0 ? landingVelocity(e, fallSpeed) : 0; // elastic landing (data.bounce, ADR 0053); no bounce = the old stop
@@ -662,7 +684,21 @@ export class World {
       }
     }
 
-    // Post-step 3: Enemy contact damage to player with brief invulnerability timer
+    // Post-step 3: Enemy contact damage to player with brief invulnerability timer.
+    // Post-step 3a first: stomping (ADR 0071). A falling player who lands on a hostile's head
+    // finishes it and bounces, for every hostile — drawn, spawned by a wave, or built by a mod.
+    this.stomped.clear();
+    if (player && !player.dead) {
+      for (const en of this.entities) {
+        if (!stompableBy(player, en)) continue;
+        this.burst(en.x + en.w / 2, en.y + en.h / 2, en.color, 12);
+        this.stomped.add(en.id);
+        this.damage(en.id, stompDamage(en));
+        player.vy = -stompBounce(en);
+        player.data.stomps = (typeof player.data.stomps === "number" ? player.data.stomps : 0) + 1;
+        break;
+      }
+    }
     if (player && !player.dead) {
       const hitCd = typeof player.data.hitCooldown === "number" ? player.data.hitCooldown : 0;
       if (hitCd > 0) {
@@ -670,6 +706,7 @@ export class World {
       } else {
         for (const en of this.entities) {
           if (en.id === player.id || en.dead) continue;
+          if (this.stomped.has(en.id)) continue; // the head you just landed on is not a body check
           if (hurtsOnContact(en) && overlap(player, en)) {
             const dmg = typeof en.data.damage === "number" ? en.data.damage : 10;
             this.damage(player.id, dmg);
@@ -733,6 +770,9 @@ function notPlayersGear(e: Entity): boolean {
 
 /** Contact damage: flagged hostiles, or enemy-named types that did not opt out (friendly, casual or hero). */
 function hurtsOnContact(e: Entity): boolean {
+  // A companion, an ally or a bystander never hurts the player, whatever else its mod set
+  // (ADR 0071): a "hostile" pet that chews on its owner is not a thing a request can produce.
+  if (isPet(e) || isFriendly(e)) return false;
   if (e.data.hostile === true || e.data.enemy === true) return true;
   if (e.data.hostile === false || e.data.casual === true || e.data.hero === true) return false;
   return traitsOf(e.type).enemyName;
