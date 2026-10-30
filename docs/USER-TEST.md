@@ -26,6 +26,13 @@ If they finish early, say: "Ask for anything else you would want in a game."
 - "Find object (AI)" uses Meta SAM 3.1 to detect and outline the object named in the box.
 - The facilitator should let the tester click to select or adjust without prompting.
 
+## What to note this round (feel and UI)
+Jot one line for each, in their words. Do not prompt for them: just watch.
+- **Aiming.** When they use an aimed thing (a grappling hook, a gun, anything that points), is a crosshair visible where they point? Did they look for a mouse pointer at all?
+- **Getting hurt.** When something hits them, do they notice? Do they say it hurt, flinch, or sit through it? Note whether they spot the red flash and the knockback.
+- **Knobs.** If they open a mod's sliders, do they try to drag the handle? Did the handle follow the mouse all the way, or did it jump and stop?
+- **Ground width.** If they drag "Ground width" on the Ground card, does the ground visibly change? Which way did they drag first (wider or narrower), and did they go looking for the edge of the level?
+
 ## What NOT to help with
 - Do **not** tell them what to type or say, point at buttons, or read the on-screen text to them. The on-screen guide is part of what we are testing.
 - Do **not** say "try this" or "no, like this". If they ask "what do I do?", answer: "What do you think you should do?"

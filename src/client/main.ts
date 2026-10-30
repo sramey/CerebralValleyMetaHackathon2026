@@ -20,6 +20,8 @@ import { Sound, buildSfx } from "./sound";
 import { createTester } from "./tester";
 import { createOnboarding, createSoundButton, plainBuildMessage } from "./onboard";
 import { createMoodCard } from "./mood-card";
+import { createModsPanel } from "./mods-panel";
+import { createCrosshair } from "./crosshair";
 import { Portal } from "./portal";
 import { isMoodUndoAsk, localRelativeAsk } from "./local-asks";
 import { visualHeight } from "../sim/sockets";
@@ -30,6 +32,7 @@ import { isSetPiece, SetPieceLayer } from "./setpieces";
 import { drawDebris, drawDebrisParticle, isDebrisOrHazard } from "./debris";
 import { drawFluffyCloud, drawParallaxEntities, isCloudEntity, isParallaxOrSkyEntity, isSkyOrBackgroundEntity } from "./parallax";
 import { ModLoader } from "../sim/loader";
+import type { LoadedMod } from "../sim/loader";
 import { isHoop } from "../sim/hoop";
 import { inputFromKeys, isGameKeyEvent, isTypingTarget } from "./keys";
 import { createGhost } from "./ghost";
@@ -89,6 +92,8 @@ const theater = createTheater(document.getElementById("stage-wrap")!, (v) => pip
 const hud = createHud(document.getElementById("stage-wrap")!);
 // Speech bubbles and the "B: Talk" prompt over entities (ADR 0059).
 const speech = createSpeech(document.getElementById("stage-wrap")!);
+// A drawn crosshair over the stage, so aiming a hook is not guesswork (bead r8n, ADR 0076).
+const crosshair = createCrosshair(document.getElementById("stage-wrap")!);
 let rejectedAt = 0;
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
 
@@ -747,9 +752,12 @@ function trackPointer(ev: PointerEvent, down?: boolean): void {
   pointer.sy = (ev.clientY - rect.top) * (app.screen.height / rect.height);
   pointer.seen = true;
   if (down !== undefined) pointer.down = down;
+  // The drawn crosshair follows the real pointer, in stage-wrap pixels (bead r8n).
+  const wrap = stageWrapEl.getBoundingClientRect();
+  crosshair.move(ev.clientX - wrap.left, ev.clientY - wrap.top, performance.now());
 }
 app.canvas.addEventListener("pointermove", (ev) => trackPointer(ev));
-app.canvas.addEventListener("pointerleave", () => { pointer.seen = false; pointer.down = false; });
+app.canvas.addEventListener("pointerleave", () => { pointer.seen = false; pointer.down = false; crosshair.setSeen(false); });
 app.canvas.addEventListener("pointerdown", (ev) => { trackPointer(ev, true); canvasDown = { x: ev.clientX, y: ev.clientY }; });
 addEventListener("pointerup", () => { pointer.down = false; });
 app.canvas.addEventListener("pointerup", (ev) => {
@@ -978,6 +986,7 @@ function render(): void {
     const sq = feel.scaleOf(e.id);
     s.scale.set(scale * e.facing * sq.sx, scale * sq.sy);
     s.tint = feel.tintOf(e.id);
+    s.alpha = feel.alphaOf(e.id);
     s.position.set(e.x - camX + e.w / 2, e.y - camYSmooth + e.h + 2 - bob);
     s.zIndex = layerOf(e, subjectKey);
     s.visible = true;
@@ -985,7 +994,7 @@ function render(): void {
   }
   for (const [id, s] of spritePool) if (!seen.has(id)) { s.visible = false; scaleOverride.delete(id); }
   const nowMs = performance.now();
-  feel.draw(camX, camYSmooth);
+  feel.draw(camX, camYSmooth, W, H);
   fx.render(world, camX, camYSmooth, W, H, (nowMs - lastRenderAt) / 1000, isEffectType);
   portal.render(world, camX, camYSmooth, (nowMs - lastRenderAt) / 1000, (t) => isEffectType(t) || !canUseSpriteSheet(t));
   lastRenderAt = nowMs;
@@ -1027,6 +1036,9 @@ function stepAndRender(now: number): void {
   last = now;
   const stepMs = SIM.dt * 1000;
   pollPad();
+  // The crosshair stays out of the way whenever something else owns the pointer (bead r8n).
+  crosshair.setBlocked(sketch.active() || !radialMenu.hidden || !cameraModal.hidden);
+  crosshair.update(now);
   if (pointer.seen) {
     world.input.pointerX = pointer.sx + (camXSmooth ?? world.camera.x);
     world.input.pointerY = pointer.sy + (camYSmooth ?? world.camera.y);
@@ -1082,6 +1094,7 @@ function setInputMode(src: InputMode): void {
   const next = nextMode(inputMode, src);
   if (next === inputMode) return;
   inputMode = next;
+  crosshair.setMode(inputMode);
   if (hintEl) hintEl.textContent = HINT_TEXT[inputMode];
   onboarding.refresh();
 }
@@ -1101,57 +1114,35 @@ function syncInput(): void {
 }
 
 // --- mod cards -----------------------------------------------------------------
+// The drawer keeps its DOM across renders, so a knob can be dragged (bead r8n). A knob change
+// reloads the mod and the server echoes the tweak back, which renders the panel again: with the
+// old "empty the list, rebuild every card" render that replaced the slider mid-drag.
+/**
+ * Mods the server built in this session (they arrive as a `mod` message). Only those know their
+ * knobs on the server; a built-in mod's slider is the client's business, so sending it would get
+ * "Unknown mod or knob" back into the orb while someone drags (bead r8n).
+ */
+const remoteModIds = new Set<string>();
+function removeMod(mod: LoadedMod): void {
+  remoteModIds.delete(mod.id);
+  loader.unload(mod.id);
+  send({ kind: "undo", modId: mod.id });
+  say(`${mod.title} removed.`, "done");
+  renderMods();
+}
+const modsPanel = createModsPanel<LoadedMod>(modsEl, {
+  onUndo: removeMod,
+  onKnob: (mod, knob, value) => {
+    loader.setKnob(mod.id, knob, value);
+    if (remoteModIds.has(mod.id)) send({ kind: "knob", modId: mod.id, knob, value });
+    autosaveTouch();
+  },
+  // "Rate it" buttons: built once, when the card is made. The card owns its Undo button.
+  decorate: (mod, head) => head.append(feedback.createVoteActions(mod)),
+});
 function renderMods(): void {
-  modsEl.innerHTML = "";
   moodCard.mount(modsEl); // the card keeps its own text; this only re-homes it (bug bv4)
-  const mods = loader.list();
-  if (mods.length === 0) {
-    const li = document.createElement("li");
-    li.textContent = "Empty world. The orb is waiting.";
-    modsEl.appendChild(li);
-    return;
-  }
-  for (const mod of mods) {
-    const li = document.createElement("li");
-    const head = document.createElement("div");
-    head.className = "title";
-    const name = document.createElement("span");
-    name.textContent = mod.title;
-    const undo = document.createElement("button");
-    undo.className = "undo";
-    undo.textContent = "Undo";
-    undo.addEventListener("click", () => {
-      loader.unload(mod.id);
-      send({ kind: "undo", modId: mod.id });
-      say(`${mod.title} removed.`, "done");
-      renderMods();
-    });
-    head.append(name, feedback.createModActions(mod, () => undo.click()));
-    li.appendChild(head);
-    for (const [knob, def] of Object.entries(mod.knobDefs)) {
-      if (typeof def.value !== "number") continue;
-      const row = document.createElement("label");
-      row.className = "knob";
-      const label = document.createElement("span");
-      label.textContent = def.label ?? knob;
-      const range = document.createElement("input");
-      range.type = "range";
-      range.min = String(def.min ?? 0);
-      range.max = String(def.max ?? 100);
-      range.value = String(mod.values[knob]);
-      const out = document.createElement("output");
-      out.textContent = range.value;
-      range.addEventListener("input", () => {
-        out.textContent = range.value;
-        loader.setKnob(mod.id, knob, Number(range.value));
-        send({ kind: "knob", modId: mod.id, knob, value: Number(range.value) });
-        autosaveTouch();
-      });
-      row.append(label, range, out);
-      li.appendChild(row);
-    }
-    modsEl.appendChild(li);
-  }
+  modsPanel.render(loader.list());
 }
 
 const timelineView = mountTimeline($("#timeline"), (n) => send({ kind: "timelineRestore", n }));
@@ -1194,7 +1185,7 @@ function handleLocal(text: string): boolean {
     if (mood && t.includes("undo") && loader.list().length === moodModCount) { send({ kind: "undo", modId: "mood" }); revertMood(); say("Back to normal.", "done"); return true; }
     const mods = loader.list();
     const last = mods[mods.length - 1];
-    if (last) { loader.unload(last.id); say(`${last.title} removed.`, "done"); showToast(`${last.title} removed.`); renderMods(); }
+    if (last) { remoteModIds.delete(last.id); loader.unload(last.id); say(`${last.title} removed.`, "done"); showToast(`${last.title} removed.`); renderMods(); }
     else say("Nothing to undo.");
     return true;
   }
@@ -1230,6 +1221,10 @@ function handleLocal(text: string): boolean {
   return false;
 }
 function tweak(modId: string, knob: string, value: KnobValue, message: string): void {
+  // Our own knob echo: the drag already applied it and the panel already shows it, so say
+  // nothing and re-render nothing (bead r8n: announcing every drag tick flooded the orb).
+  const current = loader.list().find((m) => m.id === modId)?.values[knob];
+  if (current === value) { renderMods(); return; }
   if (loader.setKnob(modId, knob, value)) { say(message, "done"); renderMods(); autosaveTouch(); }
   else say(`Add that mod first, then I can tweak it.`);
 }
@@ -2338,7 +2333,7 @@ function connect(): void {
     else if (msg.kind === "timeline") timelineView.update(msg.steps, msg.current);
     else if (msg.kind === "explainResult") explain.onMsg(msg);
     else if (msg.kind === "receiptResult") receipt.onMsg(msg);
-    else if (msg.kind === "removed") { loader.unload(msg.modId); renderMods(); autosaveTouch(); }
+    else if (msg.kind === "removed") { remoteModIds.delete(msg.modId); loader.unload(msg.modId); renderMods(); autosaveTouch(); }
     else if (msg.kind === "mod") {
       try {
         await ghost.idle(); // let the playtest replay finish before the mod lands
@@ -2347,6 +2342,7 @@ function connect(): void {
         const loaded = (await import(/* @vite-ignore */ url)) as { default: ModDefinition };
         URL.revokeObjectURL(url);
         loader.load(loaded.default);
+        remoteModIds.add(msg.mod.id); // this one's knobs live on the server too (bead r8n)
         registerLook(msg.mod.look);
         if (!sayWhileBuilding()) say(`${msg.mod.title} verified and live.`, "done");
         renderMods();

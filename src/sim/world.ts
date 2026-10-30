@@ -6,6 +6,7 @@ import { faceToward, type FacingClock } from "./facing";
 import type { CreatureOrder, Entity, SceneOptions, SceneState, HudDef, HudWidget, InputState, KnobValue, ModEvent, ModEventName, Particle, SpawnDef, Speech } from "../contract";
 import { SolidGrid } from "./grid";
 import { createRng } from "./rng";
+import { HURT_INVULN_TICKS, invulnerable, knockbackVelocity, launchKnockback, type Knockback } from "./hurt";
 import { landingVelocity } from "./bounce";
 import { collectPickups } from "./collect";
 import { canInteract, interactLabel, isOrderable, orderAck, ORDER_TICKS, steerByOrder } from "./interact";
@@ -371,7 +372,11 @@ export class World {
     if (!Number.isFinite(amount) || amount <= 0) return;
     const e = this.entities.find((en) => en.id === id);
     if (!e) return;
+    // A hit on the player inside its invulnerability window does nothing at all (ADR 0075): the
+    // blink is the promise that the next 0.6 s of contact costs nothing.
+    if (e.type === "player" && invulnerable(e, this.tickCount)) return;
     e.health -= amount;
+    if (e.type === "player") this.hurtPlayer(e);
     this.raise(e.owner, { type: "hit", entity: e, amount, by });
     if (e.health <= 0) {
       // A copy taken before the despawn clears x/y, so a death listener can drop loot where it fell.
@@ -379,6 +384,27 @@ export class World {
       this.burst(e.x + e.w / 2, e.y + e.h / 2, e.color, 10);
       this.despawn(e.id);
     }
+  }
+
+  /**
+   * The player was hit: open the invulnerability window and knock them away from what hit them.
+   * The knockback is kept here, not written to vx now, because every player mod writes vx from
+   * the input on its next tick; the mover loop adds the impulse after the mods have run.
+   */
+  private hurtPlayer(player: Entity): void {
+    player.data.invulnUntil = this.tickCount + HURT_INVULN_TICKS;
+    this.knockbacks.set(player.id, launchKnockback(player, this.entities));
+  }
+
+  /** Add this tick's share of a knockback to a body, right before it moves. */
+  private applyKnockback(e: Entity): void {
+    const k = this.knockbacks.get(e.id);
+    if (!k) return;
+    const v = knockbackVelocity(k);
+    e.vx += v.vx;
+    if (v.vy !== 0) e.vy = Math.min(e.vy, v.vy);
+    k.ticks--;
+    if (k.ticks <= 0) this.knockbacks.delete(e.id);
   }
 
   burst(x: number, y: number, color: number, n = 10): void {
@@ -401,6 +427,7 @@ export class World {
     this.clearOfPlayer.delete(id);
     this.facingClock.delete(id);
     this.stomped.delete(id);
+    this.knockbacks.delete(id);
     this.speech.delete(id);
     this.touching.delete(id);
     this.orders.delete(id);
@@ -409,6 +436,8 @@ export class World {
   /** Ticks each mover has pushed into a wall, for stuck recovery (engine-side, so every creature gets it). */
   private blocked = new Map<number, number>();
   private hopCooldown = new Map<number, number>();
+  /** Knockbacks in flight, by entity id (ADR 0075). */
+  private knockbacks = new Map<number, Knockback>();
   /** Non-player projectiles that have been clear of the player at least once (they may hit the player from then on). */
   private clearOfPlayer = new Set<number>();
   /** Hostiles the player landed on this tick: their body cannot also hurt the player (ADR 0071). */
@@ -515,6 +544,8 @@ export class World {
       // Static solids (gravityScale 0) never move. A solid with gravity still
       // gets physics: it collides with other solids, it just also blocks them.
       if (e.solid && e.gravityScale === 0) continue;
+      // A knockback enters after the mods wrote their own vx this tick, so it survives them.
+      this.applyKnockback(e);
       if (e.data.tetherTo !== undefined) { e.x += e.vx * dt; e.y += e.vy * dt; refile(e); continue; } // grappling gear flies free; the mod latches it by raycast (ADR 0050)
       if (typeof e.data.parallax === "number" || traitsOf(e.type).scenery) {
         e.x += e.vx * dt;
@@ -676,7 +707,6 @@ export class World {
       }
     }
 
-    // Post-step 3: Enemy contact damage to player with brief invulnerability timer.
     // Post-step 3a first: stomping (ADR 0071). A falling player who lands on a hostile's head
     // finishes it and bounces, for every hostile — drawn, spawned by a wave, or built by a mod.
     this.stomped.clear();
@@ -691,21 +721,17 @@ export class World {
         break;
       }
     }
-    if (player && !player.dead) {
-      const hitCd = typeof player.data.hitCooldown === "number" ? player.data.hitCooldown : 0;
-      if (hitCd > 0) {
-        player.data.hitCooldown = hitCd - 1;
-      } else {
-        for (const en of this.entities) {
-          if (en.id === player.id || en.dead) continue;
-          if (this.stomped.has(en.id)) continue; // the head you just landed on is not a body check
-          if (hurtsOnContact(en) && overlap(player, en)) {
-            const dmg = typeof en.data.damage === "number" ? en.data.damage : 10;
-            this.damage(player.id, dmg);
-            player.data.hitCooldown = 30; // 0.5s cooldown at 60Hz
-            this.burst(player.x + player.w / 2, player.y + player.h / 2, 0xff3b30, 8);
-            break;
-          }
+    // Post-step 3: Enemy contact damage to the player. The invulnerability window in damage()
+    // (ADR 0075) is the only cooldown: a hit that does not land must not restart a timer of its own.
+    if (player && !player.dead && !invulnerable(player, this.tickCount)) {
+      for (const en of this.entities) {
+        if (en.id === player.id || en.dead) continue;
+        if (this.stomped.has(en.id)) continue; // the head you just landed on is not a body check
+        if (hurtsOnContact(en) && overlap(player, en)) {
+          const dmg = typeof en.data.damage === "number" ? en.data.damage : 10;
+          this.damage(player.id, dmg, en.owner);
+          this.burst(player.x + player.w / 2, player.y + player.h / 2, 0xff3b30, 8);
+          break;
         }
       }
     }

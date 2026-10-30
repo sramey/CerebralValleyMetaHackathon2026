@@ -108,7 +108,8 @@ export function initFeedback(opts: FeedbackOptions) {
     );
   });
 
-  function createModActions(mod: { id: string; title: string }, onUndo: () => void): HTMLElement {
+  /** The two "rate it" buttons for a card, without an Undo (the mods drawer owns that button, bead r8n). */
+  function createVoteActions(mod: { id: string; title: string }): HTMLElement {
     const wrap = document.createElement("div");
     wrap.className = "mod-actions";
 
@@ -130,15 +131,20 @@ export function initFeedback(opts: FeedbackOptions) {
     downBtn.innerHTML = THUMBS_DOWN_SVG;
     downBtn.addEventListener("click", () => open({ modId: mod.id, title: mod.title, vote: "down" }));
 
+    wrap.append(upBtn, downBtn);
+    return wrap;
+  }
+
+  function createModActions(mod: { id: string; title: string }, onUndo: () => void): HTMLElement {
+    const wrap = createVoteActions(mod);
     const undo = document.createElement("button");
     undo.type = "button";
     undo.className = "undo";
     undo.textContent = "Undo";
     undo.addEventListener("click", onUndo);
-
-    wrap.append(upBtn, downBtn, undo);
+    wrap.append(undo);
     return wrap;
   }
 
-  return { open, close, createModActions };
+  return { open, close, createModActions, createVoteActions };
 }

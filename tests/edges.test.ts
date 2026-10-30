@@ -18,15 +18,18 @@ describe("creatures at the end of the ground (bead 5yy)", () => {
     const w = worldWithGround();
     const slime = w.spawn({ type: "slime", x: 2300, y: 360, w: 40, h: 40, vx: 160 }, "slime");
     // The mod hops it every time it lands and keeps steering right, as a generated hopper does.
+    // Check the invariant on every frame, not one lucky final frame: while it stands, it stands
+    // on the slab (it is only ever past the end while falling, and the rescue puts it back).
+    let standingOffSlab = false;
     for (let i = 0; i < 60 * 40; i++) {
       slime.vx = 160;
       if (slime.onGround) slime.vy = -420;
       w.step();
+      if (slime.onGround && slime.y < 400 + 900 && (slime.x < 0 || slime.x > 2400)) standingOffSlab = true;
     }
     expect(w.entities).toContain(slime);
     expect(slime.y).toBeLessThan(400 + 900); // never ends up below the rescue line
-    expect(slime.x).toBeLessThanOrEqual(2400);
-    expect(slime.x).toBeGreaterThanOrEqual(0);
+    expect(standingOffSlab).toBe(false);
   });
 
   it("a creature that is already far below the slab stands beside the player, keeping its velocity", () => {
