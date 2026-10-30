@@ -79,3 +79,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0049](0049-game-weapons-are-safe.md) | Game weapons and fighting are explicitly allowed by the kid-safe screen | Draft |
 | [0051](0051-creature-steering.md) | Creatures steer: fliers turn at walls, walkers stop at ledges, hostiles get engine AI states | Draft |
 | [0050](0050-grappling-hook-and-pointer-aim.md) | Grappling hook: pointer aim in InputState, engine rope/raycast/winch helpers | Draft |
+| [0054](0054-faster-builds-fewer-sequential-model-turns.md) | Faster builds: relative tweaks, split beside the router, prefetched world snapshot | Draft |

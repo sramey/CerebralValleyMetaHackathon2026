@@ -65,6 +65,12 @@ export interface AgentOptions {
   onStep?: (step: AgentStep) => void;
   /** If set, the model is streamed (stream: true) and every piece of text or tool-call source is passed here as it arrives (ADR 0022). */
   onText?: (chunk: string) => void;
+  /**
+   * Argument-free tools to run before the first model turn (ADR 0054). Each shows in the
+   * conversation as a call the model made, with its result, so the model skips a whole
+   * turn whose only job was to ask for it. Counts toward maxCalls like any call.
+   */
+  prefetch?: string[];
 }
 
 export interface AgentResult { text: string; calls: number; trace: AgentTrace[]; turns: number }
@@ -101,6 +107,20 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
   let calls = 0;
   let turns = 0;
   let lastSource = "";
+  for (const name of opts.prefetch ?? []) {
+    const tool = byName.get(name);
+    if (!tool || calls >= maxCalls) continue;
+    const t0 = performance.now();
+    let result: AgentToolResult;
+    try { result = await tool.run({}); } catch { continue; /* the model can still call it itself */ }
+    calls++;
+    const ms = Math.round(performance.now() - t0);
+    const id = `prefetch_${calls}`;
+    messages.push({ role: "assistant", content: "", tool_calls: [{ id, type: "function", function: { name, arguments: "{}" } }] });
+    messages.push({ role: "tool", tool_call_id: id, content: result.message });
+    trace.push({ name, ms, ok: result.ok });
+    opts.onStep?.({ n: calls, tool: name, args: summarizeArgs(name, {}), result: summarizeResult(name, result), ok: result.ok !== false, ms });
+  }
   for (let round = 0; round <= maxCalls; round++) {
     const body: Record<string, unknown> = { model: opts.model ?? WONDER, messages, max_tokens: opts.maxTokens ?? 4096, reasoning_effort: "minimal" };
     if (calls < maxCalls) body.tools = defs;
