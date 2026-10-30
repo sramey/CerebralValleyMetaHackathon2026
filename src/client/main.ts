@@ -4,6 +4,7 @@ import { initFeedback } from "./feedback";
 import { initExplain } from "./explain";
 import { Application, Graphics, Sprite, Texture } from "pixi.js";
 import { computePrimaries, framesFor, isProjectileType, loadSpriteSheet, loadSubjects } from "./sprites";
+import { startLateArt } from "./art-late";
 import chickenMod from "../mods/chicken";
 import { SIM } from "../contract";
 import { canUseSpriteSheet, entityKind } from "../ontology";
@@ -170,11 +171,18 @@ const isEffectType = (type: string): boolean => kindOf(type)?.kind === "effect";
 // AI sprites (Muse Image sheets, chroma-keyed + sliced client-side). Frames:
 // 0 idle, 1-2 walk/run, 3 jump. Entities whose type names a subject get its
 // sprite; everything else falls back to code-drawn art.
-const framesBySubject = await loadSubjects({
+// Bead 8zu: those sheets load *behind* the render loop, not in front of it. Awaiting them
+// here held the first frame for up to 6 s per sheet — a black stage behind a socket that was
+// already connected. The map starts empty, so the loop paints the code-drawn world at once
+// and each subject's sprite swaps in when its sheet lands (art-late.ts).
+const lateArt = startLateArt(() => loadSubjects({
   ninja: "/art/ninja-sheet.webp",
   chicken: "/art/chicken.webp",
+}));
+const framesBySubject = lateArt.frames;
+void lateArt.settled.then(() => {
+  console.info(`[art] subjects loaded: ${Object.entries(framesBySubject).map(([k, v]) => `${k}=${v.length}`).join(" ")}`);
 });
-console.info(`[art] subjects loaded: ${Object.entries(framesBySubject).map(([k, v]) => `${k}=${v.length}`).join(" ")}`);
 const pendingArt = new Set<string>();
 const scenerySubjects = new Set<string>();
 let photoSeq = 0;
@@ -512,12 +520,17 @@ function onMood(m: MoodSpec | null): void {
   moodModCount = loader.list().length;
   renderMods();
   // Only sheets something in the world actually uses (no image spend on art nobody can see).
-  const used = new Set<string>();
-  for (const e of world.entities) { const k = subjectKeyFor(e); if (k) used.add(k); }
-  const keys = [...used].filter((k) => !k.startsWith("photo") && !origFrames.has(k) && framesBySubject[k].length > 0);
-  restyleLeft = keys.length; restyleOk = 0;
-  if (keys.length > 0) { say(`Making it ${m.name}: restyling ${keys.length} sprites…`, "building"); send({ kind: "restyle", mood: m.name, keys }); }
-  else say(`It's ${m.name} now.`, "done");
+  // Bead 8zu: the boot sheets may still be loading, so this runs once they are in — a mood
+  // spoken during the cold start still restyles them instead of quietly skipping them.
+  void lateArt.settled.then(() => {
+    if (!mood || mood.name !== m.name) return; // superseded by a newer mood
+    const used = new Set<string>();
+    for (const e of world.entities) { const k = subjectKeyFor(e); if (k) used.add(k); }
+    const keys = [...used].filter((k) => !k.startsWith("photo") && !origFrames.has(k) && (framesBySubject[k]?.length ?? 0) > 0);
+    restyleLeft = keys.length; restyleOk = 0;
+    if (keys.length > 0) { say(`Making it ${m.name}: restyling ${keys.length} sprites…`, "building"); send({ kind: "restyle", mood: m.name, keys }); }
+    else say(`It's ${m.name} now.`, "done");
+  });
 }
 async function onRestyled(msg: Extract<ServerMsg, { kind: "restyled" }>): Promise<void> {
   if (mood && mood.name === msg.mood) noteRestyled(msg.url !== null);
@@ -1986,7 +1999,8 @@ function connect(): void {
         if (!sayWhileBuilding()) say(`${msg.mod.title} verified and live.`, "done");
         renderMods();
         const artPending = (msg.mod as { artPending?: string }).artPending;
-        if (artPending) { if (framesBySubject[artPending]) pendingArt.delete(artPending); else pendingArt.add(artPending); }
+        // Empty frames are "no sprite" (bead 8zu): a key can exist before its sheet lands.
+        if (artPending) { if ((framesBySubject[artPending]?.length ?? 0) > 0) pendingArt.delete(artPending); else pendingArt.add(artPending); }
         const art = msg.mod.art;
         if (art) {
           pendingArt.add(art.key);
