@@ -68,6 +68,8 @@ export class Fx {
   private mist = 0;
   private camX = 0;
   private camY = 0;
+  private viewW = 960;
+  private viewH = 540;
   shakeX = 0;
   shakeY = 0;
   /** ms spent in the last render(), for the frame-cost report. */
@@ -115,6 +117,8 @@ export class Fx {
     this.used = 0;
     this.camX = camX;
     this.camY = camY;
+    this.viewW = W;
+    this.viewH = H;
     this.g.clear();
 
     this.ambience(W, H);
@@ -379,9 +383,16 @@ export class Fx {
       for (let i = 0; i < 8; i++) {
         puffs.push({ dx: (Math.random() - 0.5) * 48 * size, dy: (Math.random() - 0.5) * 32 * size, vy: -38 - Math.random() * 45, r: (26 + Math.random() * 20) * size, delay: 0.06 + i * 0.03, smoke: true });
       }
-      this.blasts.push({ x: c.sx / n, y: c.sy / n, age: 0, size, sparks, puffs });
+      const bx = c.sx / n;
+      const by = c.sy / n;
+      this.blasts.push({ x: bx, y: by, age: 0, size, sparks, puffs });
       if (this.blasts.length > 12) this.blasts.shift();
-      this.shake = Math.max(this.shake, 6 + 4 * size);
+      const margin = 120;
+      const onScreen = bx >= this.camX - margin && bx <= this.camX + this.viewW + margin &&
+                       by >= this.camY - margin && by <= this.camY + this.viewH + margin;
+      if (onScreen) {
+        this.shake = Math.max(this.shake, 6 + 4 * size);
+      }
     }
   }
 
