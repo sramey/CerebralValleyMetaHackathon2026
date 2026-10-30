@@ -289,7 +289,10 @@ export function levelToModSource(level: SketchLevel): string {
   lines.push(`      api.spawn({ type: "sketch-coin", x: c[0], y: c[1], w: c[2], h: c[3], color: ${COLOR.coin}, gravityScale: 0, data: { baseY: c[1] } });`);
   lines.push(`    }`);
   lines.push(`    for (const e of ENEMIES) {`);
-  lines.push(`      api.spawn({ type: "sketch-walker", x: e[0], y: e[1], w: e[2], h: e[3], vx: 42, color: ${COLOR.enemy}, gravityScale: 1, data: { baseX: e[0], baseY: e[1], casual: true } });`);
+  // ADR 0070: a drawn enemy is a real hostile, not scenery. hostile/enemy make it damageable
+  // (bullets) and dangerous (contact) and stompable (the engine's landing rule); \`casual\`
+  // would mark it friendly and put it out of reach of every one of those.
+  lines.push(`      api.spawn({ type: "sketch-walker", x: e[0], y: e[1], w: e[2], h: e[3], vx: 42, color: ${COLOR.enemy}, gravityScale: 1, data: { baseX: e[0], baseY: e[1], hostile: true, enemy: true, creature: true, damage: 8 } });`);
   lines.push(`    }`);
   lines.push(`    let collected = 0;`);
   lines.push(`    if (COINS.length > 0) api.setHud("sketch-score", { kind: "stat", label: "Coins", icon: "🪙", value: 0, max: COINS.length, position: "top-left" });`);
@@ -302,15 +305,22 @@ export function levelToModSource(level: SketchLevel): string {
   lines.push(`      for (const c of api.byType("sketch-coin")) {`);
   lines.push(`        c.y = Number(c.data.baseY) + Math.sin(time * 2 + c.id * 0.7) * 3;`);
   lines.push(`      }`);
+  lines.push(`      const player = api.player();`);
   lines.push(`      for (const e of api.byType("sketch-walker")) {`);
-  lines.push(`        // Patrol around the drawn spot; the engine turns them at real walls.`);
+  lines.push(`        // Drawn enemies are hostiles (ADR 0070): they chase the player once they notice one and`);
+  lines.push(`        // patrol around the drawn spot otherwise; the engine turns them at walls and ledges.`);
   lines.push(`        const home = Number(e.data.baseX);`);
-  lines.push(`        if (e.vx === 0) e.vx = 42;`);
-  lines.push(`        if (e.x < home - 90) e.vx = Math.abs(e.vx);`);
-  lines.push(`        if (e.x > home + 90) e.vx = -Math.abs(e.vx);`);
+  lines.push(`        const dx = player ? (player.x + player.w / 2) - (e.x + e.w / 2) : 0;`);
+  lines.push(`        const dy = player ? (player.y + player.h / 2) - (e.y + e.h / 2) : 0;`);
+  lines.push(`        if (player && Math.abs(dx) < 280 && Math.abs(dy) < 150) {`);
+  lines.push(`          e.vx = (dx >= 0 ? 1 : -1) * 55;`);
+  lines.push(`        } else {`);
+  lines.push(`          if (e.vx === 0) e.vx = 42;`);
+  lines.push(`          if (e.x < home - 90) e.vx = Math.abs(e.vx);`);
+  lines.push(`          if (e.x > home + 90) e.vx = -Math.abs(e.vx);`);
+  lines.push(`        }`);
   lines.push(`        if (e.y > 900) { e.x = home; e.y = Number(e.data.baseY); e.vx = 42; e.vy = 0; }`);
   lines.push(`      }`);
-  lines.push(`      const player = api.player();`);
   lines.push(`      if (!player) return;`);
   lines.push(`      for (const c of api.byType("sketch-coin")) {`);
   lines.push(`        if (!api.touches(player, c)) continue;`);
@@ -342,6 +352,9 @@ export function levelToModSource(level: SketchLevel): string {
   }
   lines.push(`    t.expect(t.api.byType("sketch-coin").length === ${level.coins.length}, "every drawn coin spawns (${level.coins.length})");`);
   lines.push(`    t.expect(t.api.byType("sketch-walker").length === ${level.enemies.length}, "every drawn enemy spawns (${level.enemies.length})");`);
+  if (level.enemies.length > 0) {
+    lines.push(`    t.expect(t.api.byType("sketch-walker").every((e) => e.data.hostile === true && e.data.enemy === true && Number(e.data.damage) > 0), "every drawn enemy is a real hostile (shootable, stompable, hurts on touch)");`);
+  }
   lines.push(`    t.expect(t.api.byType("sketch-trampoline").length === ${bouncers.length}, "every bouncer spawns (${bouncers.length})");`);
   // The verifier runs mods alone in an empty world: spawn our own ground before stepping.
   lines.push(`    t.api.spawn({ type: "ground", x: -600, y: 400, w: 8000, h: 48, solid: true, gravityScale: 0 });`);
