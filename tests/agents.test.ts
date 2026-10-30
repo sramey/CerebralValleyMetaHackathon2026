@@ -110,6 +110,27 @@ describe("runAgent (native tool-calling loop)", () => {
     expect(r.trace[0].ok).toBe(false);
     expect(seen[1].messages.at(-1).content).toContain("kaput");
   });
+
+  it("prefetch runs a tool before the first turn, so the model starts already holding its result (ADR 0058)", async () => {
+    const bodies: any[] = [];
+    const steps: any[] = [];
+    const replies = [call("run_playtest", { source: "export default { v: 2 }" }, "c9")];
+    vi.stubGlobal("fetch", vi.fn(async (_u: string, init: { body: string }) => { bodies.push(JSON.parse(init.body)); return reply(replies.shift()!); }));
+    const r = await runAgent({
+      system: "s", user: "u", maxCalls: 3, prefetch: ["inspect_world", "no_such_tool"], onStep: (st) => steps.push(st),
+      tools: [inspectTool(async () => ({ mods: [{ id: "player" }], entityTypes: [] })), playtestTool(async () => ({ ok: true, message: "passed" }))],
+    });
+    expect(r.text).toBe("export default { v: 2 }");
+    expect(r.turns).toBe(1);
+    expect(r.calls).toBe(2);
+    expect(r.trace.map((t) => t.name)).toEqual(["inspect_world", "run_playtest"]);
+    expect(steps.map((st) => [st.n, st.tool])).toEqual([[1, "inspect_world"], [2, "run_playtest"]]);
+    const msgs = bodies[0].messages;
+    expect(msgs[2]).toMatchObject({ role: "assistant", tool_calls: [{ function: { name: "inspect_world", arguments: "{}" } }] });
+    expect(msgs[3]).toMatchObject({ role: "tool", tool_call_id: msgs[2].tool_calls[0].id });
+    expect(msgs[3].content).toContain("player");
+    expect(bodies[0].tools).toBeDefined();
+  });
 });
 
 describe("streaming (ADR 0022)", () => {

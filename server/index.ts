@@ -6,13 +6,15 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
 import { SIM } from "../src/contract";
-import { detectMoodCommand, entityKind, extractSpawnedEntities, isHeldItemType, isPlayerAbilityCommand } from "../src/ontology";
+import { detectMoodCommand, entityKind, extractSpawnedEntities, isHeldItemType, isPlayerAbilityCommand, isPlayerCommand } from "../src/ontology";
 import { moodKey, moodSpecFor, pool, restyleSheet, sheetPath } from "./mood";
 import { fallbackVisual, lookFor, parseShape, parseVisual } from "./visual";
 import type { Visual } from "./visual";
 import type { ClientMsg, KnobDefs, Look, MoodSpec, ShapeName, KnobValue, ServerMsg, TimelineStep, WorldMod } from "../src/contract";
 import { routerChat } from "./router-model";
+import type { Routed } from "./router-model";
 import { chat, hasApiKey, loadEnv, SPARK, WONDER } from "./meta";
+import type { ChatMessage } from "./meta";
 import { compileMod } from "./compile";
 import { importMod, verifyMod } from "./verify";
 import { inspectWorld, playtestMod } from "./playtest";
@@ -22,6 +24,7 @@ import type { AgentStep, AgentTrace } from "./agent";
 import { forceModId, modIdOf } from "./modid";
 import { runPool } from "./pool";
 import { mergeDependentParts, mightBeCompound, splitCompound } from "./compound";
+import { parseRelativeAsk, relativeTweak } from "./relative-tweak";
 import { forget, newRecent, noteCommand, noteTouched, recentText, resolvePronoun } from "./context";
 import type { Recent } from "./context";
 import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, formatManifest, ROUTER_SYSTEM, WONDER_SYSTEM } from "./prompt";
@@ -624,18 +627,27 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
   // become separate builds. One subject with several traits or behaviors stays ONE build, so
   // parallel builds never race over the same mod id in front of the player. A part that points
   // back at an earlier one is merged by a deterministic guard; the word splitter is the fallback.
-  const parts = await splitWithSpark(text);
-  if (parts) {
-    // A mood part restyles the whole world, so a mood + build pair runs in order, not in parallel.
-    const sequential = parts.some((p) => detectMoodCommand(p) !== null);
-    const limit = sequential ? 1 : Math.max(1, Number(process.env.MAX_PARALLEL ?? 3));
+  // The router starts beside the split (ADR 0058): a command that turns out to be one request
+  // no longer waits for the split first.
+  if (mightBeCompound(text)) {
+    await adoptingOf.get(ws);
     noteCommand(sess(ws).recent, text);
-    const t0 = performance.now();
-    console.log(`[split] ${parts.length} independent requests, parallel ${Math.min(limit, parts.length)}: ${parts.join(" | ")}`);
-    await runPool(parts, limit, (item) => handleSingle(ws, item, { size: parts.length, parallel: Math.min(limit, parts.length) }));
-    // End marker for the whole compound command (the sub-builds each sent their own), so clients and the rehearsal harness can tell it is done.
-    const total = Math.round(performance.now() - t0);
-    send(ws, { kind: "timing", command: text, ms: { route: 0, write: 0, compile: 0, verify: 0, total } });
+    const routing = hasApiKey() ? routerChat(routerMessages(ws, text.slice(0, 400)), 1024) : undefined;
+    routing?.catch(() => { /* read (and reported) by handleSingle, or dropped for a compound */ });
+    const parts = await splitWithSpark(text);
+    if (parts) {
+      // A mood part restyles the whole world, so a mood + build pair runs in order, not in parallel.
+      const sequential = parts.some((p) => detectMoodCommand(p) !== null);
+      const limit = sequential ? 1 : Math.max(1, Number(process.env.MAX_PARALLEL ?? 4));
+      const t0 = performance.now();
+      console.log(`[split] ${parts.length} independent requests, parallel ${Math.min(limit, parts.length)}: ${parts.join(" | ")}`);
+      await runPool(parts, limit, (item) => handleSingle(ws, item, { size: parts.length, parallel: Math.min(limit, parts.length) }));
+      // End marker for the whole compound command (the sub-builds each sent their own), so clients and the rehearsal harness can tell it is done.
+      const total = Math.round(performance.now() - t0);
+      send(ws, { kind: "timing", command: text, ms: { route: 0, write: 0, compile: 0, verify: 0, total } });
+      return;
+    }
+    await handleSingle(ws, text, undefined, undefined, routing);
     return;
   }
   await handleSingle(ws, text);
@@ -666,9 +678,18 @@ async function splitWithSpark(command: string): Promise<string[] | null> {
   }
 }
 
-async function handleSingle(ws: WebSocket, text: string, batch?: { size: number; parallel: number }, forceEditModId?: string): Promise<void> {
+/** The router's messages for one command: its system prompt, the loaded mods and the short-term memory. */
+function routerMessages(ws: WebSocket, command: string): ChatMessage[] {
+  return [
+    { role: "system", content: ROUTER_SYSTEM },
+    { role: "user", content: buildRouterPrompt(command, manifestText(ws), recentText(sess(ws).recent)) },
+  ];
+}
+
+/** `routing`: a router call the caller already started for this command (and already noted in memory). */
+async function handleSingle(ws: WebSocket, text: string, batch?: { size: number; parallel: number }, forceEditModId?: string, routing?: Promise<Routed>): Promise<void> {
   await adoptingOf.get(ws);
-  if (!batch) noteCommand(sess(ws).recent, text);
+  if (!batch && !routing) noteCommand(sess(ws).recent, text);
   const t0 = performance.now();
   let routeMs = 0;
   let writeMs = 0;
@@ -689,10 +710,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
   let route: Route | null = null;
   try {
     const r0 = performance.now();
-    const res = await routerChat([
-      { role: "system", content: ROUTER_SYSTEM },
-      { role: "user", content: buildRouterPrompt(command, manifestText(ws), recentText(sess(ws).recent)) },
-    ], 1024);
+    const res = await (routing ?? routerChat(routerMessages(ws, command), 1024));
     routeMs = Math.round(performance.now() - r0);
     send(ws, { kind: "routed", command, model: res.model, open: res.open, ms: res.ms, fellBack: res.fellBack });
     route = parseRoute(res.text);
@@ -740,6 +758,27 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
   if (route && (route.action === "tweak" || route.action === "edit" || route.action === "undo") && (!route.target || !manifest.has(route.target))) {
     const pid = resolvePronoun(command, sess(ws).recent);
     if (pid && (manifest.has(pid) || route.action === "tweak")) route.target = pid;
+  }
+
+  // Relative knob asks ("make them faster", "jump higher", "more chickens") are instant knob
+  // tweaks, whatever the router said: a rewrite costs a whole Wonder build (ADR 0058).
+  if (route.action === "edit" || route.action === "tweak" || route.action === "new") {
+    const ask = parseRelativeAsk(command);
+    if (ask) {
+      const tid = (route.target && manifest.has(route.target) ? route.target : undefined)
+        ?? (isPlayerCommand(command) && manifest.has("player") ? "player" : undefined)
+        ?? resolvePronoun(command, sess(ws).recent);
+      // An ask that names its thing ("more chickens", "make the slimes faster") may look through the whole world.
+      const chosen = !!tid && manifest.has(tid);
+      const candidates = chosen ? [manifest.get(tid)!] : ask.noun ? [...manifest.values()] : [];
+      for (const rec of candidates) {
+        const rel = relativeTweak(command, rec.knobs, `${rec.id} ${rec.title}`, chosen);
+        if (!rel) continue;
+        console.log(`[route] relative ${route.action} -> tweak ${rec.id}.${rel.knob}=${rel.value} for: ${command}`);
+        route = { action: "tweak", target: rec.id, knob: rel.knob, value: rel.value };
+        break;
+      }
+    }
   }
 
   // 2. Non-generation routes.
@@ -950,7 +989,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
   let stepPhase: "write" | "fix" = "write";
   const onStep = (s: AgentStep) => send(ws, { kind: "agentStep", command, phase: stepPhase, n: s.n, tool: s.tool, args: s.args, result: s.result, ok: s.ok, ms: s.ms });
   const onTool = (name: string) => stage(ws, { kind: "stage", stage: "writing", detail: name === "inspect_world" ? "looking at the world" : "playtesting a draft", command });
-  const TOOL_RULES = "You have two tools. inspect_world shows the live world (mods, knob values, entity types and sizes): call it FIRST whenever the request changes or builds on something that already exists (the player, a mod, an enemy: 'make me huge', 'make them faster'), and skip it for a brand-new standalone thing. run_playtest compiles, verifies and playtests your complete source in the player's world: call it with your finished source; if it passes you are done, if it fails read the reason and call it again with a corrected source. If you skip the tools, reply with ONLY the module source.";
+  const TOOL_RULES = "You have two tools. inspect_world shows the live world (mods, knob values, entity types and sizes): call it FIRST whenever the request changes or builds on something that already exists (the player, a mod, an enemy: 'make me huge', 'make them faster'), and skip it for a brand-new standalone thing. If the conversation already shows an inspect_world result, do not call it again. run_playtest compiles, verifies and playtests your complete source in the player's world: call it with your finished source; if it passes you are done, if it fails read the reason and call it again with a corrected source. If you skip the tools, reply with ONLY the module source.";
 
   try {
     const w0 = performance.now();
@@ -958,7 +997,10 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     const user = editRec ? buildEditPrompt(command, editRec.source, manifestText(ws), context) : buildWonderPrompt(command, manifestText(ws), context);
     let text: string;
     try {
-      const ag = await runAgent({ system: `${WONDER_SYSTEM}\n\n${TOOL_RULES}`, user, tools: tools(), maxCalls: 3, onTool, onStep, onText });
+      // Requests that touch what already exists get the world snapshot up front, a local call of a few ms,
+      // instead of spending a whole Wonder turn asking for it (ADR 0058).
+      const touchesWorld = !!editRec || isPlayerCommand(command) || !!resolvePronoun(command, session.recent);
+      const ag = await runAgent({ system: `${WONDER_SYSTEM}\n\n${TOOL_RULES}`, user, tools: tools(), maxCalls: 3, onTool, onStep, onText, ...(touchesWorld ? { prefetch: ["inspect_world"] } : {}) });
       agentTrace.push(...ag.trace);
       agentTurns += ag.turns;
       text = ag.text;
@@ -990,8 +1032,9 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
       const w0 = performance.now();
       const spent0 = compileMs + verifyMs;
       const fix = await runAgent({
-        system: `${WONDER_SYSTEM}\n\n${TOOL_RULES} Be terse: change only what the failure requires, keep the mod's id and every other line as is, and write no comments.`,
-        user: buildFixPrompt(command, source, first.errors),
+        // Same system prompt as the write round, so a provider-side prefix cache can reuse it (ADR 0058).
+        system: `${WONDER_SYSTEM}\n\n${TOOL_RULES}`,
+        user: `${buildFixPrompt(command, source, first.errors)}\n\nBe terse: change only what the failure requires, keep the mod's id and every other line as is, and write no comments.`,
         tools: tools(),
         maxCalls: 3,
         onTool,

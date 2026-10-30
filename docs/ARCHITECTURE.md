@@ -41,13 +41,19 @@ What happens to one command, in order:
      `server/router-model.ts`, `scripts/bench-router.ts`,
      [ADR 0032](adr/0032-open-weights-router-on-baseten.md).
    - Compound requests ("add a tree and a slime") are split and built in parallel, at most
-     `MAX_PARALLEL` (default 3) at a time. `server/pool.ts`,
-     [ADR 0016](adr/0016-parallel-agentic-builds.md).
+     `MAX_PARALLEL` (default 4) at a time. The split call runs alongside the router, so a
+     single "and" request does not wait for it. `server/pool.ts`,
+     [ADR 0016](adr/0016-parallel-agentic-builds.md), [0058](adr/0058-faster-builds-fewer-sequential-model-turns.md).
+   - Relative asks ("make them faster", "jump higher", "more chickens") become instant knob
+     tweaks when the target mod has a matching knob, whatever the router answered.
+     `server/relative-tweak.ts`, [ADR 0058](adr/0058-faster-builds-fewer-sequential-model-turns.md).
 3. **Wonder, as an agent.** Muse Wonder writes the mod through Meta's OpenAI-compatible
    tool calling. Two tools: `inspect_world` (what is loaded: mods, knobs, entity types) and
    `run_playtest` (compile, verify and playtest its own full draft; a pass ends the loop, a
    failure comes back as a reason it can fix). Bounded to 3 tool calls per round, with one
-   more fix round if the final source still fails. Each call is streamed to the pipeline
+   more fix round if the final source still fails. For edits, player builds and pronoun
+   commands the server runs `inspect_world` before the first turn and hands Wonder the
+   result as its first call, saving a model turn (ADR 0058). Each call is streamed to the pipeline
    view as a step. `server/agent.ts`, `server/index.ts`,
    [ADR 0013](adr/0013-visible-verifier.md), [0016](adr/0016-parallel-agentic-builds.md),
    [0033](adr/0033-visible-agent-loop-and-autonomy-stats.md).
