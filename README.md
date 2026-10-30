@@ -163,7 +163,7 @@ Never commit keys. `.env` is gitignored.
 - Engine, mod API + loader (knobs, undo, clean dispose), sample mods (player, ground, enemies, rain, coins, moving platform, fire arrows).
 - Live AI path end-to-end: type a sentence → Spark routes → Wonder writes a mod → esbuild compiles → 600-frame headless verify (failed mods are rejected, game unchanged, one auto-fix round) → hot-loads into the running game with its own mod card and knobs.
 - **Spike exam: 10/10 commands in one world, median 8.7s per build (bar: 8/10, <15s)** — run it yourself with `scripts/spike-run.ts`. This passes the Thu Oct 29 go/no-go bar early.
-- **Real usage log:** 78 AI builds through 2026-10-28 → 74 landed (95%), median 9.4 s, p90 26.5 s, 9 rescued by the auto-fix (`logs/builds.jsonl`, `scripts/review-log.ts`).
+- **Real usage log:** 175 AI builds through 2026-10-30 → 162 landed (92.6%), median 11.2 s, p90 26.9 s ([docs/evidence/build-stats.md](docs/evidence/build-stats.md), regenerated with `npm run stats`).
 - **Voice:** hold Shift and talk. 10/10 live runs transcribed correctly in the worktree check, 4/4 on main; release → final text p50 ~126 ms ([ADR 0012](docs/adr/0012-voice-hold-to-talk.md)).
 - **Camera import:** hold up a real object; SAM 3.1 finds it (~1.2 s), it's cut out, pixelated and dropped into the game as a physics prop ([ADR 0010](docs/adr/0010-camera-object-prototype.md)).
 - **Combat and health:** opt-in hostiles and heroes, 100 HP, health bars, player respawn ([ADR 0011](docs/adr/0011-combat-targeting-and-health.md)). Clickable objects with a radial menu.
