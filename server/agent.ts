@@ -71,6 +71,8 @@ export interface AgentOptions {
    * turn whose only job was to ask for it. Counts toward maxCalls like any call.
    */
   prefetch?: string[];
+  /** Abort every model turn with this signal (a cancelled build, ADR 0060). */
+  signal?: AbortSignal;
 }
 
 export interface AgentResult { text: string; calls: number; trace: AgentTrace[]; turns: number }
@@ -125,7 +127,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
     const body: Record<string, unknown> = { model: opts.model ?? WONDER, messages, max_tokens: opts.maxTokens ?? 4096, reasoning_effort: "minimal" };
     if (calls < maxCalls) body.tools = defs;
     if (opts.onText && round > 0) opts.onText("\n");
-    const msg = await complete(key, body, opts.onText);
+    const msg = await complete(key, body, opts.onText, opts.signal);
     turns++;
     const toolCalls: any[] = msg?.tool_calls ?? [];
     if (toolCalls.length === 0 || calls >= maxCalls) {
@@ -189,16 +191,21 @@ export function inspectTool(inspect: () => Promise<unknown>): AgentTool {
 
 const ENDPOINT = "https://api.meta.ai/v1/chat/completions";
 
-/** One model turn. Streams when `onText` is given and falls back to the plain request if the stream cannot start. */
-async function complete(key: string, body: Record<string, unknown>, onText?: (chunk: string) => void): Promise<any> {
+/** One model turn. Streams when `onText` is given and falls back to the plain request if the stream cannot start.
+ *  `signal` is the build's cancel signal (ADR 0060): both requests carry it, so a cancelled build stops paying. */
+async function complete(key: string, body: Record<string, unknown>, onText?: (chunk: string) => void, signal?: AbortSignal): Promise<any> {
   const headers = { "content-type": "application/json", authorization: `Bearer ${key}` };
   if (onText) {
     try {
-      const res = await fetch(ENDPOINT, { method: "POST", headers, body: JSON.stringify({ ...body, stream: true }) });
+      const res = await fetch(ENDPOINT, { method: "POST", headers, body: JSON.stringify({ ...body, stream: true }), ...(signal ? { signal } : {}) });
       if (res.ok && res.body) return await readStream(res.body, onText);
-    } catch { /* fall through to the plain request */ }
+    } catch (err) {
+      // A cancel must not be swallowed into the non-streaming fallback: it would start a new request.
+      if (signal?.aborted) throw err;
+      /* fall through to the plain request */
+    }
   }
-  const res = await fetch(ENDPOINT, { method: "POST", headers, body: JSON.stringify(body) });
+  const res = await fetch(ENDPOINT, { method: "POST", headers, body: JSON.stringify(body), ...(signal ? { signal } : {}) });
   if (!res.ok) throw new Error(`Meta API ${res.status}: ${(await res.text().catch(() => "")).slice(0, 400)}`);
   const data: any = await res.json();
   const msg = data?.choices?.[0]?.message;

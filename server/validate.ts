@@ -13,6 +13,8 @@ import type { ClientMsg, KnobDef, KnobValue, SketchStroke, SketchTag } from "../
 export const MAX_FRAME = 6 * 1024 * 1024;
 /** Longest command / feedback note we take. The pipeline labels a build with the first 400 chars anyway. */
 export const MAX_TEXT = 1000;
+/** Longest command text a cancel can name: builds are keyed by the command truncated to this (ADR 0060). */
+export const MAX_COMMAND = 400;
 export const MAX_PROMPT = 500;
 /** Ids and keys are short slugs ("player", "sketch-level-x", "photo-3"). */
 export const MAX_KEY = 64;
@@ -203,6 +205,11 @@ export function validateClientMsg(value: unknown): Validation {
     case "undo": {
       const id = label(value.modId, MAX_KEY);
       return id ? accept({ kind: "undo", modId: id }) : reject(REPLY.bad);
+    }
+    case "cancel": {
+      // The command text the chip shows, echoed back: it only ever keys a Map.
+      const command = text(value.command, MAX_COMMAND);
+      return command && command.trim() ? accept({ kind: "cancel", command }) : reject(REPLY.bad);
     }
     case "knob": {
       const id = label(value.modId, MAX_KEY);
