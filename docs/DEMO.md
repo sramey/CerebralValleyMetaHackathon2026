@@ -44,6 +44,8 @@ Run `npm run demo:prep` before every take (add `--dry` to only report, `--skip-a
 **Voice limit:** with no `BUDGET_SESSION_VOICE_MIN` set the per-visitor voice allowance was 8 seconds, not the intended 8 minutes (fixed in `server/budget.ts`); for recording, still raise it to 30.
 
 ## Notes for the owner
+- **New: the receipt beat (ADR 0065).** Right after beat 5 lands, click the ninja and choose **How was this made?** (gold icon). One panel shows "make me huge" → Spark → Wonder's draft → *Rejected: too big to fit through the gap* → *Fixed itself* → the proof rows ticking green → the Muse Image sheet beside its cut-out → the time bar. It is the "technology, not a game" argument in about 8 s, with no model call and nothing that can fail live. It can replace the stats narration in beat 8, or follow beat 5.
+- **Hook, technology framing:** "Every change you ask for becomes code, a test and art, and an agent proves it works before it goes live." Consider it in place of the game-making hook in beat 1.
 - **Impact numbers:** the claim "non-coders build games in minutes" needs the non-coder test (WINPLAN item 4) clips and numbers; none are in this draft. Beat 8 is the place to cut to them if you have them (cost: about 10 s of the slack).
 - **Open-weights bonus:** if Muse Spark Open via Baseten is used in the product, say where in beat 2 or 8; this draft does not claim it.
 - **Speed-ups:** only beats 2 and 6 contain waits worth compressing. Every speed-up gets a visible label.

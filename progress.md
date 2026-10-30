@@ -23,7 +23,7 @@ Original prompt: lets setup our project, get oriented, organized, and setup, see
 - ART PIPELINE PROVEN (2026-10-27): Muse Image sheet (~8s, WebP b64) -> client chroma-key/slice (ADR 0007). Player is an AI-drawn animated ninja. Chicken proof: Spark-generated chicken sheet + chicken mod, "add a chicken" shows a white AI chicken walking next to the ninja (state: 2 chickens, walking). Art now generalizes by entity-type subject (src/client/sprites.ts loadSubjects/framesFor).
 - CREDIT RULE (orchestrator): main model decides + verifies mechanically only. All build slices delegate to `muse-spark-1.3` subagents with compact briefs + structured returns. Keep orchestrator turns short; never re-derive what a test/screenshot can state.
 
-## TODO for worker windows (see docs/WORKERS.md)
+## TODO for worker windows (see docs/process/WORKERS.md)
 
 - worker1: harden/replace src/sim + src/mods + tests ( owns those files; current versions are orchestrator-built and passing).
 - worker2: server/** + scripts/benchmark.ts — server/index.ts does not exist yet, so `npm run server` currently fails and the client shows "Server: offline". This is the top gap: live Wonder mod generation end-to-end is NOT yet wired.
@@ -82,7 +82,7 @@ Original prompt: lets setup our project, get oriented, organized, and setup, see
 
 ## Status update — 2026-10-29 (orchestration + voice merged)
 
-- Orchestration: `main` session orchestrates; `top`/`bottom` sessions work in leased worktrees (`scripts/wt.sh`), talk directly, and track work as beads. Ports come from `.env` so worktrees run live side by side. Protocol: `docs/ORCHESTRATION.md`; plan: `docs/WINPLAN.md`.
+- Orchestration: `main` session orchestrates; `top`/`bottom` sessions work in leased worktrees (`scripts/wt.sh`), talk directly, and track work as beads. Ports come from `.env` so worktrees run live side by side. Protocol: `docs/process/ORCHESTRATION.md`; plan: `docs/WINPLAN.md`.
 - Voice merged (bead gju, ADR 0012): hold Shift (or a gamepad shoulder), the orb pulses with mic volume, Muse Voice Transcribe partials show under it, release submits. Audio goes over the existing WebSocket as binary PCM16 16 kHz; the server proxies to a pre-warmed Meta session (key never in the browser). Worktree check 10/10 correct; re-checked on main 4/4, release→final p50 126 ms, press→first partial ~1.0 s (Meta emits after the first word).
 - Rough: the first press asks for mic permission and is a throwaway; the mic stays open after that; gamepad hold untested live. Deploy must cap warm voice sessions (one per connected client; Meta limit 256 concurrent).
 - Gates on main after merge: tsc clean, 41/41 tests, build green.
@@ -187,3 +187,4 @@ Original prompt: lets setup our project, get oriented, organized, and setup, see
 - 10-30 gfx merged (OpenCode): an x on a running build chip cancels that one build (ADR 0060); model calls abort, results drop before anything lands; one lane of a compound stops alone. Only headless/unit-tested; chip x not yet seen live.
 - 10-30 cvu merged (OpenCode): art tests run against a throwaway cache (ART_GEN_DIR). y0k merged (bottom): every pipeline node keeps a steady glow once its model ran this session; Voice/Image/SAM show run count and last time; a SAM reply with no box (budget spent) does not light SAM. Harness-checked only, not yet on a live beat 6/7.
 - 10-30 evy merged (top): worn gear sits on the DRAWN body (hand 55% up, back, head, feet, belt) of any character; Wonder offsets clamped; attachedTo any entity (dragon wears a hat). Live: gun in hands, jetpack on back, both stay after make me huge, hat on dragon. Rough: hat centred on the dragon body not its head; gear does not scale with the wearer.
+- 10-30 cloud Claude: "How was this made?" receipt on every AI-built object (ADR 0065): words → Spark route → Wonder draft + own test → rejection + fix → verifier checks ticking green → Muse Image sheet beside its cut-out → time bar; zero model calls. Live (headless Chromium, real API, 3 builds of "make me huge"): receipt shows Spark 2.7 s, Wonder 9.4 s, run_playtest ✗ → ✓, "Rejected: too big to fit through the gap" then "Fixed itself, 4 lines", Wonder's own test checking "player still fits through gaps"; first live run exposed that in-loop rejections were missing, now recorded. README reframed as a technology demo.

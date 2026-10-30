@@ -26,7 +26,7 @@ const KNOWN_KINDS = new Set([
   "command", "undo", "knob", "photo", "photoFind", "photoBring", "photoBringLocal",
   "cancel",
   "worldState", "voiceWarm", "voiceStart", "voiceEnd", "worldSave", "worldLoad", "worldExport",
-  "restyle", "feedback", "sketch", "tester", "timelineRestore", "explain", "paperLevel",
+  "restyle", "feedback", "sketch", "tester", "timelineRestore", "explain", "receipt", "paperLevel",
 ]);
 
 const STROKE = { color: "#3fd06a", tag: "terrain" as const, points: [{ x: 1, y: 2 }, { x: 3, y: 4 }], bbox: BBOX };
@@ -53,6 +53,7 @@ const VALID: { [K in ClientMsg["kind"]]: Extract<ClientMsg, { kind: K }> } = {
   tester: { kind: "tester", n: 2, ev: "landed", cid: 3 },
   timelineRestore: { kind: "timelineRestore", n: 4 },
   explain: { kind: "explain", modId: "player" },
+  receipt: { kind: "receipt", modId: "player" },
   sketch: { kind: "sketch", image: PNG, strokes: [STROKE], prompt: "a stair", view: { x: 0, y: 0, w: 800, h: 600 } },
   paperLevel: { kind: "paperLevel", image: PNG, prompt: "a castle drawing" },
 };
@@ -188,6 +189,9 @@ const BAD: [label: string, value: unknown][] = [
     ["explain with a numeric id", { kind: "explain", modId: 7 }],
     ["explain with an oversized id", { kind: "explain", modId: "a".repeat(MAX_KEY + 1) }],
     ["explain with a dangerous id", JSON.parse('{"kind":"explain","modId":"__proto__"}')],
+    ["receipt with no id", { kind: "receipt" }],
+    ["receipt with a numeric id", { kind: "receipt", modId: 7 }],
+    ["receipt with a dangerous id", JSON.parse('{"kind":"receipt","modId":"__proto__"}')],
 ];
 
 describe("wire validation: rejects bad shape, wrong kinds, ranges and caps", () => {

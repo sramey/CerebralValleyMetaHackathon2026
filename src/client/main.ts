@@ -2,6 +2,7 @@ import { createBuilds } from "./builds";
 import { createBootGate } from "./boot-gate";
 import { initFeedback } from "./feedback";
 import { initExplain } from "./explain";
+import { initReceipt } from "./receipt";
 import { Application, Graphics, Sprite, Texture } from "pixi.js";
 import { computePrimaries, framesFor, isProjectileType, loadSpriteSheet, loadSubjects } from "./sprites";
 import { startLateArt } from "./art-late";
@@ -128,6 +129,14 @@ const feedback = initFeedback({
 });
 /** "How does this work?" (ADR 0043): any object's code explained in plain words. */
 const explain = initExplain({
+  host: stageWrapEl,
+  send: (msg) => send(msg),
+  say,
+  connected: () => ws?.readyState === WebSocket.OPEN,
+  log,
+});
+/** "How was this made?" (ADR 0065): the chain from words to a verified, playable mod. */
+const receipt = initReceipt({
   host: stageWrapEl,
   send: (msg) => send(msg),
   say,
@@ -757,7 +766,13 @@ document.querySelectorAll<HTMLButtonElement>("#radial-menu [data-action]").forEa
     } else if (action === "explain") {
       const modTitle = loader.list().find((m) => m.id === e.owner)?.title ?? formatRadialLabel(e.type);
       closeRadialMenu();
+      receipt.close();
       explain.open({ modId: e.owner, title: modTitle, entityType: e.type });
+    } else if (action === "receipt") {
+      const modTitle = loader.list().find((m) => m.id === e.owner)?.title ?? formatRadialLabel(e.type);
+      closeRadialMenu();
+      explain.close();
+      receipt.open({ modId: e.owner, title: modTitle, entityType: e.type });
     }
   });
 });
@@ -2044,6 +2059,7 @@ function connect(): void {
     }
     else if (msg.kind === "timeline") timelineView.update(msg.steps, msg.current);
     else if (msg.kind === "explainResult") explain.onMsg(msg);
+    else if (msg.kind === "receiptResult") receipt.onMsg(msg);
     else if (msg.kind === "removed") { loader.unload(msg.modId); renderMods(); }
     else if (msg.kind === "mod") {
       try {

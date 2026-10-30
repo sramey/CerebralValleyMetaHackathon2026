@@ -319,6 +319,11 @@ export function validateClientMsg(value: unknown): Validation {
       const id = label(value.modId, MAX_KEY);
       return id ? accept({ kind: "explain", modId: id }) : reject(REPLY.explain);
     }
+    case "receipt": {
+      // "How was this made?": only the mod id travels; the receipt comes from the server's own records.
+      const id = label(value.modId, MAX_KEY);
+      return id ? accept({ kind: "receipt", modId: id }) : reject(REPLY.explain);
+    }
     default:
       return reject(REPLY.unknown);
   }

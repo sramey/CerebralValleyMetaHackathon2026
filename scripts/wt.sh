@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Worktree leases for worker windows (see docs/ORCHESTRATION.md).
+# Worktree leases for worker windows (see docs/process/ORCHESTRATION.md).
 #   scripts/wt.sh new  <task> <slot>   create ../metabuild-wt/<task> on branch wt/<task>
 #   scripts/wt.sh done <task>          remove the worktree and its branch (after merge)
 #   scripts/wt.sh list                 show worktrees

@@ -11,7 +11,7 @@ import { logArt } from "./createlog";
 import { loadRules } from "./learn";
 import { screenArtPrompt } from "./safety";
 
-const IMAGE_MODEL = "muse-image-1.0";
+export const IMAGE_MODEL = "muse-image-1.0";
 const IMAGE_URL = "https://api.meta.ai/v1/images/generations";
 
 /** In-memory cache: sanitized key -> public URL. */
@@ -168,6 +168,15 @@ export function spritePrompt(cleanSubject: string, form: { held: boolean; scener
     `Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
 }
 
+/** The sheet prompt generateSubjectArt sends for this subject; the receipt (ADR 0065) shows the same string. */
+export function subjectArtPrompt(cleanSubject: string, key: string, scenery = false, flying = false): string {
+  // The ontology names the art form (ADR 0031); the router's `scenery` hint still wins.
+  const plan = artPlanFor(key);
+  const heldItem = isHeldItemType(cleanSubject) || plan === "held-item";
+  const effectiveScenery = scenery || heldItem || plan === "scenery" || isScenerySubject(cleanSubject);
+  return spritePrompt(cleanSubject, { held: heldItem, scenery: effectiveScenery, flying: flying && !heldItem && !effectiveScenery });
+}
+
 /**
  * Generate sprite-sheet art for a subject, or reuse the cached file.
  * Returns the public URL, or null on any failure. Never throws.
@@ -193,11 +202,7 @@ export async function generateSubjectArt(subject: string, keyRaw: string, scener
     const apiKey = loadEnv();
     if (!apiKey) return null;
     const cleanSubject = subject.trim() || key;
-    // The ontology names the art form (ADR 0031); the router's `scenery` hint still wins.
-    const plan = artPlanFor(key);
-    const heldItem = isHeldItemType(cleanSubject) || plan === "held-item";
-    const effectiveScenery = scenery || heldItem || plan === "scenery" || isScenerySubject(cleanSubject);
-    const prompt = spritePrompt(cleanSubject, { held: heldItem, scenery: effectiveScenery, flying: flying && !heldItem && !effectiveScenery });
+    const prompt = subjectArtPrompt(cleanSubject, key, scenery, flying);
     const t0 = performance.now();
     // Image prompts take the same kid-safe screen (ADR 0044): a declined subject simply gets
     // no AI art, and the mod still loads with its code-drawn shape.

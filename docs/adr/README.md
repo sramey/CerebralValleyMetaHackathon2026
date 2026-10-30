@@ -92,3 +92,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0062](0062-aware-sprite-generation-orientation-and-actions.md) | Aware sprite generation: 2D side-scrolling platformer orientation facing right and 4 sequential action poses | Draft |
 | [0063](0063-fallen-creatures-go-back-on-the-ground.md) | Fallen creatures go back on the ground: a creature 900 px below the main slab is stood beside the player | Draft |
 | [0064](0064-friendly-fire-protection-and-clustered-burst-explosions.md) | Friendly fire protection and spatially clustered burst explosions | Draft |
+| [0065](0065-how-was-this-made-receipt.md) | "How was this made?": a receipt for every creation, from words to verified playable mod | Draft |

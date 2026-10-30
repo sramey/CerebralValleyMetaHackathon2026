@@ -1,8 +1,10 @@
-# Talk-to-Build Platformer
+# Talk-to-Build: prompt to verified, playable software, live
 
-> Game making takes years to learn. What if it took a sentence?
+> One sentence becomes logic, a test, art and a playable asset, and an agent proves it works before it goes live.
 
-You start with an empty black screen. You talk to it, and a modern pixel-art side scroller builds itself around you **while you play**:
+This is a technology demonstration, not just a game. The engine underneath turns spoken or typed words into running code with its own test, playtests that code in a copy of your world, fixes it when the playtest says no, draws its art, and hot-loads it without a restart. A pixel-art platformer is the testbed because you can *see* every change land.
+
+You start with an empty black screen. You talk to it, and a side scroller builds itself around you **while you play**:
 
 - "add a player, make it a ninja"
 - "add some ground"
@@ -13,6 +15,30 @@ You start with an empty black screen. You talk to it, and a modern pixel-art sid
 Each change is written by AI agents, **verified by a headless playtest before it goes live**, and hot-loaded into the running game without a restart.
 
 Entry for the Meta Global AI Developer Hackathon (solo, Indie track). **Deadline: Wed Nov 4 2026, 9:00 PM ET.**
+
+**Demo video (3:00):** _link added at submission_ · **Run it yourself:** [5-minute quickstart](#run-it-in-5-minutes-judges-start-here) · **Evidence:** [build stats](docs/evidence/build-stats.md)
+
+## For judges: the 60-second version
+
+| Rubric | What to look at | Evidence |
+|---|---|---|
+| **Impact (30)** | Anyone makes a playable game by talking, with no code and no game-engine knowledge. A sentence becomes a working, playable change in about 10 s. | [96% of AI builds land verified, median 10.2 s](docs/evidence/build-stats.md) · first-run coach for non-coders · share links and one-file offline export |
+| **Meta tooling (25)** | Five Meta models do real jobs at runtime, plus Wonder's agent features. No other AI provider is used anywhere in the product. | [Who does what](#meta-models-who-does-what) below |
+| **Depth (20)** | A pure, deterministic 60 Hz engine runs the same in the browser and headless. Every AI-written mod is compiled, then playtested by a bot in a copy of *your* world before it may load. Failures are rejected with a reason and auto-fixed by a tool-using agent. | [ARCHITECTURE.md](docs/ARCHITECTURE.md) · [61 ADRs](docs/adr/README.md) · 814 tests · `npm run cold:check` |
+| **Demo (25)** | Voice in, game out, live. The "make me huge" beat shows the verifier reject a change and Wonder fix it on camera, then **How was this made?** replays the whole chain for that object. | [Shot list](docs/DEMO.md) · [rejected → fixed GIF](docs/img/make-me-huge-rejected-fixed.gif) |
+
+**What's new here:** most "AI makes a game" demos generate a game once. Here the software **rewrites itself while you use it**, and **no change goes live until an agent has proved you can still play**. Click anything and choose **How was this made?** to see the whole chain for that one object: your words, Spark's route, Wonder's code and the test it wrote, the rejected draft and the fix, every check the verifier ran, the Muse Image prompt and sheet, and the timings ([ADR 0065](docs/adr/0065-how-was-this-made-receipt.md)).
+
+### Meta models: who does what
+
+| Meta model / feature | Its job in the game | When it runs |
+|---|---|---|
+| **Muse Spark** (`muse-spark-1.2`) | Routes every command (tweak / new / edit / undo / mood / question), picks each thing's visual kind, splits compound asks, art-directs moods, explains code, kid-safe screen | Every command, in about 1 s |
+| **Muse Wonder** (`muse-wonder-1.0`) | Writes and edits mods. As a **tool-calling agent** (`inspect_world`, `run_playtest`) it fixes mods the verifier rejected. Compound asks run as parallel sub-builds | Every new thing, about 10 to 20 s |
+| **Muse Image** (`muse-image-1.0`) | Draws sprite sheets on demand and redraws the world in a new mood (edit from an anchor) | Each new creature or prop, async |
+| **SAM 3.1** | Finds the object you hold up to the webcam so it can be cut out and dropped into the game | Camera import, about 1.2 s |
+| **Muse Voice Transcribe** | Hold Shift and talk. Live partials appear under the orb | Voice, about 130 ms after release |
+| **Muse Spark Open** (open weights, via Baseten) | Optional router. Falls back to hosted Spark automatically | When `BASETEN_API_KEY` is set |
 
 ## See it in action
 
@@ -53,7 +79,7 @@ Open **http://127.0.0.1:8787/** (or your configured `PORT`) in Chrome, click the
 | **Bring an object in (camera)** in the side panel: type what you're holding (e.g. `coffee mug`) and hold it to the webcam (or click **Upload a photo instead**) | SAM 3.1 finds it (green box; or click the object yourself), then it's cut out, pixelated and dropped into the game as a physics prop |
 | Click any creature or object | A radial menu: bigger, smaller, front, back, remove, plus 👍/👎 to teach the engine |
 | **Share this world (copy link)** in the side panel | Copies a link that reopens this exact world for anyone to remix |
-| Press **P** or click **PIPELINE** in the bottom-right | Live architecture pipeline view: see Spark, Wonder agent (with tools `inspect_world` / `run_playtest`), esbuild, the Verifier, and SAM 3.1 with real-time telemetry |
+| Press **P** or click **PIPELINE** in the bottom-right | Live architecture pipeline view: see Spark, Wonder agent (with tools `inspect_world` / `run_playtest`), esbuild, the Verifier, and SAM 3.1 with real-time telemetry, plus live build numbers (landed %, first-try %, median time) |
 | `make it spooky` (or `neon`, `snowy`) | Spark art-directs a whole-world mood: the palette, fog and lighting change in ~3 s, then Muse Image redraws every AI sprite in the new style (~20–30 s). `undo` restores it |
 | `make this christmas themed` | Theme words restyle the world (no new code): snow-frosted surfaces, icy hills, falling snow |
 | `add some stairs` | Wonder builds code-drawn stone steps; the player walks up them |
@@ -61,10 +87,10 @@ Open **http://127.0.0.1:8787/** (or your configured `PORT`) in Chrome, click the
 | **✏️ Draw a level** (or say "let me draw a level") | Sketch ledges, coins and enemies over the game; Wonder reads the drawing and builds it |
 | **⏪ Time travel** (strip under the stage) | Every build, mood and undo is a dot; hover one to see that world, Restore brings it back as a new step (nothing is ever deleted) |
 | **⬇ Download game** (side panel) | Saves your world as one HTML file that plays offline in any browser, no server or AI needed |
+| Click anything → **How was this made?** (gold receipt icon) in the radial menu | The receipt for that object: your words, how Spark routed them, Wonder's code and its own test, the draft the playtest rejected and the fix, each verifier check ticking green, the Muse Image sheet beside its cut-out, and a time bar. No model call |
 | Click anything → **How does this work?** in the radial menu | Muse Spark explains that object's code in three plain sentences and highlights the three lines that matter |
 | "build a grappling hook" | Click where you want to go (or aim with the mouse and press **B**); a rope latches onto any solid and reels you in, Jump vaults off |
 | Changed your mind mid-build? | Click the **×** on the build's chip under the orb; just that build stops and nothing lands ([ADR 0060](docs/adr/0060-cancel-a-running-build.md)) |
-| Press **P** | Pipeline view with live build numbers (landed %, first-try %, median time) |
 | Click **👍** or **👎** on any mod card or radial menu | Feedback modal lets you teach the engine rules, distill skills, or auto-fix the mod live |
 
 Move with A/D or the arrows, jump with W or Space, shoot with X, use items with F. Sound is synthesized in the browser: M mutes, [ and ] change volume, ?mute starts muted, ?noshake turns off screen shake. First visit shows a skippable 3-step coach (?coach shows it again, ?nocoach hides it); in a scripted fresh-browser run the first build landed 15.5 s after page load. Watch the top-left HUD (health, mod counters). **Fresh-clone check (2026-10-30, a clean clone of `main`, README steps only, Windows, Node 24, npm 11):** clone 1.8 s, `npm install` 7.9 s, `npm run build` 6.1 s, server listening 1.3 s after `npm start`; "add a bouncing green slime" was verified and live 7.2 s after typing (Spark 1.0 s, Wonder 6.2 s), and its AI-drawn sprite replaced the placeholder 27 s after that. With no key the same page loads, shows the demo worlds, and the orb says the AI is not connected.
@@ -119,7 +145,7 @@ See [docs/DESIGN.md](docs/DESIGN.md) for all locked product and architecture dec
 
 ## Current milestone: the win plan
 
-The spike passed its go/no-go early (10/10). The remaining plan, in priority order, is in [docs/WINPLAN.md](docs/WINPLAN.md): voice (done), a deploy-ready server with share links (done), the visible verifier with a ghost playtest (done), visual kinds and effects (done), then parallel agent builds, a non-coder user test, and rehearsal. Work runs in parallel git worktrees ([docs/ORCHESTRATION.md](docs/ORCHESTRATION.md)).
+The spike passed its go/no-go early (10/10). The remaining plan, in priority order, is in [docs/WINPLAN.md](docs/WINPLAN.md): voice (done), a deploy-ready server with share links (done), the visible verifier with a ghost playtest (done), visual kinds and effects (done), parallel agent builds (done), then a non-coder user test and rehearsal. Work runs in parallel git worktrees ([docs/process/ORCHESTRATION.md](docs/process/ORCHESTRATION.md)).
 
 ## Hackathon
 
@@ -156,7 +182,11 @@ powershell scripts/voice-synth.ps1; npx tsx scripts/voice-check.ts 10   # live v
 
 Never commit keys. `.env` is gitignored.
 
-## Status (2026-10-29)
+## License
+
+[MIT](LICENSE). How the work was organized during the event (orchestrator and AI worker sessions in git worktrees) is recorded in [docs/process/](docs/process/README.md).
+
+## Status (2026-10-30)
 
 **Working and verified**
 
@@ -173,7 +203,8 @@ Never commit keys. `.env` is gitignored.
 - **Crash containment:** a mod that throws mid-game is taken out and the orb says so; the rest of the world keeps running. Every loop in an AI-written mod gets an iteration guard at compile time, so an infinite loop fails verification in milliseconds instead of hanging the server or the tab ([ADR 0056](docs/adr/0056-contain-crashing-and-looping-mods.md)).
 - **Engine budget:** a 500-entity level steps in ~0.4 ms (2 ms budget) with a grid broad phase that gives identical results to a full scan ([ADR 0057](docs/adr/0057-engine-rules-gear-shots-ground-broad-phase.md)).
 - **Voice orders and living creations:** "chickens, follow me", "everyone stay", "dragon, go away" route locally in 1–4 ms with no model call (works with no key) and the engine steers the creatures; mods get events, speech bubbles and an action-key interaction ([ADR 0059](docs/adr/0059-living-creations-events-speech-orders-and-route-rules.md), `tests/interact.test.ts`, `tests/route-rules.test.ts`).
-- Tests: 792 passing (`npm test`, green in a fresh clone), typecheck clean, production build green.
+- **"How was this made?":** every AI-built object carries a receipt of its whole chain, from words to verified, playable mod, opened from the radial menu with no model call ([ADR 0065](docs/adr/0065-how-was-this-made-receipt.md), `tests/receipt.test.ts`). Sketch, paper and photo builds show their code and test but no build record yet.
+- Tests: 814 passing (`npm test`, green in a fresh clone), typecheck clean, production build green.
 
 **Art pipeline: first proof (2026-10-27)**
 
@@ -183,4 +214,4 @@ Never commit keys. `.env` is gitignored.
 - Goal-reachability search (the playtest bot runs right and jumps; it doesn't prove a goal is reachable).
 - Endless level generator (cut for the hackathon).
 - Public hosting (deploy-ready; host not chosen yet), worker-thread verifier isolation ([ADR 0003](docs/adr/0003-verifier-in-process-empty-world.md)).
-- Relative tweaks: "make them faster", "jump higher" and "more chickens" now tweak a knob instantly ([ADR 0058](docs/adr/0058-faster-builds-fewer-sequential-model-turns.md)); other relative wording ("make it bigger") can still build a new mod or rewrite one ([ADR 0005](docs/adr/0005-tweak-edit-fallbacks.md)).
+- Some relative wording ("make it bigger") can still build a new mod or rewrite one instead of tweaking a knob ([ADR 0005](docs/adr/0005-tweak-edit-fallbacks.md)). "Make them faster", "jump higher" and "more chickens" already tweak a knob instantly ([ADR 0058](docs/adr/0058-faster-builds-fewer-sequential-model-turns.md)).
