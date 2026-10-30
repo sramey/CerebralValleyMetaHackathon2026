@@ -447,7 +447,9 @@ async function handleSketchMessage(ws: WebSocket, msg: Extract<ClientMsg, { kind
     }
   }
   if (!spend(ws, "build")) {
-    send(ws, { kind: "stage", stage: "done", detail: "feedback saved" });
+    // Budget/key denial used to `return` silently and leave the sketch overlay waiting out its
+    // watchdog; tell the overlay now so the player can keep drawing (bug q8x).
+    stage(ws, { kind: "stage", stage: "failed", detail: "the AI build budget for this visit is used up", command });
     return;
   }
   const manifest = sess(ws).manifest;
@@ -481,14 +483,18 @@ async function handleSketchMessage(ws: WebSocket, msg: Extract<ClientMsg, { kind
   };
   try {
     await runSketchBuild({
-      ask: (messages) => chat(WONDER, messages, 1400).then((r) => { timings.write += r.ms; return r.text; }),
+      // The signal is the sketch pipeline's own deadline (bug q8x): a hung vision call is
+      // cancelled here instead of holding the build until the client gives up.
+      ask: (messages, signal) => chat(WONDER, messages, 1400, "minimal", signal).then((r) => { timings.write += r.ms; return r.text; }),
       deliver,
       say: (text) => send(ws, { kind: "say", text }),
       stage: (s, detail) => stage(ws, { kind: "stage", stage: s, detail, command }),
       note: (text) => console.log(`[sketch] ${text}`),
     }, msg);
   } catch (err) {
-    send(ws, { kind: "say", text: `Sketch failed: ${err instanceof Error ? err.message : String(err)}` });
+    const why = err instanceof Error ? err.message : String(err);
+    send(ws, { kind: "say", text: `Sketch failed: ${why}` });
+    stage(ws, { kind: "stage", stage: "failed", detail: why.slice(0, 200), command });
     logBuild({ command, route: "new", outcome: "failed", timings: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) }, fixAttempted: false });
   }
   send(ws, { kind: "timing", command, ms: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) } });

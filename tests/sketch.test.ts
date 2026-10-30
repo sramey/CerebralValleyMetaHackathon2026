@@ -13,6 +13,7 @@ import {
   isEmptyLevel,
   levelFromStrokes,
   levelToModSource,
+  MAX_SKETCH_IMAGE_CHARS,
   modIdFor,
   normalizeLevel,
   parseSketchLevel,
@@ -77,6 +78,17 @@ describe("sketch payload sanitizing", () => {
     expect(clean!.strokes.length).toBe(80);
     expect(clean!.strokes[0].tag).toBe("coin");
     expect(clean!.prompt).toBe("hi");
+  });
+
+  it("accepts a compact JPEG sketch and refuses a raw full-screen PNG (bug q8x)", () => {
+    const strokes = [stroke("terrain", 10, 300, 100, 20)];
+    // What the client now sends: ~30-60 KB of JPEG for a whole screen of drawing.
+    const compact = `data:image/jpeg;base64,${"A".repeat(48_000)}`;
+    expect(compact.length).toBeLessThan(MAX_SKETCH_IMAGE_CHARS);
+    expect(sanitizeSketch({ image: compact, strokes })).not.toBeNull();
+    // What used to be sent: a 3 MB base64 PNG is over the cap and gets a friendly refusal.
+    const raw = `data:image/png;base64,${"A".repeat(3_000_000)}`;
+    expect(sanitizeSketch({ image: raw, strokes })).toBeNull();
   });
 });
 
@@ -332,5 +344,125 @@ describe("sketch build pipeline (no live calls)", () => {
     const r = await runSketchBuild(d, { image: "nope", strokes: [], prompt: "" });
     expect(r.ok).toBe(false);
     expect(d.asked).toBe(0);
+  });
+});
+
+// Bug q8x: the build used to hang on "Reading your sketch..." until the 60 s watchdog, and the
+// deterministic stroke-box level — which needs no model at all — never got to run. These tests
+// stub the vision call to hang, so no live Meta call is made.
+describe("sketch build timeouts and instant fallback", () => {
+  /** Deps whose vision call can hang, reject, or answer, plus everything the client would see. */
+  function stub(opts: { reply?: string; hang?: boolean; reject?: boolean; deliver?: (source: string) => Promise<{ ok: boolean; errors: string[] }> } = {}) {
+    const seen = {
+      asked: 0,
+      signals: [] as (AbortSignal | undefined)[],
+      stages: [] as string[],
+      said: [] as string[],
+      delivered: [] as string[],
+    };
+    const d: SketchDeps = {
+      ask(_messages, signal) {
+        seen.asked++;
+        seen.signals.push(signal);
+        if (opts.hang) return new Promise<string>(() => { /* never answers, ignores the signal */ });
+        if (opts.reject) return Promise.reject(new Error("Meta API 503: upstream unavailable"));
+        return Promise.resolve(opts.reply ?? "");
+      },
+      async deliver(source) {
+        seen.delivered.push(source);
+        return opts.deliver ? opts.deliver(source) : { ok: true, errors: [] };
+      },
+      say(text) { seen.said.push(text); },
+      stage(s) { seen.stages.push(s); },
+    };
+    return { deps: d, seen };
+  }
+
+  /** A detailed sketch like the one in the playtest: platforms, coins, bouncers and enemies. */
+  const richSketch = {
+    image: PNG,
+    strokes: [
+      ...Array.from({ length: 26 }, (_, i) => stroke("terrain", -900 + i * 120, 400 - (i % 4) * 70, 110, 22)),
+      ...Array.from({ length: 10 }, (_, i) => stroke("coin", -880 + i * 110, 340, 16, 16)),
+      ...Array.from({ length: 4 }, (_, i) => stroke("bouncer", -700 + i * 400, 380, 90, 18)),
+      ...Array.from({ length: 4 }, (_, i) => stroke("hazard", -600 + i * 500, 350, 28, 28)),
+    ],
+    prompt: "a big climbing level",
+    view: { x: -960, y: -200, w: 1920, h: 1080 },
+  };
+
+  it("builds the drawn boxes when the vision call hangs (no 60 s watchdog wait)", async () => {
+    const { deps: d, seen } = stub({ hang: true });
+    const t0 = Date.now();
+    const r = await runSketchBuild(d, richSketch, { askTimeoutMs: 60, readBudgetMs: 120, retryMinMs: 40 });
+    const elapsed = Date.now() - t0;
+    expect(r.ok).toBe(true);
+    expect(r.usedFallback).toBe(true);
+    expect(seen.delivered.length).toBe(1);
+    expect(seen.said.join(" ")).toContain("built from your boxes directly");
+    expect(elapsed).toBeLessThan(2_000);
+    // The call was given an abort signal and the deadline fired it.
+    expect(seen.signals[0]).toBeInstanceOf(AbortSignal);
+    expect(seen.signals[0]!.aborted).toBe(true);
+    // A successful fallback is not a failure: the overlay must not flash an error.
+    expect(seen.stages).not.toContain("failed");
+  });
+
+  it("falls back when the vision call errors out", async () => {
+    const { deps: d, seen } = stub({ reject: true });
+    const r = await runSketchBuild(d, richSketch, { askTimeoutMs: 200, readBudgetMs: 400, retryMinMs: 100 });
+    expect(r.ok).toBe(true);
+    expect(r.usedFallback).toBe(true);
+    expect(seen.delivered[0]).toContain("sketch-platform");
+  });
+
+  it("never spends more than the reading budget, however the model behaves", async () => {
+    const { deps: d, seen } = stub({ hang: true });
+    const t0 = Date.now();
+    await runSketchBuild(d, richSketch, { askTimeoutMs: 300, readBudgetMs: 400, retryMinMs: 150, totalBudgetMs: 600 });
+    expect(Date.now() - t0).toBeLessThan(1_500);
+    // One timed-out try, and no second try once the budget cannot hold it.
+    expect(seen.asked).toBe(1);
+  });
+
+  it("builds and verifies a playable level from a 40-stroke sketch with zero model help", async () => {
+    const { deps: d, seen } = stub({ hang: true });
+    const r = await runSketchBuild(d, richSketch, { askTimeoutMs: 40, readBudgetMs: 80, retryMinMs: 20 });
+    expect(r.ok).toBe(true);
+    const source = seen.delivered[0];
+    // Through the real compiler and the real verifier, not a stub.
+    const compiled = compileMod(source);
+    expect(compiled.ok, compiled.errors.join("; ")).toBe(true);
+    const verified = await verifyMod(source, compiled.js);
+    expect(verified.ok, verified.errors.join("; ")).toBe(true);
+    const world = new World(3);
+    new ModLoader(world).load(verified.def!);
+    const expected = r.level!;
+    const count = (type: string) => world.entities.filter((e) => e.type === type).length;
+    expect(count("sketch-platform")).toBe(expected.platforms.filter((p) => p.kind === "ledge" || p.kind === "wall").length);
+    expect(count("sketch-trampoline")).toBe(expected.platforms.filter((p) => p.kind === "bouncer").length);
+    expect(count("sketch-coin")).toBe(expected.coins.length);
+    expect(count("sketch-walker")).toBe(expected.enemies.length);
+    expect(count("sketch-platform") + count("sketch-coin") + count("sketch-walker")).toBeGreaterThan(20);
+  });
+
+  it("tells the client it failed instead of letting the watchdog expire", async () => {
+    const { deps: d, seen } = stub({ hang: true, deliver: async () => ({ ok: false, errors: ["verify: boom"] }) });
+    const r = await runSketchBuild(d, richSketch, { askTimeoutMs: 40, readBudgetMs: 80, retryMinMs: 20 });
+    expect(r.ok).toBe(false);
+    // The fallback path does not spend a *fix* call on a level the model never saw: one deliver,
+    // no re-compile round (the reading tries are bounded by the budget above).
+    expect(seen.delivered.length).toBe(1);
+    expect(seen.stages).not.toContain("fixing");
+    expect(seen.stages).toContain("failed");
+    expect(seen.said.join(" ")).toContain("didn't verify");
+  });
+
+  it("reports an unusable sketch immediately", async () => {
+    const { deps: d, seen } = stub({ hang: true });
+    const r = await runSketchBuild(d, { image: "nope", strokes: [], prompt: "" });
+    expect(r.ok).toBe(false);
+    expect(seen.asked).toBe(0);
+    expect(seen.stages).toEqual(["failed"]);
   });
 });

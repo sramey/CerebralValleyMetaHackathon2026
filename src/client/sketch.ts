@@ -7,6 +7,7 @@
 // touches the sim beyond reading the camera; the frame loop in main.ts freezes the world
 // while `active()` is true (ADR 0028), so the player draws on a still frame.
 import type { ClientMsg, SketchPoint, SketchStroke, SketchTag } from "../contract";
+import { compactSketchImage } from "./sketch-image";
 import {
   SKETCH_BUILDING_LABEL,
   SKETCH_IDLE_MS,
@@ -29,6 +30,13 @@ export const SKETCH_BRUSHES: { tag: SketchTag; color: string; label: string; gly
 
 export const MAX_STROKES = 80;
 export const MAX_POINTS = 300;
+/**
+ * How long the overlay waits for the builder before handing the sketch back. The server now
+ * answers a failed build within its own vision deadline (~15 s, see `server/sketch.ts`), so
+ * this is only a dead-server guard: it must stay comfortably above that deadline, and well
+ * under the minute a player will sit through.
+ */
+export const SKETCH_WATCHDOG_MS = 30_000;
 /** Screen -> world is a translation (the sim has no zoom); x/y grow right/down in both. */
 const MIN_EXTENT = 4;
 
@@ -384,7 +392,10 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
       setStatus("Draw at least one platform first.", "error");
       return;
     }
-    const payload = buildSketchPayload(strokes, cameraAtOpen, canvas.toDataURL("image/png"), hint.value, canvas.width, canvas.height);
+    // A compact JPEG (bug q8x): the raw PNG of a full-screen canvas is megabytes and is what
+    // made the vision call slow enough to miss the watchdog.
+    const image = compactSketchImage(canvas);
+    const payload = buildSketchPayload(strokes, cameraAtOpen, image, hint.value, canvas.width, canvas.height);
     state = "building";
     root.dataset.state = "building";
     setStatus(STATUS.building, "building");
@@ -403,7 +414,7 @@ export function createSketch(parent: HTMLElement, deps: SketchDeps): SketchHandl
       setStatus("No answer from the builder — press Done to try again.", "error");
       touch();
       paintChip();
-    }, 60000);
+    }, SKETCH_WATCHDOG_MS);
   });
 
   function open(): void {

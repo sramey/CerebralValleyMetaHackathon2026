@@ -36,6 +36,51 @@ const MAX_ENEMIES = 12;
 const MAX_MOVERS = 8;
 const MAX_BOUNCERS = 8;
 
+/**
+ * Hard ceiling on one multimodal Wonder call (bug q8x). A compact sketch measured ~4 s end to
+ * end here; anything past this is a hung connection, and waiting longer only starves the
+ * deterministic fallback that can build the level in milliseconds.
+ */
+export const SKETCH_ASK_TIMEOUT_MS = 15_000;
+/**
+ * The whole reading phase — every vision try — must finish inside this, so the stroke-box
+ * fallback always gets to run long before the client's watchdog (30 s).
+ */
+export const SKETCH_READ_BUDGET_MS = 18_000;
+/** Ceiling on the one auto-fix vision call after a failed verification. */
+export const SKETCH_FIX_TIMEOUT_MS = 8_000;
+/**
+ * Ceiling on all model calls for one sketch, start to finish. Kept under the client watchdog:
+ * a sketch either builds or hands itself back; it never waits out a timer.
+ */
+export const SKETCH_TOTAL_BUDGET_MS = 25_000;
+/** Less runway than this and a second vision try cannot finish: build from the boxes instead. */
+export const SKETCH_RETRY_MIN_MS = 4_000;
+/** Largest sketch image the builder accepts (base64 chars). A compact JPEG is ~60 KB; this is a sanity cap. */
+export const MAX_SKETCH_IMAGE_CHARS = 1_500_000;
+
+/** The time ceilings of one sketch build. Defaults are the constants above; tests shrink them. */
+export interface SketchLimits {
+  /** Ceiling on a single vision call. */
+  askTimeoutMs: number;
+  /** Ceiling on the reading phase (every try). */
+  readBudgetMs: number;
+  /** Minimum runway for a second try to be worth starting. */
+  retryMinMs: number;
+  /** Ceiling on the one post-verification fix call. */
+  fixTimeoutMs: number;
+  /** Ceiling on all model calls for one sketch. */
+  totalBudgetMs: number;
+}
+
+export const SKETCH_LIMITS: Readonly<SketchLimits> = {
+  askTimeoutMs: SKETCH_ASK_TIMEOUT_MS,
+  readBudgetMs: SKETCH_READ_BUDGET_MS,
+  retryMinMs: SKETCH_RETRY_MIN_MS,
+  fixTimeoutMs: SKETCH_FIX_TIMEOUT_MS,
+  totalBudgetMs: SKETCH_TOTAL_BUDGET_MS,
+};
+
 export const SKETCH_SYSTEM = `You read hand-drawn Level Sketches for a 2D side-scrolling platformer and answer with ONE JSON object.
 The world: x grows right, y grows DOWN, the ground surface is y = 400, the screen is roughly 900 px tall (sky above), and a player is 26x34 px.
 You get the sketch image and, for every stroke the player drew, its exact world-space box. Trust the numbers over your reading of the pixels.
@@ -327,9 +372,9 @@ export function sketchPrompt(strokes: readonly SketchStroke[], hint = "", view?:
   return lines.join("\n");
 }
 
-/** Validate a client sketch payload: finite stroke numbers, capped counts, a real PNG data URL. */
+/** Validate a client sketch payload: finite stroke numbers, capped counts, a real image data URL. */
 export function sanitizeSketch(msg: { image?: unknown; strokes?: unknown; prompt?: unknown }): { image: string; strokes: SketchStroke[]; prompt: string } | null {
-  if (typeof msg.image !== "string" || !msg.image.startsWith("data:image/") || msg.image.length < 256 || msg.image.length >= 4_000_000) return null;
+  if (typeof msg.image !== "string" || !msg.image.startsWith("data:image/") || msg.image.length < 256 || msg.image.length >= MAX_SKETCH_IMAGE_CHARS) return null;
   const raw = Array.isArray(msg.strokes) ? msg.strokes.slice(0, 400) : [];
   const strokes: SketchStroke[] = [];
   for (const s of raw) {
@@ -370,8 +415,12 @@ export function sketchView(raw: unknown): SketchBox | undefined {
 }
 
 export interface SketchDeps {
-  /** One multimodal Wonder call: receives the sketch image plus the stroke-coordinate text. */
-  ask: (messages: ChatMessage[]) => Promise<string>;
+  /**
+   * One multimodal Wonder call: receives the sketch image plus the stroke-coordinate text,
+   * and an abort signal that fires when the call has used its time (bug q8x). A dependency
+   * that ignores the signal is still bounded: the caller races it against the deadline.
+   */
+  ask: (messages: ChatMessage[], signal?: AbortSignal) => Promise<string>;
   /** Compile + verify + hot-load a mod source. Errors are model-readable. */
   deliver: (source: string) => Promise<{ ok: boolean; errors: string[] }>;
   say: (text: string) => void;
@@ -381,16 +430,60 @@ export interface SketchDeps {
 
 export interface SketchResult { ok: boolean; title: string; source: string; level?: SketchLevel; usedFallback: boolean }
 
+/** Why one bounded ask produced no usable text. */
+interface AskOutcome { text?: string; error?: string }
+
 /**
- * The whole draw-to-build pipeline after the sketch arrives: Wonder reads the sketch,
- * its JSON is compiled to a mod, and the mod is verified and hot-loaded. One automatic
- * retry: a bad reply is re-asked with the reason, a failed build is re-asked with the errors.
- * Falls back to a deterministic stroke-box level if the model cannot answer at all.
+ * Ask Wonder with a hard ceiling, never throwing and never hanging. The promise race is what
+ * actually bounds the call: `signal` only asks a well-behaved dependency to stop early, and a
+ * dependency that ignores it (or a socket that never answers) cannot hold the build past `ms`.
  */
-export async function runSketchBuild(deps: SketchDeps, msg: { image?: unknown; strokes?: unknown; prompt?: unknown; view?: unknown }): Promise<SketchResult> {
+async function askWithin(deps: SketchDeps, messages: ChatMessage[], ms: number): Promise<AskOutcome> {
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const call = Promise.resolve().then(() => deps.ask(messages, controller?.signal));
+  // The race may already be settled when the call rejects (an aborted fetch): mark it handled.
+  call.catch(() => {});
+  const deadline = new Promise<AskOutcome>((resolve) => {
+    timer = setTimeout(() => {
+      try { controller?.abort(); } catch { /* already aborted */ }
+      resolve({ error: `no answer within ${Math.round(ms / 1000)} s` });
+    }, ms);
+  });
+  try {
+    const text = await Promise.race([call, deadline]);
+    if (typeof text !== "string") return text; // the deadline won
+    return { text };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+/**
+ * The whole draw-to-build pipeline after the sketch arrives: Wonder reads the sketch, its JSON
+ * is compiled to a mod, and the mod is verified and hot-loaded.
+ *
+ * The reading phase is bounded end to end (bug q8x): one automatic retry only while the budget
+ * allows, each call capped at `SKETCH_ASK_TIMEOUT_MS`, and the moment the model cannot deliver
+ * in time the deterministic `levelFromStrokes` level is built instead — the player's drawn
+ * boxes land as a playable level in milliseconds instead of waiting out a watchdog.
+ *
+ * `limits` overrides the time ceilings; production always uses `SKETCH_LIMITS`.
+ */
+export async function runSketchBuild(
+  deps: SketchDeps,
+  msg: { image?: unknown; strokes?: unknown; prompt?: unknown; view?: unknown },
+  limits: Partial<SketchLimits> = {},
+): Promise<SketchResult> {
+  const L: SketchLimits = { ...SKETCH_LIMITS, ...limits };
   const clean = sanitizeSketch(msg);
   const failed = (why: string): SketchResult => {
     deps.say(why);
+    // Always end the client's "Reading your sketch..." state: without this the overlay waits
+    // for its watchdog even though the build has already given up (bug q8x).
+    deps.stage("failed", why);
     return { ok: false, title: "", source: "", usedFallback: false };
   };
   if (!clean) return failed("That sketch didn't come through — draw a few platforms and try again.");
@@ -407,18 +500,26 @@ export async function runSketchBuild(deps: SketchDeps, msg: { image?: unknown; s
   ];
 
   deps.stage("writing", "reading your sketch");
+  const started = Date.now();
+  const readUntil = started + L.readBudgetMs;
   let level: SketchLevel | undefined;
   let error = "";
   for (let tryIndex = 0; tryIndex < 2 && !level; tryIndex++) {
-    try {
-      const text = await deps.ask(body);
-      const parsed = parseSketchLevel(text);
+    const left = readUntil - Date.now();
+    // A try that cannot finish inside the budget is a try that starves the fallback.
+    if (left < (tryIndex === 0 ? Math.min(1_000, L.readBudgetMs / 4) : L.retryMinMs)) {
+      error = error || "the model was too slow to answer";
+      break;
+    }
+    const outcome = await askWithin(deps, body, Math.min(L.askTimeoutMs, left));
+    if (typeof outcome.text === "string") {
+      const parsed = parseSketchLevel(outcome.text);
       if (parsed.level) level = parsed.level;
       else error = parsed.error ?? "the reply was unusable";
-    } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+    } else {
+      error = outcome.error ?? "the model did not answer";
     }
-    if (!level && tryIndex === 0) {
+    if (!level && tryIndex === 0 && readUntil - Date.now() >= L.retryMinMs) {
       deps.note?.(`first sketch reply unusable (${error}), asking once more`);
       body.push({ role: "assistant", content: "(my last reply was not usable)" });
       body.push({ role: "user", content: `That reply could not be used because ${error}. Reply again with ONLY the JSON level object.` });
@@ -436,24 +537,32 @@ export async function runSketchBuild(deps: SketchDeps, msg: { image?: unknown; s
   deps.stage("compiling", "building your level");
   let source = levelToModSource(level);
   let built = await deps.deliver(source);
-  if (!built.ok) {
-    // One auto-fix round: hand the level and the verifier's complaint back to Wonder.
-    deps.stage("fixing", "fixing the level");
-    try {
+  // One auto-fix round: hand the level and the verifier's complaint back to Wonder. Skipped on
+  // the fallback path, where the boxes are all we have and another model call buys nothing.
+  if (!built.ok && !usedFallback) {
+    const fixLeft = L.totalBudgetMs - (Date.now() - started);
+    if (fixLeft < 2_000) {
+      deps.note?.("skipping the sketch fix round: no time left in the build budget");
+    } else {
+      deps.stage("fixing", "fixing the level");
       const fixBody: ChatMessage[] = [
         { role: "system", content: SKETCH_SYSTEM },
         { role: "user", content: `This level spec failed verification:\n${JSON.stringify(level)}\nfailures:\n- ${built.errors.slice(0, 300).join("\n- ")}\nReply with a corrected JSON level object only.` },
       ];
-      const text = await deps.ask(fixBody);
-      const parsed = parseSketchLevel(text);
-      if (parsed.level) {
-        level = parsed.level;
-        source = levelToModSource(level);
-        deps.stage("compiling", "recompiling the fixed level");
-        built = await deps.deliver(source);
+      const outcome = await askWithin(deps, fixBody, Math.min(L.fixTimeoutMs, fixLeft));
+      if (typeof outcome.text === "string") {
+        const parsed = parseSketchLevel(outcome.text);
+        if (parsed.level) {
+          level = parsed.level;
+          source = levelToModSource(level);
+          deps.stage("compiling", "recompiling the fixed level");
+          built = await deps.deliver(source);
+        } else {
+          deps.note?.(`sketch fix round failed: ${parsed.error ?? "unusable reply"}`);
+        }
+      } else {
+        deps.note?.(`sketch fix round failed: ${outcome.error ?? "no answer"}`);
       }
-    } catch (err) {
-      deps.note?.(`sketch fix round failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   if (!built.ok) {
