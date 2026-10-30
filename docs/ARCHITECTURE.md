@@ -99,6 +99,20 @@ The same pipeline is visible in the game itself (press **P**): `src/client/pipel
 [ADR 0021](adr/0021-in-app-pipeline-view.md), with live impact numbers from
 `GET /api/stats` ([ADR 0027](adr/0027-in-app-stats-feed.md), `server/stats-feed.ts`).
 
+**Genre change.** "Turn this into a 2D space shooter" is an ordinary build whose mod calls
+`api.setScene({ hideTerrain, hideScenery, backdrop, playerSkin })`. The engine moves terrain
+and scenery out of `world.entities` into a claim, the client paints the space backdrop and the
+player's generated ship skin from `world.scene`, and unloading the mod (undo) returns
+everything exactly. `src/sim/world.ts`, `server/genre.ts`,
+[ADR 0066](adr/0066-genre-change-set-scene.md).
+
+**Open-weights path (Baseten, optional).** With `BASETEN_API_KEY` set, Muse Spark Open
+routes commands (hosted Spark is the fallback, [ADR 0032](adr/0032-open-weights-router-on-baseten.md)) and
+`server/reviewer.ts` reviews each landed build in the background. A fix it proposes is
+hot-swapped only if it passes the same compile, 600-frame verify and bot playtest as any
+mod, and then feeds the learner (section 4). The review is stamped on the build receipt.
+`REVIEWER=off` disables it. [ADR 0068](adr/0068-open-weights-build-reviewer.md).
+
 Hard project rule: every AI call the product makes at runtime goes to a Meta model.
 
 ## 2. The deterministic sim and the mod sandbox

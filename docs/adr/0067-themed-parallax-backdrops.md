@@ -1,6 +1,6 @@
 # ADR 0067: Themed parallax backdrops ("change the background to medieval")
 
-- **Status:** Draft
+- **Status:** Accepted
 - **Date:** 2026-10-30
 - **Amends:** ADR 0017 (a mood can carry a backdrop and be scoped to the background)
 - **Related:** ADR 0066 (a genre scene's own backdrop, such as space, outranks this one: while it is on, the themed backdrop is hidden with the rest of the scenery)

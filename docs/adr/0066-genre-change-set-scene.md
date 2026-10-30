@@ -1,6 +1,6 @@
 # ADR 0066: Genre change: `api.setScene` reshapes the whole world, and undo puts it all back
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-30
 - **Amends:** ADR 0017 (a backdrop is a second, lighter way to repaint the sky), ADR 0062 (the player can wear a generated skin), ADR 0053 (art orders are no longer one per build)
 

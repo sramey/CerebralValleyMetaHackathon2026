@@ -12,6 +12,7 @@ Sources: dev.meta.ai/docs/models, /speech-to-text, /media-segmentation, /pricing
 | Muse Image | text + image | image | Generate **and edit** (use edit-from-anchor for the style bible) |
 | Muse Voice Transcribe | audio | text | Speech to text only |
 | SAM 3.1 (`sam-3.1`) | image or video + short noun-phrase prompt | boxes + masks (streamed) | One object type per request; tracks across video frames |
+| Muse Spark Open (`meta-models/muse-spark-open-1026`, open weights) | text | text | Served on Baseten's OpenAI-compatible endpoint, enabled by the optional `BASETEN_API_KEY`. Used for the command router ([ADR 0032](adr/0032-open-weights-router-on-baseten.md)) and the background build reviewer ([ADR 0068](adr/0068-open-weights-build-reviewer.md)); reasoning effort `minimal` as everywhere else |
 
 **No text-to-speech.** The orb talks with on-screen text plus sound effects.
 
