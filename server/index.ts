@@ -520,7 +520,12 @@ async function handlePaperLevelMessage(ws: WebSocket, msg: Extract<ClientMsg, { 
       return;
     }
   }
-  if (!spend(ws, "build")) return;
+  if (!spend(ws, "build")) {
+    // A budget/key denial used to `return` silently and leave the orb on "Reading your paper
+    // level drawing..." forever; tell it now so the player can take another photo (ADR 0054).
+    stage(ws, { kind: "stage", stage: "failed", detail: "the AI build budget for this visit is used up", command });
+    return;
+  }
   const manifest = sess(ws).manifest;
   await adoptingOf.get(ws);
   await adoptBuiltins(manifest, ["ground"]);
@@ -551,14 +556,17 @@ async function handlePaperLevelMessage(ws: WebSocket, msg: Extract<ClientMsg, { 
   };
   try {
     await runPaperBuild({
-      ask: (messages) => chat(WONDER, messages, 1400).then((r) => { timings.write += r.ms; return r.text; }),
+      ask: (messages, signal) => chat(WONDER, messages, 1400, "minimal", signal).then((r) => { timings.write += r.ms; return r.text; }),
       deliver,
       say: (text) => send(ws, { kind: "say", text }),
       stage: (s, detail) => stage(ws, { kind: "stage", stage: s, detail, command }),
       note: (text) => console.log(`[paper] ${text}`),
     }, msg);
   } catch (err) {
-    send(ws, { kind: "say", text: `Paper level failed: ${err instanceof Error ? err.message : String(err)}` });
+    const why = err instanceof Error ? err.message : String(err);
+    send(ws, { kind: "say", text: `Paper level failed: ${why}` });
+    // A thrown build must not leave the orb waiting for a stage that never comes (ADR 0054).
+    stage(ws, { kind: "stage", stage: "failed", detail: why.slice(0, 200), command });
     logBuild({ command, route: "new", outcome: "failed", timings: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) }, fixAttempted: false });
   }
   send(ws, { kind: "timing", command, ms: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) } });
@@ -1302,7 +1310,11 @@ function dispatchClientMsg(ws: WebSocket, msg: ClientMsg): void {
     });
   } else if (msg.kind === "paperLevel") {
     handlePaperLevelMessage(ws, msg).catch((err) => {
-      send(ws, { kind: "say", text: `Paper level failed: ${err instanceof Error ? err.message : String(err)}` });
+      const why = err instanceof Error ? err.message : String(err);
+      send(ws, { kind: "say", text: `Paper level failed: ${why}` });
+      // Safety net for a failure outside the build itself (kid-safe screen, level adopt): the orb
+      // still has to leave "Reading your paper level drawing..." (ADR 0054).
+      stage(ws, { kind: "stage", stage: "failed", detail: why.slice(0, 200), command: "📄 paper level" });
     });
   } else if (msg.kind === "restyle") {
     handleRestyle(ws, msg).catch(() => {});
