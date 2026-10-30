@@ -1,4 +1,5 @@
 import { createBuilds } from "./builds";
+import { createBootGate } from "./boot-gate";
 import { initFeedback } from "./feedback";
 import { initExplain } from "./explain";
 import { Application, Graphics, Sprite, Texture } from "pixi.js";
@@ -129,6 +130,20 @@ function log(text: string): void {
   logEl.prepend(li);
   while (logEl.children.length > 30) logEl.lastChild?.remove();
 }
+
+// --- cold start (bead q2s) ---------------------------------------------------
+// Open the socket before the slow work below (Pixi init, sprite sheets): a cold first
+// visit must never delay the server handshake behind image decoding. The socket's
+// handlers touch state declared further down this file, so they await `boot.ready`,
+// which resolves at the end of module evaluation (boot-gate.ts).
+let ws: WebSocket | null = null;
+// Dev: the lease's VITE_WS_URL. Production build: same origin as the page (ws:// or wss://
+// behind HTTPS), ADR 0014.
+const WS_URL: string = import.meta.env.DEV
+  ? (import.meta.env.VITE_WS_URL ?? "ws://127.0.0.1:8787")
+  : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
+const boot = createBootGate();
+connect(); // before every `await` in this file, on purpose
 
 // --- rendering -------------------------------------------------------------
 const app = new Application();
@@ -1055,7 +1070,7 @@ function tweak(modId: string, knob: string, value: KnobValue, message: string): 
 }
 
 // --- server ---------------------------------------------------------------------
-let ws: WebSocket | null = null;
+// `ws` and `WS_URL` live in the cold-start block at the top: the socket opens early.
 function send(msg: ClientMsg): void {
   if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
 }
@@ -1761,10 +1776,6 @@ cameraConfirm.addEventListener("click", () => {
   send({ kind: "photoBring", key } as unknown as ClientMsg);
   closeCameraModal(false);
 });
-// Dev: the lease's VITE_WS_URL. Production build: same origin as the page (ws:// or wss:// behind HTTPS), ADR 0014.
-const WS_URL: string = import.meta.env.DEV
-  ? (import.meta.env.VITE_WS_URL ?? "ws://127.0.0.1:8787")
-  : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
 // --- worlds, share links, visitor mode (ADR 0014, 0037) ----------------------
 // The `w` id is already validated by the URL decoder: only a current-format id gets this far.
 const worldParam = urlFlags.worldId;
@@ -1875,7 +1886,12 @@ const voice = initVoice({
 function connect(): void {
   try { ws = new WebSocket(WS_URL); }
   catch { serverStatus.textContent = "Server: offline (local mods still work)"; return; }
-  ws.addEventListener("open", () => { serverStatus.textContent = `Server: connected on ${WS_URL}`; voice.onOpen(); tester.onOpen(); sendWorldState();
+  ws.addEventListener("open", async () => {
+    // Connected is safe to report at once; the rest touches state declared further down
+    // this file, so it waits for the module to finish evaluating (cold start, bead q2s).
+    serverStatus.textContent = `Server: connected on ${WS_URL}`;
+    await boot.ready;
+    voice.onOpen(); tester.onOpen(); sendWorldState();
     if (worldParam && !worldRequested) {
       worldRequested = true;
       say("Opening the world from that link…");
@@ -1892,6 +1908,7 @@ function connect(): void {
     setTimeout(connect, 3000);
   });
   ws.addEventListener("message", async (ev) => {
+    await boot.ready; // frames that arrive before the module finishes wait here, in order
     let msg: ServerMsg;
     try { msg = JSON.parse(String(ev.data)) as ServerMsg; } catch { return; }
     pipeline.onMsg(msg);
@@ -1990,7 +2007,6 @@ function connect(): void {
     }
   });
 }
-connect();
 
 function submitCommand(text: string): void {
   if (!text) return;
@@ -2093,3 +2109,7 @@ if (urlFlags.tester) {
   if (ent) { openRadialMenu(ent); return true; }
   return false;
 };
+
+// Cold start (bead q2s): the module is fully evaluated, so the socket's queued frames and
+// its "open" handler may run now. Keep this the last statement in the file.
+boot.markReady();

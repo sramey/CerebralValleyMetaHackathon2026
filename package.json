@@ -17,7 +17,8 @@
     "rehearse": "tsx scripts/rehearse.ts",
     "safety:rehearse": "tsx scripts/safety-rehearse.ts",
     "demo:prep": "tsx scripts/demo-prep.ts",
-    "bench:router": "tsx scripts/bench-router.ts"
+    "bench:router": "tsx scripts/bench-router.ts",
+    "cold:check": "tsx scripts/cold-start-check.ts"
   },
   "dependencies": {
     "esbuild": "^0.25.0",
