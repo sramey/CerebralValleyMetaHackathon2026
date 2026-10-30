@@ -89,3 +89,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0059](0059-living-creations-events-speech-orders-and-route-rules.md) | Living creations: mod events, speech bubbles, voice orders to any creature, route rules as a named pipeline | Draft |
 | [0060](0060-cancel-a-running-build.md) | Cancel a running build: an x on its chip aborts that one build and drops its result | Draft |
 | [0061](0061-gear-sockets-on-the-drawn-body.md) | Gear sockets on the drawn body: hand/back/head/feet/belt for any character, clamped nudges, a dragon can wear a hat | Draft |
+| [0063](0063-fallen-creatures-go-back-on-the-ground.md) | Fallen creatures go back on the ground: a creature 900 px below the main slab is stood beside the player | Draft |
