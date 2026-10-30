@@ -46,22 +46,46 @@ export function createBuilds(host: HTMLElement, onChange: () => void): Builds {
   const list = document.createElement("div");
   list.className = "builds";
   list.setAttribute("aria-live", "polite");
-  host.appendChild(list);
+  // The host is the narrow text column beside the orb. Three cards need the whole rail
+  // to stay legible, so the row goes right under the orb row; anything else (a test
+  // host, a moved panel) keeps the plain append.
+  const orbRow = typeof host.closest === "function" ? host.closest("#orb-row") : null;
+  if (orbRow?.parentElement) orbRow.parentElement.insertBefore(list, orbRow.nextSibling);
+  else host.appendChild(list);
   const builds = new Map<string, Build>();
 
   const running = (): Build[] => [...builds.values()].filter((b) => b.phase === "running");
 
+  // Chips share one row (builds.css keys its widths off data-count), so the trail
+  // has to read at ~95 px: a pip per cleared stage plus the stage in flight.
   function paint(b: Build): void {
     b.chip.dataset.phase = b.phase;
     b.chip.title = b.detail;
+    b.chip.setAttribute("aria-label", `${b.command}: ${b.trail.join(" › ")}`);
     b.chip.replaceChildren();
     const name = document.createElement("span");
     name.className = "builds-name";
     name.textContent = b.command;
     const trail = document.createElement("span");
     trail.className = "builds-trail";
-    trail.textContent = b.trail.join(" › ");
+    const dots = document.createElement("span");
+    dots.className = "builds-dots";
+    dots.setAttribute("aria-hidden", "true");
+    for (let i = 0; i < b.trail.length; i++) {
+      const dot = document.createElement("i");
+      dot.className = i === b.trail.length - 1 ? "builds-dot now" : "builds-dot";
+      dots.appendChild(dot);
+    }
+    const stage = document.createElement("span");
+    stage.className = "builds-stage";
+    stage.textContent = b.trail[b.trail.length - 1] ?? "";
+    trail.append(dots, stage);
     b.chip.append(name, trail);
+  }
+
+  /** Number of chips on screen drives the row widths (.builds[data-count]). */
+  function count(): void {
+    list.dataset.count = String(list.children.length);
   }
 
   function settle(b: Build, phase: Phase): void {
@@ -72,6 +96,7 @@ export function createBuilds(host: HTMLElement, onChange: () => void): Builds {
     window.setTimeout(() => {
       b.chip.remove();
       if (builds.get(b.command) === b) builds.delete(b.command);
+      count();
     }, LINGER_MS);
   }
 
@@ -83,6 +108,7 @@ export function createBuilds(host: HTMLElement, onChange: () => void): Builds {
         const chip = document.createElement("div");
         chip.className = "builds-chip";
         list.appendChild(chip);
+        count();
         b = { command, phase: "running", trail: [], detail, chip, startedAt: performance.now(), timer: 0 };
         builds.set(command, b);
         const mine = b;
