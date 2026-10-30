@@ -64,3 +64,34 @@ describe("a pronoun ask outranks the router's 'player' target (bug cps)", () => 
       .toEqual({ action: "tweak", target: "player", knob: "jump", value: 1080 });
   });
 });
+
+describe("a named noun outranks the router's 'player' target (bead 1e6)", () => {
+  it("tweaks the slime for 'make the slimes faster' when the router says player", () => {
+    const r = resolveRoute({ action: "tweak", target: "player", knob: "speed", value: 390 }, ctx("make the slimes faster", world, ["player"]));
+    expect(r.route).toEqual({ action: "tweak", target: "bouncing-slime", knob: "speed", value: 90 });
+    expect(r.rules.join(" ")).toMatch(/named slimes, not the router's player/);
+  });
+
+  it("works with no router target and with a full edit aimed at the player", () => {
+    expect(resolveRoute({ action: "tweak" }, ctx("make the slimes faster", world)).route).toMatchObject({ action: "tweak", target: "bouncing-slime" });
+    expect(resolveRoute({ action: "edit", target: "player" }, ctx("make the slime faster", world)).route).toMatchObject({ action: "tweak", target: "bouncing-slime" });
+  });
+
+  it("edits the NAMED mod, not the player, when it has no knob for the ask", () => {
+    expect(resolveRoute({ action: "tweak", target: "player", knob: "jump", value: 1080 }, ctx("make the slimes jump higher", world)).route)
+      .toEqual({ action: "edit", target: "bouncing-slime" });
+  });
+
+  it("keeps 'me / my character' on the player", () => {
+    expect(resolveRoute({ action: "tweak", target: "player" }, ctx("make me faster", world, ["bouncing-slime"])).route)
+      .toMatchObject({ action: "tweak", target: "player" });
+    expect(resolveRoute({ action: "tweak", target: "player" }, ctx("make my character faster", world, ["bouncing-slime"])).route)
+      .toMatchObject({ action: "tweak", target: "player" });
+  });
+
+  it("does not touch the player for a noun that matches no loaded mod", () => {
+    // No dragon is loaded: the existing build-verb rule reads "make the dragons ..." as a build.
+    expect(resolveRoute({ action: "tweak", target: "player" }, ctx("make the dragons faster", world)).route)
+      .toEqual({ action: "new" });
+  });
+});
