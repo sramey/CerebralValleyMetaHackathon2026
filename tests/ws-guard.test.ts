@@ -25,7 +25,7 @@ const BBOX = { x: 10, y: 20, w: 120, h: 16 };
 const KNOWN_KINDS = new Set([
   "command", "undo", "knob", "photo", "photoFind", "photoBring", "photoBringLocal",
   "cancel",
-  "worldState", "voiceWarm", "voiceStart", "voiceEnd", "worldSave", "worldLoad", "worldResume", "worldExport",
+  "worldState", "voiceWarm", "voiceStart", "voiceEnd", "worldSave", "worldLoad", "worldResume", "worldAdopt", "worldExport",
   "restyle", "feedback", "sketch", "tester", "timelineRestore", "explain", "receipt", "paperLevel",
 ]);
 
@@ -48,6 +48,7 @@ const VALID: { [K in ClientMsg["kind"]]: Extract<ClientMsg, { kind: K }> } = {
   worldSave: { kind: "worldSave", mods: [{ id: "player", values: { size: 32 } }, { id: "coins", values: {} }] },
   worldLoad: { kind: "worldLoad", id: "demo-1" },
   worldResume: { kind: "worldResume", id: "home-abcdefgh1234" },
+  worldAdopt: { kind: "worldAdopt", id: "home-abcdefgh1234", mods: [{ id: "player", values: { size: 32 } }, { id: "jetpack", values: { thrust: 1800 } }] },
   worldExport: { kind: "worldExport", mods: [{ id: "player", values: { size: 32 } }, { id: "coins", values: {} }] },
   restyle: { kind: "restyle", mood: "spooky", keys: ["ninja", "mug-photo"] },
   feedback: { kind: "feedback", modId: "player", entityType: "player", vote: "down", note: "too slow", fixNow: true },
