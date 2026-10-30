@@ -26,10 +26,19 @@ socket outright and unclamped, so a mod could put a gun anywhere. Only the playe
    never mounted. Auto-mounting by name still applies to the player only, with the same list.
 6. The Wonder prompt gets one line: set `data.socket`/`data.attachedTo`, never position worn gear.
 
+## Amendment 2026-10-30 (bead mz1, still Draft)
+
+- **Gear scales with its wearer.** The first mount stores the item's own size and the wearer's drawn
+  height in `data.gearRefH/gearW/gearH`; later mounts scale by the ratio (0.25x to 8x), so "make me
+  huge" grows the gun and jetpack with the body and "undo" shrinks them back. If anything else resized
+  the item since (its size is not what the engine last set), that size becomes the new base.
+- **Heads lead.** A head socket on a non-player wearer sits 22% of its width ahead of the body
+  centre, by facing; the player's head stays centred.
+- **No art, no floating gear.** `visualHeight(e, hasArt)` returns the hitbox height when the entity
+  is code-drawn. Only the client knows; it sets `world.hasArt`, and the headless sim assumes art
+  (unset means yes), so server playtests are unchanged.
+
 ## Consequences
 
 - Old mods that set a large `offsetY` to place a gun now get the hands, which is what they meant.
-- The sim assumes a character has art (1.5x). A code-drawn creature without a sprite is drawn at
-  its hitbox, so its gear floats up to half a hitbox above it. Accepted: every build gets art.
-- Gear keeps its own size; it does not scale with the wearer after "make me huge", it only follows
-  the new hands. Scaling gear would need a remembered base size; left as a follow-up.
+- The headless sim (server playtest) assumes art (1.5x); only the client corrects that, see the amendment.

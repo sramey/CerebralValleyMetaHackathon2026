@@ -47,7 +47,7 @@ describe("gear sockets on the drawn body", () => {
       const b = visualBox(dragon);
       expect(hat.y + hat.h).toBeGreaterThan(b.y);
       expect(hat.y + hat.h).toBeLessThanOrEqual(b.y + 6);
-      expect(hat.x + hat.w / 2).toBeCloseTo(dragon.x + dragon.w / 2, 0);
+      expect(Math.sign(hat.x + hat.w / 2 - (dragon.x + dragon.w / 2))).toBe(f); // head is ahead of the body centre
       expect(hat.facing).toBe(f);
     }
     const byType = gear(w, "crown", { attachedTo: "dragon" }, 20);
@@ -89,5 +89,64 @@ describe("gear sockets on the drawn body", () => {
     gun.x = 700; gun.y = 100;
     w.step();
     expect(gun.x).toBe(700);
+  });
+});
+
+describe("gear follow-ups (bead mz1)", () => {
+  it("gear scales with its wearer after 'make me huge' and back again", () => {
+    const { w, player } = setup();
+    const gun = gear(w, "gun", {}, 16);
+    w.step();
+    expect(gun.w).toBeCloseTo(16, 5);
+    player.h *= 3;
+    player.y -= 68;
+    w.step();
+    expect(gun.w).toBeCloseTo(48, 5);
+    expect(gun.h).toBeCloseTo(48, 5);
+    player.h /= 3;
+    w.step();
+    expect(gun.w).toBeCloseTo(16, 5);
+  });
+
+  it("a size the item was given by someone else becomes the new base", () => {
+    const { w } = setup();
+    const gun = gear(w, "gun", {}, 16);
+    w.step();
+    gun.w = 30; gun.h = 30;
+    w.step();
+    expect(gun.w).toBeCloseTo(30, 5);
+  });
+
+  it("a hat sits over a creature's head, toward the front, mirrored by facing", () => {
+    const { w } = setup();
+    const dragon = w.spawn({ type: "dragon", x: 400, y: 200, w: 80, h: 60, solid: false, gravityScale: 0 }, "dragon");
+    const hat = gear(w, "hat", { attachedTo: dragon.id }, 20);
+    const mid = dragon.x + dragon.w / 2;
+    dragon.facing = 1; w.step();
+    expect(hat.x + hat.w / 2).toBeGreaterThan(mid + 10);
+    dragon.facing = -1; w.step();
+    expect(hat.x + hat.w / 2).toBeLessThan(mid - 10);
+  });
+
+  it("a hat on a player stays centred", () => {
+    const { w, player } = setup();
+    const hat = gear(w, "hat", {}, 20);
+    w.step();
+    expect(hat.x + hat.w / 2).toBeCloseTo(player.x + player.w / 2, 5);
+  });
+
+  it("a creature without art is measured at its hitbox, so its hat does not float", () => {
+    const { w } = setup();
+    w.hasArt = () => false;
+    const blob = w.spawn({ type: "blob", x: 400, y: 200, w: 40, h: 40, solid: false, gravityScale: 0 }, "blob");
+    const hat = gear(w, "hat", { attachedTo: blob.id }, 16);
+    w.step();
+    expect(visualHeight(blob, false)).toBe(40);
+    expect(hat.y + hat.h).toBeLessThanOrEqual(blob.y + 6);
+    expect(hat.y + hat.h).toBeGreaterThan(blob.y);
+    w.hasArt = () => true;
+    w.step();
+    expect(hat.y + hat.h).toBeLessThanOrEqual(visualBox(blob).y + 6); // 60 px drawn: higher
+    expect(hat.y).toBeLessThan(blob.y - 15);
   });
 });
