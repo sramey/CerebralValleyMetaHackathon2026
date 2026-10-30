@@ -148,7 +148,10 @@ export class Feel {
     for (let i = 0; i < entities.length; i++) {
       const e = entities[i];
       const type = e.type;
-      if (!e.solid && (type.includes("coin") || type.includes("gem"))) {
+      // A pickup: a coin/gem by name, or anything the engine collects (data.collectible,
+      // ADR 0055). Tracking it here is what gives an engine-collected pickup its pop and
+      // its coin sound when it vanishes next to the player.
+      if (!e.solid && (type.includes("coin") || type.includes("gem") || Boolean(e.data && e.data.collectible))) {
         const c = this.coins.get(e.id);
         if (c) { c.seen = f; c.x = e.x; c.y = e.y; c.w = e.w; c.h = e.h; }
         else this.coins.set(e.id, { seen: f, x: e.x, y: e.y, w: e.w, h: e.h });

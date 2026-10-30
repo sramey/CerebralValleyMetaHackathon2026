@@ -4,6 +4,7 @@ import { isDamageableTarget } from "./combat";
 import type { Entity, HudDef, HudWidget, InputState, Particle, SpawnDef } from "../contract";
 import { createRng } from "./rng";
 import { landingVelocity } from "./bounce";
+import { collectPickups } from "./collect";
 
 type TickHandler = (dt: number) => void;
 
@@ -23,6 +24,8 @@ export class World {
   camera = { x: 0, y: 0 };
   /** Declarative HUD widgets in creation order (ADR 0019). Pure data: the client renders. */
   hud = new Map<string, HudWidget>();
+  /** Banked engine-owned pickup totals per HUD id (ADR 0055), e.g. the shared "score". */
+  readonly collected = new Map<string, number>();
   private nextId = 1;
   private handlers = new Map<string, TickHandler[]>();
   private rng: () => number;
@@ -384,6 +387,10 @@ export class World {
         }
       }
     }
+
+    // Post-step 4: engine-owned pickups (ADR 0055): tag an entity data.collectible and
+    // the engine collects it into one shared HUD. Everything else lives in collect.ts.
+    collectPickups(this, player);
 
     if (player) {
       this.camera.x = player.x + player.w / 2 - 480;
