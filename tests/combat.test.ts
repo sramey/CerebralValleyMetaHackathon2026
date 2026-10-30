@@ -3,7 +3,9 @@ import { touches } from "../src/sim/reach";
 import { describe, expect, it } from "vitest";
 import { World } from "../src/sim/world";
 import { ModLoader, runModTest } from "../src/sim/loader";
-import { isDamageableTarget, checkProjectileHitAndDamage, overlap } from "../src/sim/combat";
+import { isDamageableTarget, checkProjectileHitAndDamage, overlap, isFriendly, isHostileEnemy } from "../src/sim/combat";
+import { Fx } from "../src/client/fx";
+import { Container } from "pixi.js";
 import { packInput, unpackInput } from "../src/sim/playtest";
 import { resolveItemMod, isItemUseKey } from "../src/client/items";
 import { gunMod } from "../src/mods/gun";
@@ -344,5 +346,128 @@ describe("hand cannon weapon mod (gunMod)", () => {
     world.step();
     expect(enemy.health).toBeLessThan(100);
     expect(world.entities.filter(e => e.id === bullet.id)).toHaveLength(0); // projectile despawned on hit
+  });
+  it("protects friendlies from player bullet damage and friendly fire", () => {
+    const playerBullet: Entity = {
+      id: 1, type: "player-bullet", x: 100, y: 300, w: 8, h: 4,
+      vx: 600, vy: 0, color: 0xffd700, solid: false, gravityScale: 0,
+      facing: 1, onGround: false, health: 100, owner: "gun", data: { fromPlayer: true },
+    };
+
+    const chicken: Entity = {
+      id: 2, type: "chicken", x: 150, y: 300, w: 24, h: 24,
+      vx: 0, vy: 0, color: 0xffffff, solid: false, gravityScale: 1,
+      facing: 1, onGround: true, health: 100, owner: "chicken", data: { casual: true },
+    };
+
+    const friendlyDragon: Entity = {
+      id: 3, type: "dragon", x: 160, y: 300, w: 40, h: 40,
+      vx: 0, vy: 0, color: 0x00ff00, solid: false, gravityScale: 0,
+      facing: 1, onGround: false, health: 100, owner: "pet", data: { friendly: true },
+    };
+
+    const heroAlly: Entity = {
+      id: 4, type: "knight", x: 170, y: 300, w: 30, h: 30,
+      vx: 0, vy: 0, color: 0x3366ff, solid: false, gravityScale: 1,
+      facing: 1, onGround: true, health: 100, owner: "hero", data: { hero: true },
+    };
+
+    const enemy: Entity = {
+      id: 5, type: "slime", x: 200, y: 300, w: 30, h: 30,
+      vx: 0, vy: 0, color: 0xff0000, solid: false, gravityScale: 1,
+      facing: -1, onGround: true, health: 100, owner: "enemy", data: { hostile: true },
+    };
+
+    expect(isFriendly(chicken)).toBe(true);
+    expect(isFriendly(friendlyDragon)).toBe(true);
+    expect(isFriendly(heroAlly)).toBe(true);
+    expect(isFriendly(enemy)).toBe(false);
+
+    expect(isHostileEnemy(enemy)).toBe(true);
+    expect(isHostileEnemy(chicken)).toBe(false);
+    expect(isHostileEnemy(friendlyDragon)).toBe(false);
+
+    // Player bullet cannot harm friendlies
+    expect(isDamageableTarget(chicken, playerBullet)).toBe(false);
+    expect(isDamageableTarget(friendlyDragon, playerBullet)).toBe(false);
+    expect(isDamageableTarget(heroAlly, playerBullet)).toBe(false);
+
+    // Player bullet can harm hostile enemy
+    expect(isDamageableTarget(enemy, playerBullet)).toBe(true);
+  });
+
+  it("player bullet passes through friendlies without exploding or harming them in world simulation", () => {
+    const world = new World(101);
+    const chicken = world.spawn({
+      type: "chicken", x: 200, y: 300, w: 30, h: 30,
+      solid: false, gravityScale: 0, health: 100, data: { casual: true },
+    }, "chickenMod");
+
+    const enemy = world.spawn({
+      type: "slime", x: 350, y: 300, w: 30, h: 30,
+      solid: false, gravityScale: 0, health: 100, data: { hostile: true },
+    }, "enemyMod");
+
+    // Bullet spawned overlapping the chicken
+    const bullet = world.spawn({
+      type: "player-bullet", x: 205, y: 305, w: 8, h: 4,
+      vx: 600, vy: 0, solid: false, gravityScale: 0,
+      data: { fromPlayer: true, visual: "projectile", damage: 40 },
+    }, "gunMod");
+
+    // Step world: bullet should pass through chicken unharmed
+    world.step();
+    expect(chicken.health).toBe(100); // chicken untouched
+    expect(world.entities.some(e => e.id === bullet.id)).toBe(true); // bullet did NOT despawn on chicken
+
+    // Step until bullet reaches enemy at x=350
+    for (let i = 0; i < 20; i++) world.step();
+
+    expect(enemy.health).toBe(60); // enemy took damage
+    expect(world.entities.some(e => e.id === bullet.id)).toBe(false); // bullet despawned on enemy
+    expect(chicken.health).toBe(100); // chicken still fully healthy
+  });
+
+  it("Fx.detectBursts only creates explosion blasts for spatially clustered particles, not distant bullets", () => {
+    const fx = new Fx(new Container());
+    const world = new World(102);
+
+    // Scenario 1: 3 muzzle particles at x=100 and 3 trail particles at x=400 (distance = 300px > 48px)
+    for (let i = 0; i < 3; i++) {
+      world.particles.push({ x: 100, y: 200, vx: 0, vy: 0, size: 3, color: 0xffd700, life: 0, maxLife: 20 });
+    }
+    for (let i = 0; i < 3; i++) {
+      world.particles.push({ x: 400, y: 200, vx: 0, vy: 0, size: 3, color: 0xffd700, life: 0, maxLife: 20 });
+    }
+
+    // Render frame
+    fx.render(world, 0, 0, 960, 540, 1 / 60, () => false);
+    // Neither cluster has >= 6 particles, so no blast and no screen shake!
+    expect(fx.shakeX).toBe(0);
+    expect(fx.shakeY).toBe(0);
+
+    // Scenario 2: 8 particles clustered at one impact location x=300, y=300 (actual hit)
+    for (let i = 0; i < 8; i++) {
+      world.particles.push({ x: 300 + (i % 2), y: 300 + (i % 2), vx: 10, vy: 10, size: 3, color: 0xffaa00, life: 0, maxLife: 20 });
+    }
+
+    fx.render(world, 0, 0, 960, 540, 1 / 60, () => false);
+    // Cluster has 8 particles at the hit location -> explosion blast triggers screen shake
+    expect(Math.abs(fx.shakeX) + Math.abs(fx.shakeY)).toBeGreaterThan(0);
+  });
+});
+
+describe("player bullets still hit creatures outside the hostile name list (ADR 0064 merge)", () => {
+  it("a Wonder-built pirate with health is a target; a chicken and an untagged wall are not", () => {
+    const w = new World(3);
+    const bullet = w.spawn({ type: "bullet", x: 0, y: 0, w: 4, h: 4, gravityScale: 0, data: { fromPlayer: true } }, "gun");
+    const pirate = w.spawn({ type: "pirate", x: 0, y: 0, w: 20, h: 30, health: 3 }, "m");
+    const chicken = w.spawn({ type: "chicken", x: 0, y: 0, w: 20, h: 20, health: 3 }, "m");
+    const wall = w.spawn({ type: "wall", x: 0, y: 0, w: 20, h: 80, solid: true, health: 3 }, "m");
+    const boss = w.spawn({ type: "fortress", x: 0, y: 0, w: 80, h: 80, solid: true, health: 9, data: { hostile: true } }, "m");
+    expect(isDamageableTarget(pirate, bullet)).toBe(true);
+    expect(isDamageableTarget(chicken, bullet)).toBe(false);
+    expect(isDamageableTarget(wall, bullet)).toBe(false);
+    expect(isDamageableTarget(boss, bullet)).toBe(true);
   });
 });

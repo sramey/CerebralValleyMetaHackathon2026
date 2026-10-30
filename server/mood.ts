@@ -3,7 +3,8 @@
 // AI sprite sheet, always edited from the ORIGINAL sheet so characters stay recognizable.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { canUseSpriteSheet } from "../src/ontology";
+import { artPlanFor, canUseSpriteSheet, isHeldItemType } from "../src/ontology";
+import { isFlyingRequest, isScenerySubject } from "./art";
 import { chat, loadEnv, SPARK } from "./meta";
 import type { MoodSpec } from "../src/contract";
 
@@ -120,8 +121,40 @@ export async function moodSpecFor(mood: string): Promise<MoodSpec> {
   return { ...PRESETS.spooky, name: moodKey(word), anchor: `${word.slice(0, 60)} atmosphere` };
 }
 
-export function moodPrompt(anchor: string): string {
-  return `Restyle this exact pixel-art sprite sheet for this mood: ${anchor}. Keep the SAME character or object, the same number of poses in the same layout and positions, the same chunky pixel-art style and dark outline. Change only colors, lighting, texture and small thematic details. Keep the flat solid magenta (#FF00FF) background exactly as it is. No text.`;
+export function moodPrompt(anchor: string, key?: string): string {
+  const cleanKey = key ? key.replace(/-fly$/, "").replace(/[-_]+/g, " ").trim() : "";
+  const subject = cleanKey || "character or object";
+  const plan = key ? artPlanFor(key) : "sheet";
+  const held = key ? (plan === "held-item" || isHeldItemType(key)) : false;
+  const scenery = key ? (plan === "scenery" || isScenerySubject(cleanKey)) : false;
+  const flying = key ? (key.endsWith("-fly") || isFlyingRequest("", cleanKey)) : false;
+
+  let spec: string;
+  if (held) {
+    spec = `What it is: held item icon sheet containing ONLY the isolated object ${subject} by itself for a 2D side-scrolling platformer. ` +
+      `Orientation: side view, pointing right. EXACTLY 4 variants of that single item in 1 single horizontal row from left to right. ` +
+      `NO character, NO person, NO hands holding it, NO body, NO animation poses.`;
+  } else if (scenery) {
+    spec = `What it is: scenery sprite sheet containing ONLY ${subject} for a 2D side-scrolling platformer. ` +
+      `Orientation: side view. EXACTLY 4 static variants of that single object in 1 single horizontal row from left to right, bottoms aligned on the same baseline. ` +
+      `NOT a character, no face, no limbs, no animation poses.`;
+  } else if (flying) {
+    spec = `What it is: 2D side-scrolling platformer sprite sheet of ${subject} in flight, AIRBORNE. ` +
+      `Orientation: strict side-scroller side view, facing right in ALL poses. Every pose MUST face right. NEVER face backwards or away from camera (NO rear view), NEVER front-facing, no top-down angles. ` +
+      `Actions & layout: EXACTLY 4 airborne flight action poses in 1 single horizontal row from left to right, all facing right: (1) hovering idle facing right, (2) gliding forward facing right, (3) flapping/flying forward facing right, (4) diving/ascending facing right. ` +
+      `NEVER multiple rows, NEVER a 2D grid. The ${subject} is off the ground in every pose, nothing underneath, no ground line.`;
+  } else {
+    spec = `What it is: 2D side-scrolling platformer sprite sheet of ${subject}. ` +
+      `Orientation: strict side-scroller side view, facing right in ALL poses. Every pose MUST face right (looking right). NEVER face backwards or away from camera (NO rear view, NO back of the character facing away), NEVER front-facing (no RPG turnaround), no top-down angles. ` +
+      `Actions & layout: EXACTLY 4 action poses in 1 single horizontal row from left to right, all facing right: (1) idle standing facing right, (2) running forward stride facing right, (3) running forward stride facing right, (4) jumping mid-air leap pose facing right. ` +
+      `NEVER multiple rows, NEVER a 2D grid.`;
+  }
+
+  return `Restyle this exact pixel-art sprite sheet for this mood: ${anchor}. ` +
+    `Keep the SAME character or object, the same chunky pixel-art style and dark outline. ` +
+    `${spec} ` +
+    `Change only colors, lighting, texture and small thematic details. ` +
+    `Keep the flat solid magenta (#FF00FF) background exactly as it is, with wide empty magenta gaps between poses so poses do NOT touch or overlap each other. No text.`;
 }
 
 /** Soften words that can intermittently trip image-edit moderation on retry. */
@@ -188,7 +221,7 @@ export async function restyleSheet(key: string, spec: MoodSpec, root = process.c
         const anchor = attempt === 0 ? spec.anchor : softenAnchor(spec.anchor, spec.name);
         const fd = new FormData();
         fd.append("model", IMAGE_MODEL);
-        fd.append("prompt", moodPrompt(anchor));
+        fd.append("prompt", moodPrompt(anchor, key));
         fd.append("image", new Blob([sheet], { type: "image/webp" }), "sheet.webp");
         fd.append("size", "1024x1024");
         const res = await fetch(IMAGE_EDIT_URL, { method: "POST", headers: { Authorization: `Bearer ${apiKey}` }, body: fd, signal: AbortSignal.timeout(75_000) });

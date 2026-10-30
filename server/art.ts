@@ -155,14 +155,17 @@ export function spritePrompt(cleanSubject: string, form: { held: boolean; scener
     return `Pixel art game scenery sprite sheet containing ONLY ${cleanSubject}: exactly 4 variants of that single object in one row, nothing else in the image, no landscape, no ground, no sky, no other objects or props. Each variant is the same object with a slightly different shape or size. NOT a character, no face, no eyes, no mouth, no arms, no legs, no animation poses. Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, variants far apart with wide empty magenta gaps between them, bottoms aligned on the same baseline, variants must NOT touch or overlap each other`;
   }
   if (form.flying) {
-    return `Pixel art game sprite sheet of ${cleanSubject} in flight, side view, AIRBORNE: ` +
-      `4 poses in a row: hovering, gliding, flying, diving. The ${cleanSubject} is off the ground in every pose — ` +
+    return `Pixel art game sprite sheet of ${cleanSubject} in flight for a 2D side-scrolling platformer, side view strictly facing right, AIRBORNE: ` +
+      `exactly 4 airborne flight action poses in 1 single horizontal row from left to right: hovering idle facing right, gliding forward facing right, flying forward facing right, diving facing right. ` +
+      `Orientation: all poses MUST face right in side profile — NEVER face backwards or away from the camera (no rear view), NEVER front-facing, no top-down angles, NEVER multiple rows or a 2D grid. ` +
+      `The ${cleanSubject} is off the ground in every pose — ` +
       `feet and paws lifted, wings or arms spread, cape or tail streaming behind it, nothing underneath to stand on, no ground line, no shadow, no landscape, no sky. ` +
       `Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
   }
-  return `Pixel art game sprite sheet of ${cleanSubject}, side view, 4 poses in a row: ` +
-    `idle, running, running, jumping. Flat solid magenta background (#FF00FF), ` +
-    `chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
+  return `Pixel art game sprite sheet of ${cleanSubject} for a 2D side-scrolling platformer, side view strictly facing right: ` +
+    `exactly 4 action poses in 1 single horizontal row from left to right: idle standing facing right, running forward stride facing right, running forward stride facing right, jumping mid-air leap pose facing right. ` +
+    `Orientation: every pose MUST face right in side profile — NEVER face backwards or away from the camera (no rear view, no back of character facing away), NEVER front-facing (no RPG turnaround), no top-down angles, NEVER multiple rows or a 2D grid. ` +
+    `Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
 }
 
 /**

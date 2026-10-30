@@ -57,6 +57,22 @@ describe("flying sprite pose (ADR 0053)", () => {
     expect(flying).not.toContain("running");
     expect(flying).toMatch(/off the ground/);
     expect(walking).toContain("running");
+
+    // Sprite generation must be aware of platformer context, orientations, and actions
+    expect(walking).toContain("2D side-scrolling platformer");
+    expect(walking).toContain("facing right");
+    expect(walking).toContain("NEVER face backwards or away from the camera");
+    expect(walking).toContain("NEVER multiple rows or a 2D grid");
+    expect(walking).toContain("idle standing");
+    expect(walking).toContain("running forward");
+    expect(walking).toContain("jumping mid-air");
+
+    expect(flying).toContain("2D side-scrolling platformer");
+    expect(flying).toContain("facing right");
+    expect(flying).toContain("NEVER face backwards or away from the camera");
+    expect(flying).toContain("hovering");
+    expect(flying).toContain("gliding");
+    expect(flying).toContain("diving");
   });
 
   it("gives a flying sheet its own cache key so a walking cat is never reused", () => {
