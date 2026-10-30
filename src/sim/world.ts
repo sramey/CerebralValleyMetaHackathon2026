@@ -410,6 +410,30 @@ export class World {
     }
   }
 
+  /**
+   * There is no kill floor, and a hopper is airborne at the slab's end, so the ledge guard never
+   * sees it: a creature that falls far below the main ground slab would be gone for good (bead 5yy).
+   * It goes back on the slab near the player, standing, keeping its own velocity so the mod's
+   * steering is untouched. Mods and their entities are not changed anywhere else.
+   */
+  private rescueFallen(solids: Entity[], player: Entity | undefined): void {
+    let slab: Entity | undefined;
+    for (const s of solids) if (isGroundSlab(s) && (!slab || s.w > slab.w)) slab = s;
+    if (!slab) return;
+    const floor = slab.y + RESCUE_DEPTH;
+    for (const e of this.entities) {
+      if (e.y <= floor || e.type === "player" || e.solid || e.gravityScale <= 0 || e.dead) continue;
+      if ((e.kind ?? entityKind(e)) !== "creature" || e.data.tetherTo !== undefined || traitsOf(e.type).scenery) continue;
+      // Stand beside the player on the side that faces the slab's middle, inside the slab's ends.
+      const mid = slab.x + slab.w / 2;
+      const want = player ? player.x + (player.x < mid ? 1 : -1) * RESCUE_BESIDE : mid;
+      e.x = Math.max(slab.x + RESCUE_MARGIN, Math.min(slab.x + slab.w - RESCUE_MARGIN - e.w, want));
+      e.y = slab.y - e.h;
+      e.vy = 0;
+      e.onGround = true;
+    }
+  }
+
   step(): void {
     const dt = SIM.dt;
     this.tickCount++;
@@ -522,6 +546,7 @@ export class World {
       }
       refile(e);
     }
+    this.rescueFallen(solids, player);
     for (const p of this.particles) {
       p.life += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 300 * dt;
     }
@@ -656,6 +681,11 @@ function hurtsOnContact(e: Entity): boolean {
 function isGroundSlab(s: Entity): boolean {
   return s.type === "ground";
 }
+
+/** How far below the ground slab's top a creature must be before it is put back (px), and where it lands. */
+const RESCUE_DEPTH = 900;
+const RESCUE_BESIDE = 220;
+const RESCUE_MARGIN = 80;
 
 const PAD = 32;
 function padded(e: Box): Box {
