@@ -431,14 +431,22 @@ export interface SketchDeps {
 export interface SketchResult { ok: boolean; title: string; source: string; level?: SketchLevel; usedFallback: boolean }
 
 /** Why one bounded ask produced no usable text. */
-interface AskOutcome { text?: string; error?: string }
+export interface AskOutcome { text?: string; error?: string }
+
+/** The one thing `askWithin` needs: a single model call that may honour an abort signal. */
+export interface AskDeps {
+  ask: (messages: ChatMessage[], signal?: AbortSignal) => Promise<string>;
+}
 
 /**
  * Ask Wonder with a hard ceiling, never throwing and never hanging. The promise race is what
  * actually bounds the call: `signal` only asks a well-behaved dependency to stop early, and a
  * dependency that ignores it (or a socket that never answers) cannot hold the build past `ms`.
+ *
+ * Shared by every build pipeline that reads an image (sketch, paper; ADR 0054): one
+ * implementation of "bounded model call", so a fix here fixes both.
  */
-async function askWithin(deps: SketchDeps, messages: ChatMessage[], ms: number): Promise<AskOutcome> {
+export async function askWithin(deps: AskDeps, messages: ChatMessage[], ms: number): Promise<AskOutcome> {
   const controller = typeof AbortController !== "undefined" ? new AbortController() : undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const call = Promise.resolve().then(() => deps.ask(messages, controller?.signal));
