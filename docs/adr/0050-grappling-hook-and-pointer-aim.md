@@ -19,3 +19,5 @@ A kid asked for "a grappling hook" and got a hook that shot out of the player's 
 
 ## Consequences
 Clicking the canvas still opens the radial menu on entities, so the guidance fires on the action key and aims with the mouse. Older worlds are unchanged.
+
+Update (bead 40c): while a tether mod is live, a left-click on empty space or terrain fires it at the pointer (a one-frame action press); clicking an entity still opens the radial menu.

@@ -653,7 +653,14 @@ app.canvas.addEventListener("pointerup", (ev) => {
   const sy = (ev.clientY - rect.top) * (app.screen.height / rect.height);
   const hit = entityAt(sx + (camXSmooth ?? world.camera.x), sy + (camYSmooth ?? world.camera.y));
   if (hit) openRadialMenu(hit);
-  else closeRadialMenu();
+  else {
+    closeRadialMenu();
+    // A click on empty space (or terrain) fires a live grappling hook at the pointer (bead 40c, ADR 0050).
+    if (ev.button === 0 && loader.list().some((m) => /grappl|hook|tether/i.test(m.id))) {
+      keys.add("KeyB"); syncInput();
+      setTimeout(() => { keys.delete("KeyB"); syncInput(); }, 90);
+    }
+  }
 });
 document.addEventListener("pointerdown", (ev) => {
   if (radialTargetId === null) return;
