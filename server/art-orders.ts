@@ -3,22 +3,21 @@
 // gets its own sheet: cached sheets are reused (never re-ordered), missing ones are all
 // drawn in parallel and each lands as its own `art` message (ADR 0008).
 // Pure apart from the injected cache/spend/draw callbacks, so a headless test can mock them.
+import type { ArtSheet } from "../src/contract";
 import type { ArtOrder } from "./art";
 
 /** A sheet ready to attach or send: what the client keys its frames by. */
-export interface ArtSheet {
-  key: string;
-  url: string;
-  scenery?: boolean;
-}
+export type { ArtSheet } from "../src/contract";
 
 export interface ArtPlan {
   /** The sheet carried inline on the mod message: the first cached one, if any. */
   art?: ArtSheet;
   /** Other cached sheets, sent as their own `art` messages after the mod lands. */
   extra: ArtSheet[];
-  /** Key the client marks as pending (its single `artPending` field). */
+  /** Key the client marks as pending (the first of `artPendingList`, for older clients). */
   artPending?: string;
+  /** Every key still being drawn: the client shows a placeholder for each. */
+  artPendingList?: string[];
   /** Sheets still to draw, all in parallel. */
   pending: ArtOrder[];
 }
@@ -42,7 +41,10 @@ export function planBuildArt(orders: ArtOrder[], deps: { cached: (key: string) =
       break;
     }
   }
-  if (plan.pending.length > 0) plan.artPending = plan.pending[0]!.key;
+  if (plan.pending.length > 0) {
+    plan.artPending = plan.pending[0]!.key;
+    plan.artPendingList = plan.pending.map((o) => o.key);
+  }
   return plan;
 }
 

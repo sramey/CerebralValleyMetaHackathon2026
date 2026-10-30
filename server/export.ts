@@ -4,6 +4,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildSync } from "esbuild";
+import { sheetsOf } from "../src/contract";
 import type { MoodSpec, WorldMod } from "../src/contract";
 
 export const MAX_EXPORT_BYTES = 5_000_000;
@@ -64,11 +65,12 @@ export function collectSprites(world: ExportWorldData, root = process.cwd()): Re
 
   // Custom mod art
   for (const m of world.mods) {
-    if (!m.builtin && m.art?.key && m.art.url) {
-      const cleanUrl = m.art.url.replace(/^\/?/, "");
-      const fullPath = join(root, "public", cleanUrl);
-      const uri = fileToDataUri(fullPath);
-      if (uri) sprites[m.art.key] = uri;
+    if (!m.builtin) {
+      // Every sheet the mod carries (a build can add several subjects); old worlds only have `art`.
+      for (const sheet of sheetsOf(m)) {
+        const uri = fileToDataUri(join(root, "public", sheet.url.replace(/^\/?/, "")));
+        if (uri) sprites[sheet.key] = uri;
+      }
     }
     if (!m.builtin && m.skinArt?.key && m.skinArt.url) {
       const uri = fileToDataUri(join(root, "public", m.skinArt.url.replace(/^\/?/, "")));

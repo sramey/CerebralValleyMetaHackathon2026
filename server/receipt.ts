@@ -74,6 +74,8 @@ export interface AiReceiptInput {
   msPerFrame: number;
   timings: BuildReceipt["timings"];
   art?: ReceiptArt;
+  /** Every art order of the build, the first included. */
+  arts?: ReceiptArt[];
   at?: string;
 }
 
@@ -95,6 +97,7 @@ export function aiReceipt(i: AiReceiptInput): BuildReceipt {
     test: test ? { source: test, checks: testChecks(test) } : null,
     proof: proof(i.msPerFrame, i.playtests, versions.length > 1),
     ...(i.art ? { art: i.art } : {}),
+    ...(i.arts && i.arts.length > 0 ? { arts: i.arts } : {}),
     timings: i.timings,
     at: i.at ?? new Date().toISOString(),
   };

@@ -10,7 +10,7 @@ import { healthBarColor, healthBarRect, rectBody, spriteBody, type DrawnBody } f
 import { computePrimaries, framesFor, isProjectileType, loadSpriteSheet, loadSubjects } from "./sprites";
 import { startLateArt } from "./art-late";
 import chickenMod from "../mods/chicken";
-import { SIM, emptyInput } from "../contract";
+import { SIM, emptyInput, pendingArtKeys, sheetsOf } from "../contract";
 import { canUseSpriteSheet, entityKind } from "../ontology";
 import type { ClientMsg, Entity, KnobValue, ModDefinition, MoodSpec, ServerMsg, ShapeName } from "../contract";
 import { initVoice } from "./voice";
@@ -2006,7 +2006,7 @@ async function applyWorld(msg: Extract<ServerMsg, { kind: "world" }>): Promise<v
       } else {
         registerLook(m.look);
         loader.load(await importMod(m.compiled), m.values);
-        if (m.art) { pendingArt.add(m.art.key); loadArtWithRetry(m.art.key, m.art.url, m.art.scenery === true); }
+        for (const sheet of sheetsOf(m)) { pendingArt.add(sheet.key); loadArtWithRetry(sheet.key, sheet.url, sheet.scenery === true); }
         if (m.skinArt) { pendingArt.add(m.skinArt.key); loadArtWithRetry(m.skinArt.key, m.skinArt.url, false); }
       }
       loaded++;
@@ -2181,9 +2181,11 @@ function connect(): void {
         registerLook(msg.mod.look);
         if (!sayWhileBuilding()) say(`${msg.mod.title} verified and live.`, "done");
         renderMods();
-        const artPending = (msg.mod as { artPending?: string }).artPending;
+        // Every sheet still being drawn gets its placeholder (a build can add several subjects); `artPending` is the first, for older servers.
         // Empty frames are "no sprite" (bead 8zu): a key can exist before its sheet lands.
-        if (artPending) { if ((framesBySubject[artPending]?.length ?? 0) > 0) pendingArt.delete(artPending); else pendingArt.add(artPending); }
+        for (const artPending of pendingArtKeys(msg.mod)) {
+          if ((framesBySubject[artPending]?.length ?? 0) > 0) pendingArt.delete(artPending); else pendingArt.add(artPending);
+        }
         const art = msg.mod.art;
         if (art) {
           pendingArt.add(art.key);
