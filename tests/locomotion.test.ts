@@ -72,3 +72,50 @@ describe("casual creatures", () => {
     expect(peakAir).toBeLessThan(2);
   });
 });
+
+describe("creature steering (ADR 0051)", () => {
+  it("a flier pinned against a tower turns around and flies away from it", () => {
+    const w = new World(1);
+    ground(w);
+    w.spawn({ type: "brick", x: 300, y: -200, w: 60, h: 600, solid: true, gravityScale: 0 }, "t");
+    const e = w.spawn({ type: "dragon", x: 100, y: 100, w: 50, h: 40, gravityScale: 0 }, "t");
+    // The mod pushes toward its own heading every tick and never handles walls.
+    const heading = 1;
+    let turnedAt = -1;
+    let backedOff = 0;
+    for (let i = 0; i < 180; i++) {
+      e.vx = 90 * heading; w.step();
+      if (turnedAt < 0 && e.facing === -1) turnedAt = i;
+      if (turnedAt >= 0 && i === turnedAt + 20) backedOff = e.x;
+    }
+    expect(turnedAt).toBeGreaterThan(0);
+    expect(turnedAt).toBeLessThan(150);
+    expect(backedOff).toBeLessThan(250 - 20);
+  });
+
+  it("a patrolling walker stops at a platform edge and turns back instead of walking off", () => {
+    const w = new World(1);
+    w.spawn({ type: "platform", x: 0, y: 300, w: 200, h: 20, solid: true, gravityScale: 0 }, "t");
+    ground(w);
+    const e = w.spawn({ type: "slime", x: 100, y: 270, w: 30, h: 30, gravityScale: 1 }, "t");
+    for (let i = 0; i < 300; i++) { e.vx = 80 * (e.facing || 1); w.step(); }
+    expect(e.y + e.h).toBeCloseTo(300, 0);
+    expect(e.x).toBeGreaterThan(-5);
+    expect(e.x + e.w).toBeLessThan(205);
+  });
+
+  it("a hostile holds the edge facing the player and reports its AI state", () => {
+    const w = new World(1);
+    w.spawn({ type: "platform", x: 0, y: 300, w: 200, h: 20, solid: true, gravityScale: 0 }, "t");
+    ground(w);
+    w.spawn({ type: "player", x: 260, y: 360, w: 24, h: 40, gravityScale: 1 }, "t");
+    const e = w.spawn({ type: "goblin", x: 100, y: 270, w: 30, h: 30, gravityScale: 1, data: { hostile: true } }, "t");
+    for (let i = 0; i < 200; i++) { e.vx = 80; w.step(); }
+    expect(e.y + e.h).toBeCloseTo(300, 0);
+    expect(e.facing).toBe(1);
+    expect(e.data.aiState).toBe("notice");
+    e.data.lastHit = w.tickCount;
+    w.step();
+    expect(e.data.aiState).toBe("cooldown");
+  });
+});

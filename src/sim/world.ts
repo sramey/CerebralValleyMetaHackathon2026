@@ -169,13 +169,45 @@ export class World {
   private blocked = new Map<number, number>();
   private hopCooldown = new Map<number, number>();
 
-  /** A creature grinding into an obstacle hops it, then turns around if that fails. */
-  private unstick(e: Entity, pushing: boolean): void {
+  /** Creatures told to walk the other way: direction and the tick the order lapses (ADR 0051). */
+  private turning = new Map<number, { dir: number; until: number }>();
+
+  /** Make a mover head `dir` for the next `ticks` ticks, whatever sign its own code gives vx. */
+  private turnAway(e: Entity, dir: number, ticks: number): void {
+    this.turning.set(e.id, { dir, until: this.tickCount + ticks });
+    e.facing = dir > 0 ? 1 : -1;
+  }
+
+  /** A creature grinding into an obstacle hops it, then turns around if that fails. Fliers just turn: they cannot hop. */
+  private unstick(e: Entity, pushing: boolean, pushDir: number): void {
     if (!pushing) { if (this.blocked.has(e.id)) this.blocked.delete(e.id); return; }
     const n = (this.blocked.get(e.id) ?? 0) + 1;
+    const flier = e.gravityScale === 0;
     if (n === 6 && e.onGround) e.vy = -380;
-    if (n >= 24) { e.facing = e.facing === 1 ? -1 : 1; this.blocked.delete(e.id); return; }
+    if (n >= (flier ? 4 : 24)) {
+      this.turnAway(e, pushDir > 0 ? -1 : 1, flier ? 60 : 40);
+      this.blocked.delete(e.id);
+      return;
+    }
     this.blocked.set(e.id, n);
+  }
+
+  /** True when a body's foot-front probe finds nothing to stand on within a short drop (hops and steps under 40 px are not ledges). */
+  private ledgeAhead(e: Entity, solids: Entity[], dir: number): boolean {
+    const px = dir > 0 ? e.x + e.w + 4 : e.x - 4;
+    const probe = { x: px, y: e.y + e.h, w: 1, h: 40 };
+    return !solids.some((s) => s !== e && overlap(probe, s));
+  }
+
+  /** Engine-side behaviour states for hostile creatures (ADR 0051): data.aiState is patrol, notice, attack or cooldown. Mods read it, they never have to track it. */
+  private aiState(e: Entity, player: Entity | undefined): void {
+    if (e.data.hostile !== true || !player || e.type === "player") return;
+    const dx = (player.x + player.w / 2) - (e.x + e.w / 2);
+    const dy = (player.y + player.h / 2) - (e.y + e.h / 2);
+    const dist = Math.hypot(dx, dy);
+    const since = this.tickCount - (typeof e.data.lastHit === "number" ? e.data.lastHit : -9999);
+    e.data.aiState = since < 45 ? "cooldown" : dist < (player.w + e.w) / 2 + 36 ? "attack" : dist < 280 ? "notice" : "patrol";
+    e.data.aiDir = dx >= 0 ? 1 : -1;
   }
 
   /** Casual creatures (data.casual) hop over the player instead of walking through them. */
@@ -210,7 +242,28 @@ export class World {
         continue;
       }
       const wantsMove = e.vx !== 0 && e.type !== "player";
+      const isCreature = e.type !== "player" && (e.kind ?? entityKind(e)) === "creature";
       this.casualHop(e, player);
+      if (isCreature) {
+        this.aiState(e, player);
+        // A hostile that just landed a hit backs off a beat instead of grinding on the player.
+        if (e.data.aiState === "cooldown") e.vx *= 0.25;
+        const order = this.turning.get(e.id);
+        if (order) {
+          if (this.tickCount >= order.until) this.turning.delete(e.id);
+          else if (e.vx !== 0) e.vx = Math.abs(e.vx) * order.dir;
+        }
+        // Walkers stop at a ledge: patrollers turn back, hostiles hold the edge facing the player.
+        if (e.gravityScale > 0 && e.onGround && e.vx !== 0 && e.data.ledge !== false) {
+          const dir = e.vx > 0 ? 1 : -1;
+          if (this.ledgeAhead(e, solids, dir)) {
+            e.vx = 0;
+            if (e.data.hostile !== true) this.turnAway(e, -dir, 40);
+            else e.facing = dir > 0 ? 1 : -1;
+          }
+        }
+      }
+      const pushDir = Math.sign(e.vx);
       e.vy = Math.min(e.vy + SIM.gravity * e.gravityScale * dt, 1100); // terminal velocity
       // X axis. One-way platforms (data.oneWay) never block sideways.
       e.x += e.vx * dt;
@@ -233,7 +286,7 @@ export class World {
         e.vx = 0;
         blockedX = true;
       }
-      this.unstick(e, wantsMove && blockedX);
+      this.unstick(e, wantsMove && blockedX && pushDir !== 0, pushDir);
       // Y axis. One-way platforms only catch a falling entity that was above them.
       const prevBottom = e.y + e.h;
       e.y += e.vy * dt;
