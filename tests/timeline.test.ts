@@ -79,3 +79,18 @@ describe("timeline", () => {
     expect(describeChange(world(built("a")), world(built("b"))).label).toBe("B replaces 1 mod");
   });
 });
+
+describe("mood undo on the timeline (bead b0i)", () => {
+  it("a forced undo step is recorded at once under its own label, not the next command's", () => {
+    const t = new Timeline();
+    t.record(world(base("ground")));
+    t.record({ mods: [base("ground")], mood: { name: "spooky" } as never });
+    const undone = t.record(world(base("ground")), undefined, { kind: "undo", label: "Back to normal" });
+    expect(undone?.kind).toBe("undo");
+    expect(undone?.label).toBe("Back to normal");
+    // the next command builds on top and gets its own step
+    const next = t.record(world(base("ground"), built("rain")), "make it rain");
+    expect(next?.label).toBe("make it rain");
+    expect(t.list().map((s) => s.label)).toContain("Back to normal");
+  });
+});

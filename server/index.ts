@@ -243,6 +243,13 @@ function noteTimelineSoon(ws: WebSocket): void {
   s.tlTimer = setTimeout(() => { s.tlTimer = undefined; noteTimeline(ws); }, 450);
 }
 
+/** Record a mood undo on the timeline now, as its own step (bead b0i); the client's optimistic step is replaced by this frame. */
+function noteMoodUndo(ws: WebSocket): void {
+  const s = sess(ws);
+  if (s.tlTimer) { clearTimeout(s.tlTimer); s.tlTimer = undefined; }
+  noteTimeline(ws, { kind: "undo", label: "Back to normal" });
+}
+
 function handleTimelineRestore(ws: WebSocket, n: number): void {
   const s = sess(ws);
   const step = s.timeline?.get(n);
@@ -812,6 +819,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
       sess(ws).mood = undefined;
       sess(ws).restyled = undefined;
       send(ws, { kind: "mood", mood: null });
+      noteMoodUndo(ws);
       send(ws, { kind: "say", text: "Back to normal." });
       send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
       return;
@@ -1457,6 +1465,7 @@ function dispatchClientMsg(ws: WebSocket, msg: ClientMsg): void {
     if (msg.modId === "mood") {
       sess(ws).mood = undefined;
       sess(ws).restyled = undefined;
+      noteMoodUndo(ws);
     } else if (manifest.has(msg.modId)) {
       manifest.delete(msg.modId);
       send(ws, { kind: "removed", modId: msg.modId });

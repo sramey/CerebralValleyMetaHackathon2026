@@ -20,7 +20,7 @@ import { createTester } from "./tester";
 import { createOnboarding, createSoundButton, plainBuildMessage } from "./onboard";
 import { createMoodCard } from "./mood-card";
 import { Portal } from "./portal";
-import { localRelativeAsk } from "./local-asks";
+import { isMoodUndoAsk, localRelativeAsk } from "./local-asks";
 import { visualHeight } from "../sim/sockets";
 import { drawCliff, drawHoop, drawShape, drawTetherGear, isCliff, isTetherGear, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
 import { celestialPos, computeDesiredCamY, depthFog, drawContactShadows, drawDistantMountains, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
@@ -1121,6 +1121,7 @@ function autoLoadStarterOnce(): void {
 }
 function handleLocal(text: string): boolean {
   const t = text.toLowerCase();
+  if (mood && isMoodUndoAsk(t, mood.name)) { send({ kind: "undo", modId: "mood" }); revertMood(); say("Back to normal.", "done"); return true; }
   if (t.includes("undo") || t.startsWith("remove")) {
     // A mood is the latest change until a mod is added after it (ADR 0017): bare "undo" puts the world back first.
     if (mood && t.includes("undo") && loader.list().length === moodModCount) { send({ kind: "undo", modId: "mood" }); revertMood(); say("Back to normal.", "done"); return true; }
