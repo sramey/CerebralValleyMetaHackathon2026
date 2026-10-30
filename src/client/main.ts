@@ -5,11 +5,12 @@ import { initExplain } from "./explain";
 import { initReceipt } from "./receipt";
 import { Application, Graphics, Sprite, Texture } from "pixi.js";
 import { pickWalkFrame } from "./walk-frame";
+import { PadTracker, HINT_TEXT, mergeInputs, nextMode, type InputMode } from "./gamepad";
 import { healthBarColor, healthBarRect, rectBody, spriteBody, type DrawnBody } from "./health-bar";
 import { computePrimaries, framesFor, isProjectileType, loadSpriteSheet, loadSubjects } from "./sprites";
 import { startLateArt } from "./art-late";
 import chickenMod from "../mods/chicken";
-import { SIM } from "../contract";
+import { SIM, emptyInput } from "../contract";
 import { canUseSpriteSheet, entityKind } from "../ontology";
 import type { ClientMsg, Entity, KnobValue, ModDefinition, MoodSpec, ServerMsg, ShapeName } from "../contract";
 import { initVoice } from "./voice";
@@ -1017,6 +1018,7 @@ function stepAndRender(now: number): void {
   acc = sketching ? 0 : acc + Math.min(100, now - last);
   last = now;
   const stepMs = SIM.dt * 1000;
+  pollPad();
   if (pointer.seen) {
     world.input.pointerX = pointer.sx + (camXSmooth ?? world.camera.x);
     world.input.pointerY = pointer.sy + (camYSmooth ?? world.camera.y);
@@ -1063,10 +1065,31 @@ addEventListener("keyup", (e) => { keys.delete(e.code); syncInput(); });
 // key pressed in the game never keeps the player running while the person types a command.
 addEventListener("focusin", (e) => { if (isTypingTarget(e.target) && keys.size > 0) { keys.clear(); syncInput(); } });
 addEventListener("blur", () => { if (keys.size > 0) { keys.clear(); syncInput(); } });
+// Controller (bead 5p6, src/client/gamepad.ts): polled once per frame, merged with the keyboard.
+const padTracker = new PadTracker();
+let padInput = emptyInput();
+let inputMode: InputMode = "key";
+const hintEl = document.querySelector("#hint");
+function setInputMode(src: InputMode): void {
+  const next = nextMode(inputMode, src);
+  if (next === inputMode) return;
+  inputMode = next;
+  if (hintEl) hintEl.textContent = HINT_TEXT[inputMode];
+  onboarding.refresh();
+}
+addEventListener("keydown", () => setInputMode("key"));
+function pollPad(): void {
+  const f = padTracker.poll(navigator.getGamepads ? Array.from(navigator.getGamepads()) : []);
+  for (const ev of f.events) showToast(ev === "connected" ? "Controller connected" : "Controller disconnected", "🎮");
+  if (f.touched) setInputMode("pad");
+  if (f.options) drawerToggle.click();
+  padInput = f.input;
+  syncInput();
+}
 function syncInput(): void {
   // One pure mapping for every key (src/client/keys.ts, ADR 0046): B is an action key, so
   // "pick it up and shoot with B" works without a special case per prompt.
-  Object.assign(world.input, inputFromKeys(keys));
+  Object.assign(world.input, mergeInputs(inputFromKeys(keys), padInput));
 }
 
 // --- mod cards -----------------------------------------------------------------
@@ -2234,7 +2257,7 @@ document.querySelectorAll<HTMLButtonElement>("#chips button").forEach((b) => {
 
 renderMods();
 say("Say something — or type below. Try “add a player”.");
-const onboarding = createOnboarding({ submit: (t) => submitCommand(t), orbInput: orbInputEl, mount: stageWrapEl, flags: urlFlags });
+const onboarding = createOnboarding({ inputMode: () => inputMode, submit: (t) => submitCommand(t), orbInput: orbInputEl, mount: stageWrapEl, flags: urlFlags });
 // A share link we could not decode (corrupted, truncated, oversized, old version) never reaches the
 // server: say so and give the visitor the starter world. Works offline, too (ADR 0037).
 if (urlFlags.shareIssue) openStarterAfterBadLink(urlFlags.shareIssue);

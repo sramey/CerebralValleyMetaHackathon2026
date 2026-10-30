@@ -3,6 +3,7 @@
 // The step logic and the message wording are pure (tested); the DOM below only renders them.
 import "./onboard.css";
 import type { Sound } from "./sound";
+import { coachBody, type InputMode } from "./gamepad";
 
 /** Ideas the pipeline is known to land (from the rehearse sets), shown in the placeholder in rotation. */
 export const IDEAS: readonly string[] = [
@@ -69,6 +70,8 @@ const store = {
 };
 
 export interface OnboardingHooks {
+  /** Which controls the person is using right now; the coach names the matching ones. */
+  inputMode?: () => InputMode;
   /** Run an idea as if the person had typed it. */
   submit(text: string): void;
   orbInput: HTMLInputElement;
@@ -80,6 +83,8 @@ export interface OnboardingHooks {
 export interface Onboarding {
   event(ev: CoachEvent): void;
   readonly step: CoachStep;
+  /** Redraw the card, for when the input mode changed. */
+  refresh(): void;
 }
 
 export function createOnboarding(h: OnboardingHooks): Onboarding {
@@ -125,7 +130,7 @@ export function createOnboarding(h: OnboardingHooks): Onboarding {
     title.textContent = t.title;
     const body = document.createElement("div");
     body.className = "coach-body";
-    body.textContent = t.body;
+    body.textContent = h.inputMode ? coachBody(step, t.body, h.inputMode()) : t.body;
     card.append(top, title, body);
     if (step === 1) {
       const go = document.createElement("button");
@@ -186,7 +191,7 @@ export function createOnboarding(h: OnboardingHooks): Onboarding {
     render();
   }
   render();
-  return { event, get step() { return step; } };
+  return { event, refresh: render, get step() { return step; } };
 }
 
 const ICON_ON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
