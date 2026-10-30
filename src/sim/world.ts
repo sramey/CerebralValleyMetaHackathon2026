@@ -9,6 +9,7 @@ import { collectPickups } from "./collect";
 import { canInteract, interactLabel, isOrderable, orderAck, ORDER_TICKS, steerByOrder } from "./interact";
 import { touches } from "./reach";
 import { mountGear, wearerOf } from "./sockets";
+import { Loadout } from "./loadout";
 import { BACKDROPS, cleanSceneWord, isSceneScenery, isSceneTerrain, sceneOptionsOk, type SceneRec } from "./scene";
 
 type TickHandler = (dt: number) => void;
@@ -49,6 +50,10 @@ export class World {
   /** Standing orders by entity id and the tick each one lapses. */
   private orders = new Map<number, { order: CreatureOrder; until: number }>();
   private prevAction = false;
+  /** One active held item, switch / drop / reload, vehicles (ADR 0070). */
+  readonly loadout = new Loadout(this);
+  /** Mod titles by id, so an item the engine registered for a mod can be named on the HUD. */
+  readonly modTitles = new Map<string, string>();
   private rng: () => number;
   private grid = new SolidGrid();
 
@@ -307,6 +312,7 @@ export class World {
   removeByOwner(owner: string, keepSlot = false): void {
     for (const r of this.scenes) r.stash = r.stash.filter((e) => e.owner !== owner);
     this.unscene(owner);
+    this.loadout.removeOwner(owner);
     if (keepSlot && this.handlers.has(owner)) this.handlers.set(owner, []);
     else this.handlers.delete(owner);
     for (const e of this.entities) {
@@ -493,6 +499,7 @@ export class World {
     this.ageHud(dt);
     this.ageSpeech(dt);
     this.deliverEvents();
+    this.loadout.begin();
     this.runHandlers(dt);
 
     const solids = this.entities.filter((e) => e.solid);
@@ -600,6 +607,7 @@ export class World {
       refile(e);
     }
     this.rescueFallen(solids, player);
+    this.loadout.runOver();
     for (const p of this.particles) {
       p.life += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 300 * dt;
     }

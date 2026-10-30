@@ -36,6 +36,7 @@ export class ModLoader {
     for (const [k, d] of Object.entries(knobDefs)) values[k] = overrides[k] ?? d.value;
     const rec: LoadedMod = { id: def.id, title: def.title, knobDefs, values, def };
     this.loaded.set(def.id, rec);
+    this.world.modTitles.set(def.id, def.title);
     try {
       def.setup(this.apiFor(def.id), values);
     } catch (err) {
@@ -85,7 +86,8 @@ export function modApiFor(w: World, owner: string): ModApi {
     byType: (type) => w.entities.filter((e) => e.type === type),
     touches: (a, b) => touches(a, b),
     player: () => w.entities.find((e) => e.type === "player"),
-    input: () => w.input,
+    input: () => w.loadout.view(owner),
+    gear: (def) => w.loadout.gear(owner, def),
     onTick: (fn) => w.addHandler(owner, fn),
     burst: (x, y, color, n) => w.burst(x, y, color, n),
     rand: () => w.rand(),
