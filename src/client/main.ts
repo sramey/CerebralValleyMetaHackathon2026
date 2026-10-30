@@ -1112,19 +1112,20 @@ function syncInput(): void {
 // The drawer keeps its DOM across renders, so a knob can be dragged (bead r8n). A knob change
 // reloads the mod and the server echoes the tweak back, which renders the panel again: with the
 // old "empty the list, rebuild every card" render that replaced the slider mid-drag.
+function removeMod(mod: LoadedMod): void {
+  loader.unload(mod.id);
+  send({ kind: "undo", modId: mod.id });
+  say(`${mod.title} removed.`, "done");
+  renderMods();
+}
 const modsPanel = createModsPanel<LoadedMod>(modsEl, {
-  onUndo: (mod) => {
-    loader.unload(mod.id);
-    send({ kind: "undo", modId: mod.id });
-    say(`${mod.title} removed.`, "done");
-    renderMods();
-  },
+  onUndo: removeMod,
   onKnob: (mod, knob, value) => {
     loader.setKnob(mod.id, knob, value);
     send({ kind: "knob", modId: mod.id, knob, value });
   },
-  // Rate it / Undo buttons per card: built once, when the card is made.
-  decorate: (mod, head) => head.append(feedback.createModActions(mod, () => { loader.unload(mod.id); send({ kind: "undo", modId: mod.id }); say(`${mod.title} removed.`, "done"); renderMods(); })),
+  // "Rate it" buttons: built once, when the card is made. The card owns its Undo button.
+  decorate: (mod, head) => head.append(feedback.createVoteActions(mod)),
 });
 function renderMods(): void {
   moodCard.mount(modsEl); // the card keeps its own text; this only re-homes it (bug bv4)
