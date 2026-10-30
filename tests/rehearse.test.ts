@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { applyServerMsg, awareMiss, emptyCommandState, formatTable, metExpectation, parseCommandList, percentile, summarize, summarizeAll } from "../scripts/rehearse";
 import type { RehearsalRow } from "../scripts/rehearse";
 import type { MoodSpec, ServerMsg } from "../src/contract";
@@ -157,5 +158,36 @@ describe("awareMiss (bead 4fa)", () => {
     expect(awareMiss({ mood: "daytime" }, none)).toMatch(/expected mood/);
     expect(awareMiss({ noArt: true }, { ...none, arts: ["stair"] })).toMatch(/sprite art/);
     expect(awareMiss({ notSource: "ninja" }, { ...none, sources: ["type: 'ninja'"] })).toMatch(/forbidden/);
+  });
+});
+
+describe("the demo rehearsal set (scripts/rehearse-demo.json)", () => {
+  const parsed: unknown = JSON.parse(readFileSync(new URL("../scripts/rehearse-demo.json", import.meta.url), "utf8"));
+  const specs = parseCommandList(parsed);
+
+  it("holds the eight typed demo beats, in demo order", () => {
+    expect(specs.map((spec) => spec.cmd)).toEqual([
+      "add a bouncing green slime",
+      "make them faster",
+      "add a dragon, some coins, and make it rain",
+      "make it so my character can double jump",
+      "let me shoot fireballs",
+      "make me huge",
+      "make it spooky",
+      "undo",
+    ]);
+  });
+
+  it("keeps the checks the demo beats depend on", () => {
+    const byCmd = new Map(specs.map((spec) => [spec.cmd, spec]));
+    expect(byCmd.get("make me huge")?.expect).toBe("rejected-then-fixed");
+    expect(byCmd.get("make it spooky")?.mood).toBe("spooky");
+    expect(byCmd.get("make it so my character can double jump")?.source).toMatch(/player/);
+    // A projectile ability is code-drawn: no sprite sheet, or the mod's own art budget is spent.
+    expect(byCmd.get("let me shoot fireballs")?.noArt).toBe(true);
+    // "undo" only shows a revert if the mood beat runs before it in the same world.
+    const order = specs.map((spec) => spec.cmd);
+    expect(order.indexOf("make it spooky")).toBeLessThan(order.indexOf("undo"));
+    expect(order[order.length - 1]).toBe("undo");
   });
 });
