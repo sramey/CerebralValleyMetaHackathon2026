@@ -42,6 +42,13 @@ export function isSkyOrBackgroundEntity(e: Entity): boolean {
   return t === "sky" || t === "background" || t.includes("sky") || t.includes("background");
 }
 
+/** A cloud or cumulus layer entity: it still drifts in front of a themed backdrop (ADR 0067). */
+export function isCloudEntity(e: Entity): boolean {
+  if (e.solid || e.type === "player") return false;
+  const t = e.type.toLowerCase();
+  return t.includes("cloud") || t.includes("cumulus");
+}
+
 export function isParallaxOrSkyEntity(e: Entity): boolean {
   if (e.solid || e.type === "player") return false;
   const t = e.type.toLowerCase();

@@ -62,6 +62,29 @@ export interface MoodSpec {
   skyTop: number; skyBottom: number; ridgeFar: number; ridgeNear: number; moon: number; star: number; grass: number; soil: number;
   tint: number; grade: number; dim: number; fog: number; vignette: number;
   ambient: "none" | "fog" | "snow" | "embers" | "sparks";
+  /** Themed parallax scenery that replaces the starter scenery ("change the background to medieval", ADR 0067). */
+  backdrop?: ThemedBackdrop;
+  /** "background": the ask named only the backdrop, so sprites keep their look (no Muse Image edits). */
+  scope?: "world" | "background";
+}
+
+/** Landmarks and props the code-drawn backdrop can paint (ADR 0067). Spark picks from this list; nothing else is drawn. */
+export const BACKDROP_MOTIFS = [
+  "castle", "tower", "village", "church", "windmill", "farmhouse", "barn", "silo", "watertower", "city", "pyramid", "tent",
+  "pine", "oak", "deadtree", "palm", "cactus", "rock", "bush", "fence", "lamp", "torch", "haybale", "corn", "banner", "well", "cart",
+] as const;
+export type BackdropMotif = (typeof BACKDROP_MOTIFS)[number];
+
+/**
+ * A themed backdrop: the skyline shape plus what stands in each parallax band behind the play plane.
+ * `landmark` is the big set piece repeated far apart in the far band (a castle on a hill).
+ */
+export interface ThemedBackdrop {
+  skyline: "mountains" | "hills" | "flat";
+  landmark?: BackdropMotif;
+  far: BackdropMotif[];
+  mid: BackdropMotif[];
+  near: BackdropMotif[];
 }
 
 export interface Particle {

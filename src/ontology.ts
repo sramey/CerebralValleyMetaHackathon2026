@@ -1260,6 +1260,39 @@ const KNOWN_MOOD_WORDS: ReadonlySet<string> = new Set([
   "volcanic",
 ]);
 
+const BACKDROP_NOUN = "(?:background|backdrop|bg|scenery|landscape|setting|surroundings|parallax)";
+/** Filler that says "a background" without saying which one. */
+const BACKDROP_FILLER = /\b(?:parallax|paralax|background|backdrop|bg|scenery|scene|landscape|setting|style|styled|themed|theme|looking|look|new|cool|nice|different|whole|kind\s+of|sort\s+of|something|one|please)\b/gi;
+
+/**
+ * "Change the background to medieval", "change the background to be in an Indiana farm",
+ * "medieval parallax background" (ADR 0067). Returns the theme words, or null when the command
+ * is not about the backdrop. "Add a castle in the background" is a build, not a backdrop.
+ */
+export function detectBackdropCommand(command: string): string | null {
+  const clean = command.trim().replace(/[.!?,;:]+$/, "").trim().replace(/\s+/g, " ");
+  if (!clean || new RegExp(`\\b(?:in|on|into|to)\\s+(?:the|my|our)\\s+${BACKDROP_NOUN}$`, "i").test(clean)) return null;
+  const lead = "^(?:(?:please|can\\s+you|could\\s+you|let'?s|i\\s+want\\s+to)\\s+)?";
+  const change = new RegExp(`${lead}(?:change|set|switch|make|turn|swap|replace|redo|update)\\s+(?:the\\s+|my\\s+|our\\s+|this\\s+)?${BACKDROP_NOUN}(?:\\s+(?:background|backdrop|scenery))?\\s+(?:(?:to|into|with|for|so\\s+it(?:'s|\\s+is)?|so\\s+we(?:'re|\\s+are)?)\\s+)?(.+)$`, "i").exec(clean);
+  const named = change ? null : new RegExp(`${lead}(?:(?:give\\s+(?:me|us)|i\\s+want|use|add|make|show(?:\\s+me)?|put\\s+(?:up|in)|switch\\s+to|go\\s+to)\\s+)?(?:a\\s+|an\\s+|the\\s+|some\\s+)?(.+?)\\s+(?:parallax\\s+|paralax\\s+)?(?:background|backdrop|scenery|landscape)$`, "i").exec(clean);
+  const raw = (change ?? named)?.[1];
+  // "…to medieval and add a dragon" is a compound: the splitter gives each part its own route.
+  if (!raw || /(?:,|;|\b(?:and|then|also|plus)\s+(?:add|make|create|spawn|build|give|put|turn|change|remove|let)\b)/i.test(raw)) return null;
+  const phrase = raw
+    .replace(BACKDROP_FILLER, " ")
+    .replace(/^\s*(?:be|look|looks|feel)\s+(?:like\s+)?/i, " ")
+    .replace(/^\s*(?:(?:set|located|placed)\s+)?(?:in|on|at|like|of)\s+/i, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^(?:(?:a|an|the|some|in|on|at|of|with|like)\s+)+/i, "")
+    .replace(/\s+(?:a|an|the|in|on|at|of|with|and)$/i, "")
+    .trim()
+    .toLowerCase();
+  if (!/[a-z]{3}/.test(phrase) || phrase.split(" ").length > 6) return null;
+  if (/^(?:add|create|spawn|build|remove|undo|delete|change|set|switch|make|turn|swap|replace|bigger|smaller|darker|lighter|brighter)\b/.test(phrase)) return null;
+  return phrase;
+}
+
 /**
  * Deterministic detector for whole-world theme/mood commands (e.g. "Make this Christmas themed.",
  * "make it daytime", "make the world spooky", "christmas theme").
@@ -1268,6 +1301,9 @@ const KNOWN_MOOD_WORDS: ReadonlySet<string> = new Set([
 export function detectMoodCommand(command: string): string | null {
   const clean = command.trim().replace(/[.!?,;:]+$/, "").trim();
   if (!clean) return null;
+  // A new backdrop is a mood scoped to the background (ADR 0067).
+  const backdrop = detectBackdropCommand(clean);
+  if (backdrop) return backdrop;
 
   // 1. "<X> themed" / "<X> theme" / "<X> mood" / "<X> vibe":
   // Matches "Make this Christmas themed", "make it christmas themed", "make the world retro themed", "christmas theme", etc.
