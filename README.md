@@ -84,6 +84,7 @@ Open **http://127.0.0.1:8787/** (or your configured `PORT`) in Chrome, click the
 | **📷 Bring an object in** (top-right of the game): type what you're holding (e.g. `coffee mug`) and hold it to the webcam (or click **Upload a photo instead**) | SAM 3.1 finds it (green box; or click the object yourself), then it's cut out, pixelated and dropped into the game as a physics prop |
 | Click any creature or object | A radial menu: bigger, smaller, front, back, remove, plus 👍/👎 to teach the engine |
 | **Share this world (copy link)** in the side panel (open it with « at the top right) | Copies a link that reopens this exact world for anyone to remix |
+| Just reload, or restart the server | Your world saves itself (one autosave per browser, scrubbed of keys and personal paths) and comes back as you left it; **New world** in the side panel starts a blank one ([ADR 0070](docs/adr/0070-world-survives-reload.md)) |
 | Press **P** or click **PIPELINE** in the bottom-right | Live architecture pipeline view: see Spark, Wonder agent (with tools `inspect_world` / `run_playtest`), esbuild, the Verifier, and SAM 3.1 with real-time telemetry, plus live build numbers (landed %, first-try %, median time) |
 | `make it spooky` (or `neon`, `snowy`) | Spark art-directs a whole-world mood: the palette, fog and lighting change in ~3 s, then Muse Image redraws every AI sprite in the new style (~20–30 s). `undo` restores it |
 | `make this christmas themed` | Theme words restyle the world (no new code): snow-frosted surfaces, icy hills, falling snow |

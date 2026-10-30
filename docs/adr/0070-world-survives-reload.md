@@ -1,6 +1,6 @@
 # ADR 0070: The current world survives a reload and a server restart
 
-- **Status:** Draft
+- **Status:** Proposed
 - **Date:** 2026-10-30
 
 ## Context
