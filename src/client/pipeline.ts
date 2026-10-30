@@ -8,6 +8,7 @@ import { createStatsPanel } from "./stats-panel";
 import { isLiveBuildMsg } from "./stats-refresh";
 import { chain, stepLine } from "./agent-steps";
 import type { AgentStepMsg } from "./agent-steps";
+import { ON_DEMAND, ranNode } from "./pipeline-ran";
 
 type NodeId = "voice" | "spark" | "wonder" | "esbuild" | "verifier" | "live" | "image" | "sam";
 type Slot = "route" | "write" | "compile" | "verify";
@@ -74,6 +75,8 @@ export function createPipeline(host: HTMLElement): Pipeline {
   const counters = loadCounters();
   const lanes: Lane[] = [];
   const flash = new Map<NodeId, number>();
+  // Which models ran this session, and how many on-demand calls we saw (bead y0k).
+  const ran = new Map<NodeId, { n: number; at: Date }>();
   let open = false;
   let ticker = 0;
 
@@ -139,9 +142,15 @@ export function createPipeline(host: HTMLElement): Pipeline {
       const running = c.get(n.id) ?? 0;
       const flashed = (flash.get(n.id) ?? 0) > now;
       el.classList.toggle("on", running > 0 || flashed);
+      el.classList.toggle("ran", ran.has(n.id));
       el.querySelector(".pl-count")!.textContent = running > 1 ? `${running} builds` : running === 1 ? "building" : "";
       const last = n.slot ? [...lanes].reverse().find((l) => l.times[n.slot!] !== undefined) : undefined;
       el.querySelector(".pl-last")!.textContent = last ? fmt(last.times[n.slot!]) : "";
+      const seen = ran.get(n.id);
+      if (seen && ON_DEMAND.has(n.id)) {
+        if (running === 0) el.querySelector(".pl-count")!.textContent = seen.n === 1 ? "ran once" : `ran ${seen.n}x`;
+        el.querySelector(".pl-last")!.textContent = `last ${seen.at.toTimeString().slice(0, 8)}`;
+      }
       if (n.id === "wonder") {
         const tool = [...lanes].reverse().find((l) => l.phase === "running" && l.node === "wonder")?.tool;
         for (const t of el.querySelectorAll<HTMLElement>("[data-tool]")) t.classList.toggle("hot", running > 0 && t.dataset.tool === tool);
@@ -225,6 +234,11 @@ export function createPipeline(host: HTMLElement): Pipeline {
 
   function onMsg(msg: ServerMsg): void {
     const now = performance.now();
+    const proved = ranNode(msg);
+    if (proved) {
+      const prev = ran.get(proved);
+      ran.set(proved, { n: (prev?.n ?? 0) + (ON_DEMAND.has(proved) ? 1 : 0), at: new Date() });
+    }
     if (msg.kind === "transcript") lit("voice");
     else if (msg.kind === "routed") {
       // Name the model that actually answered on the Spark node (open weights or hosted).
@@ -236,7 +250,7 @@ export function createPipeline(host: HTMLElement): Pipeline {
       l.tool = msg.tool;
       lit("wonder");
     }
-    else if (msg.kind === "art") lit("image");
+    else if (msg.kind === "art" || (msg.kind === "restyled" && msg.url)) lit("image");
     else if (msg.kind === "segment") lit("sam");
     else if (msg.kind === "mod" && (msg.mod.art || msg.mod.artPending)) lit("image");
     else if (msg.kind === "stage" && msg.command) {
