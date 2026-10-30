@@ -1,8 +1,9 @@
 // Bead 852: a build orders a sprite sheet for every new creature or prop type it spawns,
 // cached sheets are reused, and all missing sheets are drawn in parallel. No per-build cap.
 import { describe, expect, it } from "vitest";
-import { planArtOrders } from "../server/art";
+import { isArtChangeRequest, planArtOrders } from "../server/art";
 import { drawPendingArt, planBuildArt } from "../server/art-orders";
+import { lookFor } from "../server/visual";
 
 const SOURCE = `
 export default {
@@ -91,5 +92,37 @@ describe("art orders for a multi-subject build (bead 852)", () => {
     const capped = planBuildArt(planArtOrders(SOURCE, COMMAND), { cached: () => null, spend: () => { spent.push(1); return spent.length < 2; } });
     expect(capped.pending.map((o) => o.key)).toEqual(["dragon-fly"]);
     expect(spent).toHaveLength(2); // the second refusal stops the rest
+  });
+
+  it("preserves art sheet key on modify/edit unless the request changes the art (dragon shoot fire regression)", () => {
+    const dragonShootFireSource = `
+    export default {
+      id: "rideable-dragon",
+      title: "Rideable Dragon",
+      setup(api) {
+        api.spawn({ type: "dragon", x: 180, y: 180, w: 84, h: 52, data: { flying: true } });
+        api.spawn({ type: "fireball", x: 200, y: 200, w: 20, h: 20, data: { fromPlayer: true } });
+      },
+      dispose(api) { for (const e of api.byType("dragon")) api.despawn(e.id); },
+    };`;
+
+    const existingArts = [{ key: "dragon-fly", url: "/art/gen/dragon-fly.webp" }];
+
+    // Modifying the dragon with "make it shoot fire" retains the flying dragon sheet key
+    const orders = planArtOrders(dragonShootFireSource, "make it shoot fire", undefined, existingArts);
+    expect(orders).toHaveLength(1);
+    expect(orders[0]!.type).toBe("dragon");
+    expect(orders[0]!.key).toBe("dragon-fly");
+    expect(orders[0]!.flying).toBe(true);
+
+    // lookFor never treats creatures with sprite art as effect looks even if the command contains effect words like "fire"
+    expect(lookFor("effect", undefined, ["dragon"])).toBeUndefined();
+    expect(lookFor("shape", "circle", ["dragon"])).toBeUndefined();
+
+    // isArtChangeRequest identifies whether an art change is requested
+    expect(isArtChangeRequest("make it shoot fire")).toBe(false);
+    expect(isArtChangeRequest("make it faster")).toBe(false);
+    expect(isArtChangeRequest("change the dragon art")).toBe(true);
+    expect(isArtChangeRequest("reskin the dragon")).toBe(true);
   });
 });

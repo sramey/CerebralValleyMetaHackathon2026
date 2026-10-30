@@ -142,6 +142,8 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #
 #rail { transition: transform .35s ease, visibility .35s ease; }
 #app.drawer-hidden { grid-template-columns: 1fr 0; }
 #app.drawer-hidden #rail { transform: translateX(105%); visibility: hidden; padding-left: 0; padding-right: 0; border-left: 0; overflow: hidden; }
+#app.drawer-hidden #sound-btn { top: 58px; right: 13px; }
+#app.drawer-hidden .hud-pos-top-right { top: 106px; }
 #drawer-toggle { position: absolute; right: 12px; top: 12px; z-index: 30; width: 42px; height: 42px; border-radius: 50%; background: #ffc94d; color: #171106; border: 2px solid #0b0e13; font-size: 20px; font-weight: 700; line-height: 1; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.5); pointer-events: auto; }
 #drawer-toggle:hover { background: #ffd97a; }
 #radial-menu { position: absolute; z-index: 28; width: 0; height: 0; pointer-events: none; --r: clamp(66px, 8.5vh, 76px); }

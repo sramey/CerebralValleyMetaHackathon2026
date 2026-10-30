@@ -148,13 +148,28 @@ export function findPoseBounds(
   }
   if (start >= 0) runs.push({ x0: start, x1: w - 1 });
 
-  // 3. Recursively split merged poses at the column with lowest pixel occupancy (valley).
-  // Dynamic threshold based on image width rather than a hardcoded 520 px.
-  const maxPoseW = Math.round(w * 0.28);
-  const splitCutoff = Math.min(maxPoseW, Math.round(w * 0.24));
-  while (runs.length < targetFrames || runs.some((r) => r.x1 - r.x0 + 1 > maxPoseW)) {
-    if (runs.length >= 6) break;
-    let widest = -1, widestW = splitCutoff;
+  // 3. If too many runs due to stray slivers, merge narrow runs separated by small gaps
+  if (runs.length > targetFrames) {
+    let i = 0;
+    while (i < runs.length - 1 && runs.length > targetFrames) {
+      const r1 = runs[i];
+      const r2 = runs[i + 1];
+      const gapW = r2.x0 - r1.x1 - 1;
+      const w1 = r1.x1 - r1.x0 + 1;
+      const w2 = r2.x1 - r2.x0 + 1;
+      if ((w1 < 30 || w2 < 30) && gapW <= 24) {
+        runs.splice(i, 2, { x0: r1.x0, x1: r2.x1 });
+      } else {
+        i++;
+      }
+    }
+  }
+
+  // 4. Recursively split merged poses at the column with lowest pixel occupancy (valley).
+  // Only split while runs.length < targetFrames so wide single poses (outstretched limbs/wings)
+  // are never sliced in half into partial leg/tail frames.
+  while (runs.length < targetFrames) {
+    let widest = -1, widestW = 0;
     for (let i = 0; i < runs.length; i++) {
       const wd = runs[i].x1 - runs[i].x0 + 1;
       if (wd > widestW) { widestW = wd; widest = i; }
@@ -217,6 +232,26 @@ export function findPoseBounds(
   return frames;
 }
 
+/**
+ * Align all pose bounds from a sprite sheet to a common baseline and height.
+ * Every frame canvas gets height = (maxBaseline - minTop), with the pose
+ * positioned so that the baseline aligns to the bottom of the canvas.
+ * This guarantees consistent scale (targetH / frame.height is constant)
+ * and consistent feet placement across idle, walk, stride, and airborne poses.
+ */
+export function alignPoseBounds(bounds: FrameBounds[]): FrameBounds[] {
+  if (bounds.length === 0) return [];
+  const minTop = Math.min(...bounds.map((b) => b.y));
+  const maxBaseline = Math.max(...bounds.map((b) => b.y + b.h));
+  const commonH = Math.max(1, maxBaseline - minTop);
+  return bounds.map((b) => ({
+    x: b.x,
+    y: minTop,
+    w: b.w,
+    h: commonH,
+  }));
+}
+
 export async function loadSpriteSheet(url: string): Promise<Texture[]> {
   try {
     const img = new Image();
@@ -276,7 +311,8 @@ export async function loadSpriteSheet(url: string): Promise<Texture[]> {
     }
     ctx.putImageData(data, 0, 0);
 
-    const bounds = findPoseBounds(w, h, px);
+    const tightBounds = findPoseBounds(w, h, px);
+    const bounds = alignPoseBounds(tightBounds);
     const textures: Texture[] = [];
     for (const b of bounds) {
       const frame = document.createElement("canvas");

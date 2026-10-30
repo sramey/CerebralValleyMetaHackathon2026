@@ -157,6 +157,7 @@ export interface HudWidget extends HudDef {
 export interface WaveSpawnOptions {
   type?: string;
   flyerType?: string;
+  allowFlyers?: boolean;
   screenWidth?: number;
   screenHeight?: number;
   groundY?: number;
@@ -216,6 +217,7 @@ export interface WaveControllerOptions {
   screenHeight?: number;
   enemyType?: string;
   flyerType?: string;
+  allowFlyers?: boolean;
   separationRadius?: number;
   separationStrength?: number;
   autoTick?: boolean;
@@ -393,7 +395,7 @@ export type ClientMsg =
   /** The mods in the player's world right now, in load order, sent before each command so the playtest runs in a copy of it (ADR 0013). */
   /** Make step `n` the world again, as a new step; nothing is deleted (ADR 0041). */
   | { kind: "timelineRestore"; n: number }
-  | { kind: "worldState"; mods: { id: string; values: Record<string, KnobValue> }[] }
+  | { kind: "worldState"; mods: { id: string; values: Record<string, KnobValue> }[]; /** `reset`: this is a brand-new world (ADR 0070), so drop every mod the session still holds. */ reset?: boolean }
   /** "How does this work?" (ADR 0043): explain one loaded mod's source in plain words. The
    *  server answers from its own copy of the source, so no code travels on this message. */
   | { kind: "explain"; modId: string }
@@ -404,8 +406,13 @@ export type ClientMsg =
   | { kind: "voiceStart" }
   | { kind: "voiceEnd"; cancel?: boolean }
   // Share links (ADR 0014). The server only ever saves mods it verified itself; the client just says which are loaded.
-  | { kind: "worldSave"; mods: { id: string; values: KnobValues }[] }
+  /** `slot` (ADR 0070) turns the save into the browser's own autosave: the same file is rewritten in
+   *  place instead of getting a new share id. Absent = the share button (a new id every time). */
+  | { kind: "worldSave"; mods: { id: string; values: KnobValues }[]; slot?: string }
   | { kind: "worldLoad"; id: string }
+  /** "Give me back the world this browser was last building" (ADR 0070). Answered with a `world`
+   *  frame marked `resumed`, or with `worldMissing` so the client can start fresh. */
+  | { kind: "worldResume"; id: string }
   // Export single-file HTML game (ADR 0042)
   | { kind: "worldExport"; mods: { id: string; values: KnobValues }[] }
   // Mood restyle (ADR 0017): the client lists the sprite sheets it has; the server edits each toward the mood anchor.
@@ -458,6 +465,18 @@ export type WorldMod =
 export interface TimelineStep { n: number; kind: "start" | "build" | "mood" | "undo" | "restore"; label: string; mood?: string; mods: { id: string; title: string }[] }
 
 export interface DemoWorld { id: string; title: string; blurb: string }
+
+/**
+ * The browser's own autosaved world (ADR 0070): a normal world file, but written by the client's
+ * autosave under a fixed id this browser keeps in its own storage, so a reload gets the same world
+ * back. The prefix is the whole safety story: only ids shaped like this can be rewritten in place,
+ * and only ids shaped like this are ever pruned.
+ */
+export const HOME_WORLD_PREFIX = "home-";
+/** Local storage key holding this browser's home slot id. Nothing else is stored there. */
+export const HOME_WORLD_KEY = "ttb.home";
+const HOME_WORLD_RE = new RegExp(`^${HOME_WORLD_PREFIX}[A-Za-z0-9_-]{8,32}$`);
+export const isHomeWorldId = (id: unknown): id is string => typeof id === "string" && HOME_WORLD_RE.test(id);
 
 /**
  * The impact numbers the game shows about itself (ADR 0027): the same aggregate
@@ -579,11 +598,15 @@ export type ServerMsg =
   | { kind: "timing"; command: string; ms: { route: number; write: number; compile: number; verify: number; total: number } }
   | { kind: "voiceState"; state: "ready" | "listening" | "error"; detail?: string }
   | { kind: "transcript"; text: string; final: boolean; ms?: { firstPartial: number; final: number } }
-  | { kind: "worldSaved"; id: string }
+  | { kind: "worldSaved"; id: string; /** true for an autosave (ADR 0070): no share link to announce. */ slot?: true }
   | { kind: "worldExported"; html: string; filename: string }
   /** The session's steps, newest last; `current` is the step the world is at right now (ADR 0041). */
   | { kind: "timeline"; steps: TimelineStep[]; current: number }
-  | { kind: "world"; id: string; mods: WorldMod[]; mood?: MoodSpec | null; restyled?: Record<string, string> }
+  /** `resumed`: the world this browser was last building (ADR 0070), not an opened link: the client
+   *  keeps its URL and says nothing about sharing. */
+  | { kind: "world"; id: string; mods: WorldMod[]; mood?: MoodSpec | null; restyled?: Record<string, string>; resumed?: true }
+  /** Nothing saved under that autosave slot (ADR 0070): start fresh. */
+  | { kind: "worldMissing"; id: string }
   /** A plain-words explanation of one mod (ADR 0043): `text` is three short sentences and
    *  `lines` are the key lines of its source, already resolved from the source itself. */
   | { kind: "explainResult"; modId: string; title: string; text: string; lines: { n: number; code: string }[]; cached: boolean; ms: number }

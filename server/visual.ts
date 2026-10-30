@@ -39,6 +39,9 @@ export function lookFor(visual: Visual | undefined, shape: ShapeName | undefined
     if (types.length > 0 && types.every((t) => artPlanFor(t) !== "none")) return undefined;
     return { visual, shape: shape ?? "circle", types };
   }
-  if (visual === "effect") return { visual, types };
+  if (visual === "effect") {
+    if (types.length > 0 && types.every((t) => artPlanFor(t) !== "none")) return undefined;
+    return { visual, types };
+  }
   return undefined;
 }

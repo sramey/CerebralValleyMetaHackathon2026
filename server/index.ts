@@ -5,7 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
-import { SIM, sheetsOf } from "../src/contract";
+import { isHomeWorldId, SIM, sheetsOf } from "../src/contract";
 import { detectBackdropCommand, detectLevelCommand, detectMoodCommand, extractSpawnedEntities, isPlayerAbilityCommand, isPlayerCommand } from "../src/ontology";
 import { moodKey, moodSpecFor, pool, restyleSheet, sheetPath } from "./mood";
 import { fallbackVisual, lookFor, parseShape, parseVisual } from "./visual";
@@ -35,7 +35,7 @@ import { activeLogFile, logBuild, logMood, saveModSources } from "./createlog";
 import { createStatsHandler } from "./stats-feed";
 import { createBrainHandler } from "./brain";
 import { genreWarnings } from "./genre";
-import { artCachedUrl, artCachedUrlByKey, artKeyForType, clearCachedArt, generateSubjectArt, pickArtType, pickSkin, planArtOrders, purgeLegacyArt, subjectArtPrompt, IMAGE_MODEL } from "./art";
+import { artCachedUrl, artCachedUrlByKey, artKeyForType, clearCachedArt, generateSubjectArt, isArtChangeRequest, pickArtType, pickSkin, planArtOrders, purgeLegacyArt, subjectArtPrompt, IMAGE_MODEL } from "./art";
 import { drawPendingArt, planBuildArt } from "./art-orders";
 import { aiReceipt, plainReceipt } from "./receipt";
 import { learnFromFix, learnRuleFromFeedback, learnSkillFromFeedback } from "./learn";
@@ -43,7 +43,8 @@ import { segmentPhoto } from "./photo";
 import { Budget, readLimits } from "./budget";
 import type { Kind } from "./budget";
 import { Timeline, type Snapshot } from "./timeline";
-import { isWorldId, restyledForWorld, snapshotWorld, WorldStore } from "./worlds";
+import { isWorldId, restyledForWorld, reuseStoredMods, snapshotWorld, WorldStore } from "./worlds";
+import type { StoredWorld } from "./worlds";
 import { generateExportHtml } from "./export";
 import { createStaticHandler } from "./static";
 import { createVoiceHub } from "./voice";
@@ -80,7 +81,7 @@ interface ManifestRec {
 // Each connection has its own world (ADR 0014): a public server must never mix visitors' mods.
 /** A screen verdict the build path may still read, tagged with the command it belongs to (ADR 0044). */
 interface PendingScreen { command: string; verdict: PendingVerdict }
-interface Session { /** Family-test tester index and session id once the page said ?tester=N (ADR 0034). */ tester?: { n: number; sid: string }; manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string>; mood?: MoodSpec; moodMods?: Set<string>; /** Level mods a sketch replaced, by the sketch mod id, so undo can put them back (bug j2t). */ levelStash?: Map<string, ManifestRec[]>; restyled?: Record<string, string>; /** Time-travel steps and the command that probably explains the next one (ADR 0041). */ timeline?: Timeline; lastCommand?: { text: string; at: number }; tlTimer?: ReturnType<typeof setTimeout>; /** Kid-safe verdict the screen did not wait for (ADR 0044). */ pendingSafety?: PendingScreen; /** Builds this connection can still cancel, keyed by command (ADR 0060). */ cancel?: CancelRegistry }
+interface Session { /** Family-test tester index and session id once the page said ?tester=N (ADR 0034). */ tester?: { n: number; sid: string }; manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string>; mood?: MoodSpec; moodMods?: Set<string>; /** Level mods a sketch replaced, by the sketch mod id, so undo can put them back (bug j2t). */ levelStash?: Map<string, ManifestRec[]>; restyled?: Record<string, string>; /** Time-travel steps and the command that probably explains the next one (ADR 0041). */ timeline?: Timeline; lastCommand?: { text: string; at: number }; tlTimer?: ReturnType<typeof setTimeout>; /** Kid-safe verdict the screen did not wait for (ADR 0044). */ pendingSafety?: PendingScreen; /** Builds this connection can still cancel, keyed by command (ADR 0060). */ cancel?: CancelRegistry; /** Set once an autosave (ADR 0070) has been refused, so the player is told once, not every change. */ slotWarned?: boolean }
 const sessions = new WeakMap<WebSocket, Session>();
 function sess(ws: WebSocket): Session {
   let s = sessions.get(ws);
@@ -1142,14 +1143,26 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     const fb = route.visual ? undefined : fallbackVisual(`${command} ${artType ?? ""}`);
     const visual: Visual | undefined = route.visual ?? fb?.visual;
     const look = artType ? lookFor(visual, route.shape ?? fb?.shape, [artType.toLowerCase()]) : undefined;
+    const existingArts = editRec ? [...(editRec.art ? [editRec.art] : []), ...(editRec.arts ?? [])] : undefined;
     const artPlan = artType && !look
-      ? planBuildArt(planArtOrders(source, command, route.visual), { cached: artCachedUrlByKey, spend: () => spend(ws, "image") })
+      ? planBuildArt(planArtOrders(source, command, route.visual, existingArts), { cached: artCachedUrlByKey, spend: () => spend(ws, "image") })
       : { extra: [], pending: [] };
-    const art = artPlan.art;
+    let art = artPlan.art;
     const artPending = artPlan.artPending;
     const artPendingList = artPlan.artPendingList;
-    const extraArt = artPlan.extra;
+    const extraArt = [...artPlan.extra];
     const pendingArts = artPlan.pending;
+    // A modify/replace of a mod must keep its art (sheet key) unless the request changes the art
+    if (editRec && !isArtChangeRequest(command)) {
+      if (!art && editRec.art) art = editRec.art;
+      const allKeys = new Set([art?.key, ...extraArt.map((a) => a.key)].filter(Boolean));
+      for (const ea of editRec.arts ?? (editRec.art ? [editRec.art] : [])) {
+        if (!allKeys.has(ea.key)) {
+          extraArt.push(ea);
+          allKeys.add(ea.key);
+        }
+      }
+    }
     // A genre change re-skins the player (ADR 0066): its own sheet, cached or ordered like any other art.
     let skinArt: { key: string; url: string } | undefined;
     let skinPending: string | undefined;
@@ -1326,7 +1339,21 @@ function handleWorldSave(ws: WebSocket, msg: Extract<ClientMsg, { kind: "worldSa
   const requested = Array.isArray(msg.mods) ? msg.mods.filter((m) => m && typeof m.id === "string") : [];
   const s = sess(ws);
   const mods = snapshotWorld(requested, s.manifest, BUILTIN_IDS);
-  const saved = worlds.save(mods, s.mood, restyledForWorld(s.mood, mods, s.restyled));
+  const restyled = restyledForWorld(s.mood, mods, s.restyled);
+  // The browser's own autosave (ADR 0070): rewrite its fixed file, no share link to announce.
+  if (msg.slot) {
+    // A server that restarted (or a reconnect: sessions are per socket) has no manifest for mods the
+    // page still shows, so the slot's own file supplies them instead of being emptied.
+    const kept = reuseStoredMods(requested, mods, worlds.get(msg.slot));
+    const saved = worlds.saveSlot(msg.slot, kept, s.mood, restyledForWorld(s.mood, kept, s.restyled));
+    if ("error" in saved) {
+      // Quiet on purpose: an autosave failing is not something the player asked for. Say it once.
+      if (!s.slotWarned) { s.slotWarned = true; send(ws, { kind: "say", text: saved.error }); }
+      console.warn(`[autosave] ${msg.slot}: ${saved.error}`);
+    }
+    return;
+  }
+  const saved = worlds.save(mods, s.mood, restyled);
   if ("error" in saved) send(ws, { kind: "say", text: saved.error });
   else send(ws, { kind: "worldSaved", id: saved.id });
 }
@@ -1345,10 +1372,12 @@ function handleWorldExport(ws: WebSocket, msg: Extract<ClientMsg, { kind: "world
   }
 }
 
-function handleWorldLoad(ws: WebSocket, msg: Extract<ClientMsg, { kind: "worldLoad" }>): void {
-  const w = isWorldId(msg.id) ? worlds.get(msg.id) : null;
-  if (!w) { send(ws, { kind: "say", text: "That world link doesn't exist (any more). Start fresh or open a demo world." }); return; }
-  // The session now holds exactly this world, so remixing (edit/undo/tweak) works on it.
+/**
+ * Make one stored world this session's world: seed the manifest so remixing (edit/undo/tweak)
+ * works on it, and tell the client what it now has. Shared by an opened link and by the browser's
+ * own autosave (ADR 0070).
+ */
+function applyStoredWorld(ws: WebSocket, w: StoredWorld, resumed: boolean): void {
   const s = sess(ws);
   const manifest = s.manifest;
   manifest.clear();
@@ -1359,7 +1388,27 @@ function handleWorldLoad(ws: WebSocket, msg: Extract<ClientMsg, { kind: "worldLo
   s.moodMods = w.mood ? new Set(manifest.keys()) : undefined;
   const restyled = restyledForWorld(w.mood, w.mods, w.restyled);
   s.restyled = restyled;
-  send(ws, { kind: "world", id: w.id, mods: w.mods as WorldMod[], ...(w.mood ? { mood: w.mood } : {}), ...(restyled ? { restyled } : {}) });
+  worldOf.set(ws, w.mods.map((m) => ({ id: m.id, values: m.values ?? {} })));
+  send(ws, { kind: "world", id: w.id, mods: w.mods as WorldMod[], ...(w.mood ? { mood: w.mood } : {}), ...(restyled ? { restyled } : {}), ...(resumed ? { resumed: true as const } : {}) });
+}
+
+function handleWorldLoad(ws: WebSocket, msg: Extract<ClientMsg, { kind: "worldLoad" }>): void {
+  const w = isWorldId(msg.id) ? worlds.get(msg.id) : null;
+  if (!w) { send(ws, { kind: "say", text: "That world link doesn't exist (any more). Start fresh or open a demo world." }); return; }
+  // The session now holds exactly this world, so remixing (edit/undo/tweak) works on it.
+  applyStoredWorld(ws, w, false);
+}
+
+/**
+ * Give a browser back the world it was last building (ADR 0070). The slot id comes from the
+ * client's own local storage, so it names its own file and never another visitor's; an empty or
+ * unknown slot answers `worldMissing` and the client starts fresh.
+ */
+function handleWorldResume(ws: WebSocket, msg: Extract<ClientMsg, { kind: "worldResume" }>): void {
+  const w = isHomeWorldId(msg.id) ? worlds.get(msg.id) : null;
+  if (!w || w.mods.length === 0) { send(ws, { kind: "worldMissing", id: msg.id }); return; }
+  applyStoredWorld(ws, w, true);
+  console.log(`[autosave] resumed ${msg.id} (${w.mods.length} mods)`);
 }
 
 /** "How does this work?" (ADR 0043): explain one loaded mod's code in plain words, from the
@@ -1455,6 +1504,8 @@ function dispatchClientMsg(ws: WebSocket, msg: ClientMsg): void {
   if (msg.kind === "worldState") {
     if (Array.isArray(msg.mods)) {
       const prev = new Set((worldOf.get(ws) ?? []).map((m) => m.id));
+      // "New world" (ADR 0070): the client says nothing else survived, so nothing else may edit-play.
+      if (msg.reset === true) { manifest.clear(); sess(ws).levelStash?.clear(); }
       worldOf.set(ws, msg.mods.filter((m) => m && typeof m.id === "string").map((m) => ({ id: m.id, values: m.values ?? {} })));
       for (const m of worldOf.get(ws) ?? []) if (!prev.has(m.id)) noteTouched(sess(ws).recent, m.id);
       noteTimelineSoon(ws);
@@ -1462,6 +1513,7 @@ function dispatchClientMsg(ws: WebSocket, msg: ClientMsg): void {
     adoptingOf.set(ws, adoptBuiltins(manifest, (worldOf.get(ws) ?? []).map((m) => m.id)));
   } else if (msg.kind === "worldSave") handleWorldSave(ws, msg);
   else if (msg.kind === "worldLoad") handleWorldLoad(ws, msg);
+  else if (msg.kind === "worldResume") handleWorldResume(ws, msg);
   else if (msg.kind === "worldExport") handleWorldExport(ws, msg);
   else if (msg.kind === "feedback") {
     handleFeedback(ws, msg).catch((err) => {
@@ -1610,6 +1662,11 @@ wss.on("connection", (ws: WebSocket, req) => {
 // One-time cleanup of legacy terrain sheets, explicitly at startup (never an import side effect, ADR 0031).
 const purgedArt = purgeLegacyArt();
 if (purgedArt.length > 0) console.log(`purged legacy art sheets: ${purgedArt.join(", ")}`);
+// Autosaved worlds nobody reopened for two weeks go, so a long-lived server does not fill up (ADR 0070).
+try {
+  const prunedWorlds = worlds.pruneSlots();
+  if (prunedWorlds > 0) console.log(`pruned ${prunedWorlds} old autosaved world(s)`);
+} catch { /* a read-only data dir still serves and shares worlds */ }
 httpServer.listen(PORT, HOST, () => {
   console.log(`meta server listening on ws://${HOST}:${PORT} (client + websocket on one port)`);
   console.log(`open http://${HOST}:${PORT}/ in Chrome`);
