@@ -146,6 +146,32 @@ export function receiptSteps(r: BuildReceipt): ReceiptStep[] {
   if (r.origin === "ai" && r.timings) {
     steps.push({ tone: "live", title: "Hot-loaded while you played", by: "engine", lines: [`No restart. ${r.proof.fixed ? "Fixed and verified" : "Verified"} in ${(r.timings.total / 1000).toFixed(1)} s from your words.`] });
   }
+
+  if (r.review) {
+    const rev = r.review;
+    const by = modelName(rev.model, true);
+    const title = rev.verdict === "fix"
+      ? (rev.accepted ? "Reviewed & improved (open weights)" : "Reviewed (patch rejected)")
+      : "Reviewed (open weights)";
+    const lines: string[] = [];
+    if (rev.issues.length > 0) {
+      for (const iss of rev.issues) {
+        lines.push(rev.accepted ? "Fixed: " + iss : "Issue: " + iss);
+      }
+    } else {
+      lines.push("No bugs or issues found: clean mod.");
+    }
+    if (rev.accepted) {
+      lines.push("Verified and hot-swapped into the live world.");
+    }
+    steps.push({
+      tone: rev.accepted ? "live" : "model",
+      title,
+      by,
+      lines,
+      secs: secs(rev.ms),
+    });
+  }
   return steps;
 }
 

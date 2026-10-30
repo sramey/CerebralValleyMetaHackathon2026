@@ -138,6 +138,23 @@ describe("receiptSteps", () => {
     expect(steps.find((s) => s.tone === "proof")?.checks?.length).toBe(3);
   });
 
+
+  it("includes open-weights reviewer step in receipt when review is present", () => {
+    const r = aiReceipt({ modId: "b", title: "Ball", command: "add a ball", route, source: MOD, rejected: [], tools: [], turns: 1, playtests: 1, msPerFrame: 0.001, timings });
+    r.review = {
+      model: "meta-models/muse-spark-open",
+      verdict: "fix",
+      issues: ["fixed ball despawn leak"],
+      accepted: true,
+      ms: 1200,
+    };
+    const steps = receiptSteps(r);
+    const revStep = steps.find((step) => step.title.includes("Reviewed & improved"));
+    expect(revStep).toBeDefined();
+    expect(revStep?.by).toBe("Muse Spark Open (open weights)");
+    expect(revStep?.lines[0]).toBe("Fixed: fixed ball despawn leak");
+    expect(revStep?.tone).toBe("live");
+  });
   it("code-drawn art makes no image claim", () => {
     const r = aiReceipt({ modId: "b", title: "Ball", command: "add a ball", route, source: MOD, rejected: [], tools: [], turns: 1, playtests: 1, msPerFrame: 0.001, timings, art: { model: "code", subject: "ball", state: "code-drawn" } });
     const art = receiptSteps(r).find((s) => s.tone === "art")!;

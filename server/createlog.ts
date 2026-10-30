@@ -150,3 +150,23 @@ export function logMood(rec: { mood: string; ms?: number }): void {
     /* logging must not break anything */
   }
 }
+
+/**
+ * Append one open-weights review record (ADR 0067) to the same JSONL file. Never throws.
+ */
+export function logReview(rec: {
+  modId: string;
+  command: string;
+  model: string;
+  verdict: "ok" | "fix";
+  issues: string[];
+  accepted: boolean;
+  ms: number;
+}): void {
+  try {
+    mkdirSync(dirname(activeLog), { recursive: true });
+    appendFileSync(activeLog, JSON.stringify({ kind: "review", ts: new Date().toISOString(), ...rec }) + "\n");
+  } catch {
+    /* logging must not break anything */
+  }
+}
