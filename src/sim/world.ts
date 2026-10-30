@@ -49,6 +49,9 @@ export class World {
   private rng: () => number;
   private grid = new SolidGrid();
 
+  /** Set by the client: does this entity have drawn art? Unset (headless) means yes (ADR 0061). */
+  hasArt?: (e: Entity) => boolean;
+
   constructor(seed = 1337) {
     this.rng = createRng(seed);
   }
@@ -533,12 +536,12 @@ export class World {
       const a = e.data.attachedTo;
       if (a !== undefined && a !== "player" && (typeof a === "number" || typeof a === "string")) {
         const wearer = wearerOf(e, this.entities, player);
-        if (wearer && e.data.pickup !== true) mountGear(e, wearer);
+        if (wearer && e.data.pickup !== true) mountGear(e, wearer, undefined, this.hasArt?.(wearer) ?? true);
         continue;
       }
       if (!player) continue;
       const isHeld = e.data.heldByPlayer === true || e.data.equipped === true || a === "player";
-      if (isHeld || (traitsOf(e.type).equipment && !notPlayersGear(e))) mountGear(e, player);
+      if (isHeld || (traitsOf(e.type).equipment && !notPlayersGear(e))) mountGear(e, player, undefined, this.hasArt?.(player) ?? true);
     }
 
     // Post-step 2: Universal projectile collision & enemy combat (bead 578). A projectile a mod

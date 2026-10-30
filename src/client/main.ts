@@ -614,12 +614,13 @@ function formatRadialLabel(type: string): string {
 }
 const scaleOverride = new Map<number, number>();
 
+function hasDrawnArt(e: Entity): boolean {
+  return framesFor(framesBySubject, e.type, e.type === "player").length >= 1 && !kindOf(e.type);
+}
+world.hasArt = hasDrawnArt; // gear sockets measure the body the eye sees (ADR 0061)
+
 function visualHeightOf(e: Entity): number {
-  const frames = framesFor(framesBySubject, e.type, e.type === "player");
-  if (frames.length >= 1 && !kindOf(e.type)) {
-    return visualHeight(e);
-  }
-  return e.h;
+  return visualHeight(e, hasDrawnArt(e));
 }
 
 function positionRadialMenu(e: Entity, camX: number, camY: number): void {
