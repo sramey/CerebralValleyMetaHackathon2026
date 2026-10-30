@@ -58,4 +58,9 @@ describe("a pronoun ask outranks the router's 'player' target (bug cps)", () => 
     expect(resolveRoute({ action: "tweak", target: "player" }, ctx("make them faster", world, ["deleted-mod"])).route)
       .toMatchObject({ action: "tweak", target: "player" });
   });
+
+  it("keeps the player as the second choice when the newest mod has no knob for the ask", () => {
+    expect(resolveRoute({ action: "tweak", target: "player" }, ctx("make them jump higher", world, ["bouncing-slime"])).route)
+      .toEqual({ action: "tweak", target: "player", knob: "jump", value: 1080 });
+  });
 });
