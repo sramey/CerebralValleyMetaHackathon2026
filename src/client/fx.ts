@@ -62,7 +62,7 @@ export class Fx {
   private seen = new WeakSet<Particle>();
   private blasts: Blast[] = [];
   private splashes: Splash[] = [];
-  private lastDrops = new Map<number, { x: number; y: number }>();
+  private lastDrops = new Map<number, { x: number; y: number; land: boolean }>();
   private clock = 0;
   private shake = 0;
   private mist = 0;
@@ -185,7 +185,14 @@ export class Fx {
   private entities(world: World, W: number, H: number, isEffect: (type: string) => boolean): number {
     const g = this.g;
     let drops = 0;
-    const now = new Map<number, { x: number; y: number }>();
+    const now = new Map<number, { x: number; y: number; land: boolean }>();
+    const solids = world.entities.filter((o) => o.solid && !isEffect(o.type));
+    /** Top of the first solid surface under x at or below fromY, or null over a pit (weather must not splash in mid-air). */
+    const surfaceUnder = (x: number, fromY: number): number | null => {
+      let best: number | null = null;
+      for (const s of solids) if (x >= s.x && x <= s.x + s.w && s.y >= fromY - 2 && (best === null || s.y < best)) best = s.y;
+      return best;
+    };
     for (const e of world.entities) {
       if (!isEffect(e.type)) continue;
       const t = e.type.toLowerCase();
@@ -200,12 +207,12 @@ export class Fx {
       if (t.includes("rain") || t.includes("drop")) {
         drops++;
         const cx = x + e.w / 2;
-        const groundScreenY = 400 - this.camY;
-        const endY = Math.min(y + e.h, groundScreenY);
+        const surf = surfaceUnder(e.x + e.w / 2, e.y);
+        const endY = surf === null ? y + e.h : Math.min(y + e.h, surf - this.camY);
         if (endY > y - e.vy * 0.03) {
           g.moveTo(cx - e.vx * 0.03, y - e.vy * 0.03).lineTo(cx, endY).stroke({ width: 1.6, color: 0xbfe6ff, alpha: 0.55, cap: "round" });
         }
-        now.set(e.id, { x: e.x + e.w / 2, y: Math.min(e.y + e.h, 400) });
+        now.set(e.id, { x: e.x + e.w / 2, y: surf === null ? e.y + e.h : Math.min(e.y + e.h, surf), land: surf !== null });
       } else if (t.includes("snow") || t.includes("blizzard")) {
         drops++;
         const cx = x + e.w * 0.5;
@@ -232,12 +239,13 @@ export class Fx {
         }
 
         // Soft snow puff & accumulation when touching ground
-        if (e.onGround || e.y + e.h >= 396) {
-          const groundScreenY = 400 - this.camY;
+        const snowSurf = surfaceUnder(e.x + e.w * 0.5, e.y);
+        if (snowSurf !== null && (e.onGround || e.y + e.h >= snowSurf - 4)) {
+          const groundScreenY = snowSurf - this.camY;
           this.puff(cx, groundScreenY - 1, 7 + sizeSeed * 2, 0xffffff, 0.18, false);
           g.ellipse(cx, groundScreenY, 4 + sizeSeed, 1.4).fill({ color: 0xffffff, alpha: 0.65 });
         }
-        now.set(e.id, { x: e.x + e.w * 0.5, y: Math.min(e.y + e.h, 400) });
+        now.set(e.id, { x: e.x + e.w * 0.5, y: snowSurf === null ? e.y + e.h : Math.min(e.y + e.h, snowSurf), land: snowSurf !== null });
       } else if (t.includes("spark") || t.includes("ember") || t.includes("firefly")) {
         const cx = x + e.w * 0.5;
         const cy = y + e.h * 0.5;
@@ -271,7 +279,7 @@ export class Fx {
     let gone = 0;
     for (const id of this.lastDrops.keys()) if (!now.has(id)) gone++;
     if (gone > 0 && gone < 40) {
-      for (const [id, p] of this.lastDrops) if (!now.has(id)) this.splashes.push({ x: p.x, y: p.y, age: 0 });
+      for (const [id, p] of this.lastDrops) if (!now.has(id) && p.land) this.splashes.push({ x: p.x, y: p.y, age: 0 });
       if (this.splashes.length > 60) this.splashes.splice(0, this.splashes.length - 60);
     }
     this.lastDrops = now;
@@ -308,7 +316,7 @@ export class Fx {
       s.age += dt;
       const q = s.age / SPLASH_LIFE;
       if (q >= 1) continue;
-      const syClamped = Math.min(s.y, 400);
+      const syClamped = s.y;
       const x = s.x - this.camX, y = syClamped - this.camY;
       g.ellipse(x, y, 3 + q * 9, 1.2 + q * 3).stroke({ width: 1, color: 0xdff3ff, alpha: (1 - q) * 0.7 });
       for (const vx of [-34, 0, 34]) {
