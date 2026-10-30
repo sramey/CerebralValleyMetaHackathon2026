@@ -81,9 +81,9 @@ Open **http://127.0.0.1:8787/** (or your configured `PORT`) in Chrome, click the
 | Type `add a bouncing green slime` in the orb bar at the top (or **hold Shift and say it**) | Spark routes it, Wonder writes a mod, the verifier playtests it, and it hot-loads in ~10–20 s while you keep playing; its sprite art is drawn after that (about 15–30 s, shown as a pixel-noise placeholder until it lands) |
 | `make me huge` | The playtest bot finds you can't fit through the gap, the change is **rejected with a reason**, Wonder fixes it as a tool-using agent, and it lands. Watch the ghost window |
 | `make it rain`, `add trees`, `add a dragon` | Muse Image draws art on demand; a digitize placeholder shows until it arrives. Dynamic HUD widgets appear on the top-left |
-| **Bring an object in (camera)** in the side panel: type what you're holding (e.g. `coffee mug`) and hold it to the webcam (or click **Upload a photo instead**) | SAM 3.1 finds it (green box; or click the object yourself), then it's cut out, pixelated and dropped into the game as a physics prop |
+| **📷 Bring an object in** (top-right of the game): type what you're holding (e.g. `coffee mug`) and hold it to the webcam (or click **Upload a photo instead**) | SAM 3.1 finds it (green box; or click the object yourself), then it's cut out, pixelated and dropped into the game as a physics prop |
 | Click any creature or object | A radial menu: bigger, smaller, front, back, remove, plus 👍/👎 to teach the engine |
-| **Share this world (copy link)** in the side panel | Copies a link that reopens this exact world for anyone to remix |
+| **Share this world (copy link)** in the side panel (open it with « at the top right) | Copies a link that reopens this exact world for anyone to remix |
 | Press **P** or click **PIPELINE** in the bottom-right | Live architecture pipeline view: see Spark, Wonder agent (with tools `inspect_world` / `run_playtest`), esbuild, the Verifier, and SAM 3.1 with real-time telemetry, plus live build numbers (landed %, first-try %, median time) |
 | `make it spooky` (or `neon`, `snowy`) | Spark art-directs a whole-world mood: the palette, fog and lighting change in ~3 s, then Muse Image redraws every AI sprite in the new style (~20–30 s). `undo` restores it |
 | `make this christmas themed` | Theme words restyle the world (no new code): snow-frosted surfaces, icy hills, falling snow |
@@ -92,7 +92,7 @@ Open **http://127.0.0.1:8787/** (or your configured `PORT`) in Chrome, click the
 | `build a volcano` | A real drawn prop, not a flat shape: named things get Muse Image art and are sliced pose by pose ([item quality review](docs/process/item-quality-review.md)). Big set-pieces sit on the ground behind the play layer, and lava, rocks and sparks are glowing shaded particles |
 | `add some stairs` | Wonder builds code-drawn stone steps; the player walks up them |
 | `give me a gun`, then press **F** | Equips a hand cannon; F (or X) fires shots that damage enemies |
-| **✏️ Draw a level** (or say "let me draw a level") | Sketch ledges, coins and enemies over the game; Wonder reads the drawing and builds it |
+| **✏️ Draw a level** (top-right of the game, or say "let me draw a level") | Sketch ledges, coins and enemies over the game; Wonder reads the drawing and builds it |
 | **⏪ Time travel** (strip under the stage) | Every build, mood and undo is a dot; hover one to see that world, Restore brings it back as a new step (nothing is ever deleted) |
 | **⬇ Download game** (side panel) | Saves your world as one HTML file that plays offline in any browser, no server or AI needed |
 | Click anything → **How was this made?** (gold receipt icon) in the radial menu | The receipt for that object: your words, how Spark routed them, Wonder's code and its own test, the draft the playtest rejected and the fix, each verifier check ticking green, the Muse Image sheet beside its cut-out, and a time bar. No model call |
@@ -216,7 +216,7 @@ Never commit keys. `.env` is gitignored.
 - **Themed backdrops, item quality, UI:** "change the background to medieval" repaints the sky and scenery with no model call ([ADR 0067](docs/adr/0067-themed-parallax-backdrops.md)); named props get real art with pose-bound sheet slicing, not flat shapes; the health bar draws above every sprite and follows size changes; undoing a mood restores the world cleanly.
 - **Rehearsed:** the eight demo commands ran 20 times each against the live server, with pass rates and timings in [docs/process/rehearsal-20x.md](docs/process/rehearsal-20x.md).
 - **Open-weights reviewer:** Muse Spark Open reviews finished builds in the background and swaps in verified fixes ([ADR 0068](docs/adr/0068-open-weights-build-reviewer.md)).
-- **What it has learned:** the side-panel button opens a live scorecard of the reviewer, each fix with its code diff and the rule it taught, plus the rules and skills library; works without the open-weights key ([ADR 0069](docs/adr/0069-what-it-has-learned-area.md)).
+- **What it has learned:** the gold **🧠 What it has learned** button at the top right of the game opens a live scorecard of the reviewer, each fix with its code diff and the rule it taught, plus the rules and skills library; works without the open-weights key ([ADR 0069](docs/adr/0069-what-it-has-learned-area.md)).
 - Tests: 900+ passing (`npm test`, green in a fresh clone with no keys), typecheck clean, production build green.
 
 **Art pipeline: first proof (2026-10-27)**
