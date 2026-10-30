@@ -88,3 +88,6 @@ aimed it at `player`; only "me/my/I" still means the player. The rule lives in
 A NAMED noun ("make the slimes faster") that matches a loaded mod now outranks a router target of
 `player` too, in the same rule; "me/my character" still means the player. If that mod has no knob
 for the ask, the route becomes an edit of the named mod, never a tweak of the player.
+
+Bead 5w1 (10-30): the client's local "faster"/"jump higher" shortcut (`src/client/local-asks.ts`) now answers
+only explicit player asks or, offline, anything else; a named thing or pronoun goes to the server.

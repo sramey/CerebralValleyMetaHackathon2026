@@ -16,6 +16,7 @@ import { Sound, buildSfx } from "./sound";
 import { createTester } from "./tester";
 import { createOnboarding, createSoundButton, plainBuildMessage } from "./onboard";
 import { Portal } from "./portal";
+import { localRelativeAsk } from "./local-asks";
 import { visualHeight } from "../sim/sockets";
 import { drawCliff, drawHoop, drawShape, drawTetherGear, isCliff, isTetherGear, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
 import { celestialPos, computeDesiredCamY, depthFog, drawContactShadows, drawDistantMountains, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
@@ -1106,13 +1107,12 @@ function handleLocal(text: string): boolean {
   if (n === "parallax" || n === "parallax background" || n === "parallax forest" || n === "parallax vista") { loadLocal(parallaxMod); return true; }
   if (n === "chicken") { loadLocal(chickenMod); return true; }
   if (n === "swarm" || n === "swarms" || n === "wave" || n === "waves") { loadLocal(swarmMod); return true; }
-  // A bare pronoun ("make them faster") names whatever the player added last, which is the server's
-  // short-term memory: it goes there instead of speeding the player up (bug cps). "make me / my
-  // character faster" is about the player, and the local paths below answer that with no server.
-  const aboutPlayer = /\b(?:me|my|mine|myself|i|player|character|hero|ninja|avatar)\b/.test(t);
-  const pronounAsk = /\b(?:it|them|they|those|these|that)\b/.test(t) && !aboutPlayer;
-  if (!pronounAsk && t.includes("jump higher")) { tweak("player", "jump", 880, "Jump raised."); return true; }
-  if (!pronounAsk && t.includes("faster")) {
+  // Only an ask about the player is answered here; pronouns and named things ("make the slimes
+  // faster") go to the server, whose route rules pick the mod (bugs cps, 5w1).
+  const serverUp = ws?.readyState === WebSocket.OPEN || ws?.readyState === WebSocket.CONNECTING;
+  const localAsk = localRelativeAsk(t, serverUp);
+  if (localAsk === "jump") { tweak("player", "jump", 880, "Jump raised."); return true; }
+  if (localAsk === "speed") {
     if (loader.has("enemies")) tweak("enemies", "speed", 140, "Walkers sped up.");
     else tweak("player", "speed", 380, "Player sped up.");
     return true;
