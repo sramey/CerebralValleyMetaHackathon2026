@@ -59,7 +59,6 @@ export function isFriendly(e: Entity): boolean {
   return false;
 }
 
-
 /**
  * True when an entity is a hostile enemy target that player attacks and weapons should damage.
  */

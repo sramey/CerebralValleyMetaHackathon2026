@@ -1,7 +1,6 @@
 // Pure, deterministic wave spawner and swarm archetype (ADR 0052).
 // Provides off-screen multi-angle spawning (40% left, 40% right, 20% airborne flyers),
 // anti-clumping boid separation, and kill-paced level progression.
-import { entityKind } from "../ontology";
 import type {
   Entity,
   ModApi,
