@@ -122,6 +122,12 @@ travel at up to 4 MB of base64, unlike the compact sketch JPEG (`src/client/sket
 reusing that encoder on the paper path is the obvious next step and would cut both upload and
 vision time.
 
+## Note (2026-10-30): the paper photo payload is compact now
+
+`src/client/paper-image.ts` encodes a paper photo at `PAPER_MAX_EDGE = 1024` / `PAPER_JPEG_QUALITY = 0.8` (through `compactImage`, shared with the sketch), walking a `PAPER_STEPS` ladder until the base64 fits `PAPER_MAX_CHARS = 320_000`.
+The paper working canvas is sized at 1024 px in drawing mode, so the pixels reaching the encoder are the drawing, not a 768 px cut-out stand-in.
+The 4 MB above is now the server's refusal line (`MAX_IMAGE`), not a size the client sends; `src/client/main.ts` logs the measured payload on every paper build.
+
 ## Alternatives considered
 
 - **`AbortSignal.timeout(15_000)` alone, passed to `fetch`.** The smaller change, but it only

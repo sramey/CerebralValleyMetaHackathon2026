@@ -31,6 +31,7 @@ import { createHud } from "./hud";
 import { createSketch } from "./sketch";
 import { CAMERA_LABEL, CAPTURE_LABEL, UPLOAD_LABEL, defaultAction, dialogCssVars, dialogLayout, fitInside, photoFindMessage, photoWorkSize, stageHint, wantsCameraStream } from "./camera-dialog";
 import type { DialogPhase } from "./camera-dialog";
+import { compactPaperImage, paperImageSize, paperLevelMessage } from "./paper-image";
 import { matchPaperIntent, matchSketchIntent } from "./phrases";
 import { World } from "../sim/world";
 import playerMod from "../mods/player";
@@ -1563,7 +1564,9 @@ async function startCamera(): Promise<void> {
 
 function setPendingCapture(source: CanvasImageSource, sw: number, sh: number): void {
   if (sw <= 0 || sh <= 0) return;
-  const { w, h } = photoWorkSize({ w: sw, h: sh });
+  // A paper drawing is read as pencil lines, so it keeps more detail than a prop photo: its
+  // own 1024 px budget (bead 9ch, ADR 0054) instead of the 768 px the cut-out path uses.
+  const { w, h } = cameraPaper?.checked ? paperImageSize({ w: sw, h: sh }) : photoWorkSize({ w: sw, h: sh });
   const canvas = document.createElement("canvas");
   canvas.width = w;
   canvas.height = h;
@@ -1758,9 +1761,15 @@ cameraPreview.addEventListener("click", (e) => {
 cameraConfirm.addEventListener("click", () => {
   if (cameraPaper?.checked) {
     if (!pendingCapture) return;
-    const image = pendingCapture.dataUrl;
-    const prompt = cameraLabel.value.trim();
-    send({ kind: "paperLevel", image, ...(prompt ? { prompt } : {}) } as unknown as ClientMsg);
+    // A compact JPEG, not the raw photo (bead 9ch, ADR 0054): the drawing still travels at up
+    // to 1024 px so Wonder can read it, but at tens of KB instead of megabytes of base64.
+    const image = compactPaperImage(pendingCapture.canvas);
+    if (!image) {
+      setCameraStatus("That photo didn't come through — try taking it again.");
+      return;
+    }
+    console.info(`[paper] image ${pendingCapture.canvas.width}x${pendingCapture.canvas.height} jpeg = ${Math.round(image.length / 1024)} KB`);
+    send(paperLevelMessage(image, cameraLabel.value));
     closeCameraModal(false);
     say("Reading your paper level drawing...", "building");
     return;
