@@ -74,3 +74,6 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0041](0041-time-travel-timeline.md) | Time-travel timeline: snapshot every world change, restore as a new step | Draft |
 | [0042](0042-export-single-html.md) | Download the world as one self-contained, offline HTML game | Draft |
 | [0046](0046-basketball-goal-and-action-key.md) | Basketball goal as a real structure; B is the action key | Draft |
+| [0040](0040-paper-to-level.md) | Paper to level: photograph a drawn level and it gets built | Draft |
+| [0048](0048-camera-dialog-film-ready-layout.md) | Film-ready camera dialog; upload is the default door | Draft |
+| [0049](0049-game-weapons-are-safe.md) | Game weapons and fighting are explicitly allowed by the kid-safe screen | Draft |
