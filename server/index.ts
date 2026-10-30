@@ -33,7 +33,7 @@ import { activeLogFile, logBuild, logMood, saveModSources } from "./createlog";
 import { createStatsHandler } from "./stats-feed";
 import { createBrainHandler } from "./brain";
 import { genreWarnings } from "./genre";
-import { artCachedUrl, artCachedUrlByKey, artKeyForType, clearCachedArt, generateSubjectArt, pickArtType, pickSkin, planArtOrders, purgeLegacyArt, subjectArtPrompt, IMAGE_MODEL } from "./art";
+import { artCachedUrl, artCachedUrlByKey, artKeyForType, clearCachedArt, generateSubjectArt, isArtChangeRequest, pickArtType, pickSkin, planArtOrders, purgeLegacyArt, subjectArtPrompt, IMAGE_MODEL } from "./art";
 import { drawPendingArt, planBuildArt } from "./art-orders";
 import { aiReceipt, plainReceipt } from "./receipt";
 import { learnFromFix, learnRuleFromFeedback, learnSkillFromFeedback } from "./learn";
@@ -1126,14 +1126,26 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     const fb = route.visual ? undefined : fallbackVisual(`${command} ${artType ?? ""}`);
     const visual: Visual | undefined = route.visual ?? fb?.visual;
     const look = artType ? lookFor(visual, route.shape ?? fb?.shape, [artType.toLowerCase()]) : undefined;
+    const existingArts = editRec ? [...(editRec.art ? [editRec.art] : []), ...(editRec.arts ?? [])] : undefined;
     const artPlan = artType && !look
-      ? planBuildArt(planArtOrders(source, command, route.visual), { cached: artCachedUrlByKey, spend: () => spend(ws, "image") })
+      ? planBuildArt(planArtOrders(source, command, route.visual, existingArts), { cached: artCachedUrlByKey, spend: () => spend(ws, "image") })
       : { extra: [], pending: [] };
-    const art = artPlan.art;
+    let art = artPlan.art;
     const artPending = artPlan.artPending;
     const artPendingList = artPlan.artPendingList;
-    const extraArt = artPlan.extra;
+    const extraArt = [...artPlan.extra];
     const pendingArts = artPlan.pending;
+    // A modify/replace of a mod must keep its art (sheet key) unless the request changes the art
+    if (editRec && !isArtChangeRequest(command)) {
+      if (!art && editRec.art) art = editRec.art;
+      const allKeys = new Set([art?.key, ...extraArt.map((a) => a.key)].filter(Boolean));
+      for (const ea of editRec.arts ?? (editRec.art ? [editRec.art] : [])) {
+        if (!allKeys.has(ea.key)) {
+          extraArt.push(ea);
+          allKeys.add(ea.key);
+        }
+      }
+    }
     // A genre change re-skins the player (ADR 0066): its own sheet, cached or ordered like any other art.
     let skinArt: { key: string; url: string } | undefined;
     let skinPending: string | undefined;
