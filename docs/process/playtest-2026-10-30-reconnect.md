@@ -1,6 +1,6 @@
 # Playtest 2026-10-30 — a reconnect keeps the world editable (bead 2ww)
 
-Follow-up to ADR 0070 (the world survives a reload). Rules: **ADR 0072**.
+Follow-up to ADR 0070 (the world survives a reload). Rules: **ADR 0077**.
 
 ## Saw
 
@@ -27,7 +27,7 @@ disappear; it did nothing for the *session*, which is where editing happens.
 ## Fix
 
 A reconnect now tells the server "this page still has my world, and it is my own autosave slot"
-(`worldAdopt { id, mods }`, ADR 0072). The server adopts its own stored file back into the session for
+(`worldAdopt { id, mods }`, ADR 0077). The server adopts its own stored file back into the session for
 the ids the page still lists and the session does not know, applies the page's knob values on top
 (clamped), and answers with nothing: no `world` frame, so nothing on screen is re-rendered or reset.
 

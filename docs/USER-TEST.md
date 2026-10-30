@@ -39,7 +39,7 @@ Jot one line for each, in their words. Do not prompt for them: just watch.
 - Do **not** explain errors or rejections. If the game turns something down, let them react. Write down what they said and did.
 - Do not apologise for the game or defend it.
 
-You **may** step in only for: a crash or frozen screen (reload the same address, same `N`; the world they built comes back by itself), a safety problem, or if they ask to stop. A server restart needs no reload: the page reconnects on its own and the world stays editable (ADR 0072).
+You **may** step in only for: a crash or frozen screen (reload the same address, same `N`; the world they built comes back by itself), a safety problem, or if they ask to stop. A server restart needs no reload: the page reconnects on its own and the world stays editable (ADR 0077).
 
 ## Stuck rule
 If they have made no progress for **3 minutes** on a task, say once: "Want to skip to the next one?" and move on. Mark the task in your notes as "skipped". Do not hint.

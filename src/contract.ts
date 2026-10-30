@@ -384,7 +384,7 @@ export type ClientMsg =
   /** "Give me back the world this browser was last building" (ADR 0070). Answered with a `world`
    *  frame marked `resumed`, or with `worldMissing` so the client can start fresh. */
   | { kind: "worldResume"; id: string }
-  /** "This page still has my world on screen, and it is my own autosave slot" (ADR 0072). A dropped
+  /** "This page still has my world on screen, and it is my own autosave slot" (ADR 0077). A dropped
    *  socket, or a server that restarted under an open tab, leaves the client holding a world the new
    *  session has no manifest for, so edits, undo and knobs had nothing to act on. The server adopts
    *  its own stored file back into the session for the ids listed here and answers with nothing:

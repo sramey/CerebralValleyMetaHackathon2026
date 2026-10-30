@@ -110,7 +110,7 @@ export function resumeSlotId(args: { slot: HomeSlot; worldParam: string | null; 
 
 /**
  * What a reconnect sends so the server can adopt its own autosave file back into the session
- * (ADR 0072), or null when there is nothing to say. Only a page that is *showing* its own autosaved
+ * (ADR 0077), or null when there is nothing to say. Only a page that is *showing* its own autosaved
  * world may ask: a world opened from a share link or a demo has its own mod ids, and mixing the
  * browser's previous file into it would hand the server code the player is not looking at. A page
  * with nothing loaded has nothing to adopt.

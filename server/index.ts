@@ -1364,7 +1364,7 @@ function handleWorldResume(ws: WebSocket, msg: Extract<ClientMsg, { kind: "world
 
 /**
  * A reconnect kept the world on screen but this process's session is new (a restarted server, or any
- * dropped socket: sessions are per socket), so edits, undo and knobs had nothing to act on (ADR 0072).
+ * dropped socket: sessions are per socket), so edits, undo and knobs had nothing to act on (ADR 0077).
  * Adopt the browser's own slot file back into the session, silently: no `world` frame goes back, so
  * the client's world is never re-rendered or reset, and the page keeps playing.
  */

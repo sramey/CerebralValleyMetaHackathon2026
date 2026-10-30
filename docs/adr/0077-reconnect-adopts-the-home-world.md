@@ -1,4 +1,4 @@
-# ADR 0072: A reconnect adopts the browser's own world file, so the world stays editable
+# ADR 0077: A reconnect adopts the browser's own world file, so the world stays editable
 
 - **Status:** Proposed
 - **Date:** 2026-10-30

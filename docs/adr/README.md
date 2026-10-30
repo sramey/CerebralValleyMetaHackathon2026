@@ -102,3 +102,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0072](0072-walker-hostiles-grounding-and-art-persistence.md) | Creature sheets slice into 4 whole frames on one baseline; wave walkers are grounded unless flyers are asked for; editing a mod keeps its art unless the art is asked to change | Proposed |
 | [0075](0075-engine-owned-hurt-window-and-knockback.md) | Getting hurt is engine-owned: a short invulnerability window, a knockback and a red flash | Proposed |
 | [0076](0076-drawn-crosshair-over-the-stage.md) | A drawn crosshair over the stage for aiming, hidden for keyboard and gamepad play | Proposed |
+| [0077](0077-reconnect-adopts-the-home-world.md) | A reconnect adopts the browser's own world file back into the session, so knobs, undo and edits keep working with no reload | Proposed |

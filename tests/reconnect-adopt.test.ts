@@ -1,4 +1,4 @@
-// Reconnect keeps the world editable (bead 2ww, ADR 0072). A server restart under an open tab used to
+// Reconnect keeps the world editable (bead 2ww, ADR 0077). A server restart under an open tab used to
 // leave the page showing a world the new session had no manifest for: the autosave file survived
 // (ADR 0070), but "make it faster", the knobs and undo all answered "Unknown mod or knob" until a
 // reload. These tests walk the real path: a first session builds and autosaves, the server restarts
@@ -63,7 +63,7 @@ async function builtAndSaved(): Promise<{ root: string; tuned: KnobValues }> {
   return { root, tuned: { speed: 340 } };
 }
 
-describe("a reconnect keeps the world editable (ADR 0072)", () => {
+describe("a reconnect keeps the world editable (ADR 0077)", () => {
   it("adopts the browser's own file so a knob, an undo and an edit all work with no reload", async () => {
     const { root } = await builtAndSaved();
 
@@ -151,7 +151,7 @@ describe("a reconnect keeps the world editable (ADR 0072)", () => {
   });
 });
 
-describe("when a page asks the server to adopt its file (ADR 0072)", () => {
+describe("when a page asks the server to adopt its file (ADR 0077)", () => {
   const mods = [{ id: "jetpack", values: { thrust: 1800 } }];
 
   it("asks only from a page that shows its own autosaved world", () => {

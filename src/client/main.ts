@@ -2067,7 +2067,7 @@ const resumeOf = resumeSlotId({ slot: home, worldParam, shareIssue: urlFlags.sha
 let resumeAsked = false;
 let resumeFallbackTimer = 0;
 /**
- * True once the world on screen is the one this browser has autosaved (ADR 0072): it was resumed from
+ * True once the world on screen is the one this browser has autosaved (ADR 0077): it was resumed from
  * the home slot, or it has been written to it since. Only then may a reconnect ask the server to adopt
  * that file, so a world opened from a share link is never mixed with the browser's own old one.
  */
@@ -2081,7 +2081,7 @@ const autosave = createAutosave({
   send: () => {
     if (ws?.readyState !== WebSocket.OPEN) return;
     send({ kind: "worldSave", mods: worldList(), slot: home.id });
-    worldIsHome = true; // this world now is the browser's own: a reconnect may adopt it (ADR 0072)
+    worldIsHome = true; // this world now is the browser's own: a reconnect may adopt it (ADR 0077)
   },
 });
 /** Something in the world changed: one save once it goes quiet (a compound command lands in bursts). */
@@ -2246,7 +2246,7 @@ function connect(): void {
       sendWorldState();
       // This connection is a reconnect of a page that still shows its world (a server restart, a
       // dropped socket). The new session has no manifest for it, so ask the server to adopt its own
-      // autosave file: edits, undo and knobs keep working, and the world is not reloaded (ADR 0072).
+      // autosave file: edits, undo and knobs keep working, and the world is not reloaded (ADR 0077).
       const adopt = adoptFrame({ worldIsHome, slot: home.id, mods: worldList() });
       if (adopt) send(adopt);
     }

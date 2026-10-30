@@ -208,7 +208,7 @@ export function reuseStoredMods(
 }
 
 /**
- * The mods a reconnecting session adopts from its own slot file (ADR 0072): the ones the page still
+ * The mods a reconnecting session adopts from its own slot file (ADR 0077): the ones the page still
  * has loaded, that this session does not already know, with the client's own knob values laid over
  * the file's. A restarted server (or any reconnect: sessions are per socket) holds no manifest for
  * the world on screen, so without this an edit, an undo or a knob change fails until the page is
@@ -360,7 +360,7 @@ export class WorldStore {
   }
 
   /**
-   * Adopt this browser's own slot back into a session that has just reconnected (ADR 0072). The page
+   * Adopt this browser's own slot back into a session that has just reconnected (ADR 0077). The page
    * kept its world in memory across a dropped socket or a server restart, but sessions are per socket,
    * so a fresh session knows none of those mods and "edit it", undo and the knobs would all fail until
    * a reload. Only ids the client still lists are adopted, only out of this server's own stored file,

@@ -261,7 +261,7 @@ export function validateClientMsg(value: unknown): Validation {
       return isHomeWorldId(id) ? accept({ kind: "worldResume", id }) : reject(REPLY.bad);
     }
     case "worldAdopt": {
-      // A reconnect adopting this browser's own file back (ADR 0072). Only a home slot can name a
+      // A reconnect adopting this browser's own file back (ADR 0077). Only a home slot can name a
       // file, and the id list is the client's own load order: both are checked, never trusted.
       const mods = modList(value.mods);
       if (!mods) return reject(REPLY.bad);
