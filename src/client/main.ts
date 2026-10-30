@@ -25,6 +25,8 @@ import { visualHeight } from "../sim/sockets";
 import { ASTEROID_RE, TARGET_RE, drawAsteroidRock, drawBullseyeTarget, drawCliff, drawHoop, drawShape, drawTetherGear, isCliff, isTetherGear, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
 import { celestialPos, computeDesiredCamY, depthFog, drawContactShadows, drawDistantMountains, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
 import { drawBackdrop, drawScenery, skylineAmplitude } from "./scenery";
+import { isSetPiece, SetPieceLayer } from "./setpieces";
+import { drawDebris, drawDebrisParticle, isDebrisOrHazard } from "./debris";
 import { drawFluffyCloud, drawParallaxEntities, isCloudEntity, isParallaxOrSkyEntity, isSkyOrBackgroundEntity } from "./parallax";
 import { ModLoader } from "../sim/loader";
 import { isHoop } from "../sim/hoop";
@@ -180,6 +182,11 @@ connect(); // before every `await` in this file, on purpose
 const app = new Application();
 await app.init({ background: 0x05070a, antialias: false });
 stageEl.appendChild(app.canvas);
+const bgGfx = new Graphics();
+bgGfx.zIndex = -200;
+app.stage.addChild(bgGfx);
+const setPieceLayer = new SetPieceLayer();
+app.stage.addChild(setPieceLayer.container);
 const gfx = new Graphics();
 app.stage.addChild(gfx);
 app.stage.sortableChildren = true;
@@ -297,7 +304,7 @@ function ridgeY(wx: number, seed: number): number {
     : Math.sin(wx * 0.011 + 4.0) * 20 + Math.sin(wx * 0.033) * 8;
 }
 
-function drawRidge(pts: number[], camX: number, par: number, baseY: number, seed: number, color: number, amp = 1): void {
+function drawRidge(target: Graphics, pts: number[], camX: number, par: number, baseY: number, seed: number, color: number, amp = 1): void {
   const W = app.screen.width;
   const H = app.screen.height;
   pts.length = 0;
@@ -307,10 +314,10 @@ function drawRidge(pts: number[], camX: number, par: number, baseY: number, seed
   }
   const topCount = pts.length;
   pts.push(W + step, H, -step, H);
-  gfx.poly(pts).fill(color);
+  target.poly(pts).fill(color);
   const rim = mixC(color, pal.moon, 0.22);
   for (let i = 0; i + 3 < topCount; i += 2) {
-    gfx.moveTo(pts[i], pts[i + 1]).lineTo(pts[i + 2], pts[i + 3]).stroke({ width: 1.5, color: rim, alpha: 0.30 });
+    target.moveTo(pts[i], pts[i + 1]).lineTo(pts[i + 2], pts[i + 3]).stroke({ width: 1.5, color: rim, alpha: 0.30 });
   }
 }
 
@@ -436,10 +443,12 @@ function getActivePrimaries(): Set<number> {
 
 function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   if (isParallaxOrSkyEntity(e)) return;
+  if (isSetPiece(e)) return; // Set-pieces are drawn in the background set-piece pass behind the play layer
   const x = e.x - camX;
   const y = e.y - camY;
   const W = app.screen.width;
   const H = app.screen.height;
+  if (isDebrisOrHazard(e)) { drawDebris(gfx, e, x, y, world.tickCount); return; }
   if (isTetherGear(e)) { // grappling hook + rope: always code-drawn, never a character sprite (ADR 0050)
     const tt = e.data?.tetherTo;
     const target = tt === undefined ? undefined : tt === "player" ? world.entities.find((o) => o.type === "player") : world.entities.find((o) => o.id === Number(tt));
@@ -820,6 +829,7 @@ document.querySelectorAll<HTMLButtonElement>("#radial-menu [data-action]").forEa
 });
 
 function render(): void {
+  bgGfx.clear();
   gfx.clear();
   const W = app.screen.width;
   const H = app.screen.height;
@@ -850,7 +860,7 @@ function render(): void {
   const skyEntityCol = (!mood && skyEntity) ? skyEntity.color : undefined;
 
   drawSkyAndCelestials(
-    gfx,
+    bgGfx,
     W,
     H,
     camX,
@@ -865,11 +875,11 @@ function render(): void {
   if (isDaytime && !world.entities.some((e) => e.type.toLowerCase().includes("cloud"))) {
     const skyBottomCol = SKY[SKY_BANDS - 1];
     const c1x = ((140 - camX * 0.08) % (W + 220) + W + 220) % (W + 220) - 110;
-    drawFluffyCloud(gfx, c1x, 38, 120, 36, 0xffffff, pal.moon, skyBottomCol, 1);
+    drawFluffyCloud(bgGfx, c1x, 38, 120, 36, 0xffffff, pal.moon, skyBottomCol, 1);
     const c2x = ((W * 0.48 - camX * 0.12) % (W + 260) + W + 260) % (W + 260) - 130;
-    drawFluffyCloud(gfx, c2x, 62, 150, 42, 0xffffff, pal.moon, skyBottomCol, 2);
+    drawFluffyCloud(bgGfx, c2x, 62, 150, 42, 0xffffff, pal.moon, skyBottomCol, 2);
     const c3x = ((W * 0.82 - camX * 0.06) % (W + 200) + W + 200) % (W + 200) - 100;
-    drawFluffyCloud(gfx, c3x, 28, 95, 30, 0xffffff, pal.moon, skyBottomCol, 3);
+    drawFluffyCloud(bgGfx, c3x, 28, 95, 30, 0xffffff, pal.moon, skyBottomCol, 3);
   }
   // far hill silhouettes + parallax layers + atmospheric horizon mist (bead 1z7 & rm1)
   const horizon = H * 0.62 - camYSmooth * 0.1;
@@ -879,19 +889,20 @@ function render(): void {
   const amp = skylineAmplitude(backdrop);
   const fog = depthFog(mood?.name);
   if (!inSpace) {
-    if (!backdrop || backdrop.skyline === "mountains") drawDistantMountains(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
-    drawRidge(ridgeFar, camX, 0.3, horizon, 0, mixC(pal.ridgeFar, SKY[SKY_BANDS - 1], fog.far), amp);
-    drawRidge(ridgeNear, camX, 0.55, horizon + 34, 1, mixC(pal.ridgeNear, SKY[SKY_BANDS - 1], fog.near), amp);
+    if (!backdrop || backdrop.skyline === "mountains") drawDistantMountains(bgGfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
+    drawRidge(bgGfx, ridgeFar, camX, 0.3, horizon, 0, mixC(pal.ridgeFar, SKY[SKY_BANDS - 1], fog.far), amp);
+    drawRidge(bgGfx, ridgeNear, camX, 0.55, horizon + 34, 1, mixC(pal.ridgeNear, SKY[SKY_BANDS - 1], fog.near), amp);
   }
   // Starter-world scenery, unless a mod brings its own parallax backdrop (bead 5fl)
   if (backdrop && world.entities.some((e) => e.type === "ground")) {
-    drawBackdrop(gfx, camX, camYSmooth, W, pal, SKY[SKY_BANDS - 1], fog.far, isDaytime, backdrop, mood?.name);
+    drawBackdrop(bgGfx, camX, camYSmooth, W, pal, SKY[SKY_BANDS - 1], fog.far, isDaytime, backdrop, mood?.name);
   } else if (!inSpace && world.entities.some((e) => e.type === "ground") && !world.entities.some(isParallaxOrSkyEntity)) {
-    drawScenery(gfx, camX, camYSmooth, W, pal, SKY[SKY_BANDS - 1], fog.far, isDaytime, mood?.name);
+    drawScenery(bgGfx, camX, camYSmooth, W, pal, SKY[SKY_BANDS - 1], fog.far, isDaytime, mood?.name);
   }
   // The backdrop replaces a parallax mod's silhouettes; its clouds still drift.
-  drawParallaxEntities(gfx, backdrop ? world.entities.filter(isCloudEntity) : world.entities, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1], grade);
-  if (!inSpace) drawHorizonMist(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
+  drawParallaxEntities(bgGfx, backdrop ? world.entities.filter(isCloudEntity) : world.entities, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1], grade);
+  if (!inSpace) drawHorizonMist(bgGfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
+  setPieceLayer.render(world.entities, camX, camYSmooth, framesBySubject);
   // solids-first, then contact shadows on solid surfaces, then dynamic entities
   order.length = 0;
   for (let i = 0; i < world.entities.length; i++) order.push(world.entities[i]);
@@ -906,7 +917,7 @@ function render(): void {
   }
   if (!shadowsDrawn) drawContactShadows(gfx, world.entities, camX, camYSmooth, W, H, isEffectType, celestialPos(W).x);
   for (const p of world.particles) {
-    gfx.rect(p.x - camX, p.y - camYSmooth, p.size, p.size).fill({ color: p.color, alpha: Math.max(0, 1 - p.life / p.maxLife) });
+    drawDebrisParticle(gfx, p, camX, camYSmooth);
   }
   // Sprite primaries: per owner+subject every entity at >=30% of the group's
   // max area gets the sprite; small assembled sub-parts stay rects under it.
@@ -917,7 +928,7 @@ function render(): void {
     for (const e of world.entities) {
       if (isParallaxOrSkyEntity(e)) continue;
       const frames = framesFor(framesBySubject, e.type, e.type === "player", world.scene.playerSkin);
-      if (frames.length < 1 || kindOf(e.type) || isTetherGear(e)) continue;
+      if (frames.length < 1 || kindOf(e.type) || isTetherGear(e) || isSetPiece(e)) continue;
       const subject = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0] ?? e.type;
       const gk = `${e.owner}|${subject}`;
       const area = e.w * e.h;
@@ -937,7 +948,7 @@ function render(): void {
   for (const e of world.entities) {
     if (isParallaxOrSkyEntity(e)) continue;
     const frames = framesFor(framesBySubject, e.type, e.type === "player", world.scene.playerSkin);
-    if (frames.length < 1 || !primaries.has(e.id) || kindOf(e.type) || (morph.size > 0 && isMorphing(e))) continue;
+    if (frames.length < 1 || !primaries.has(e.id) || kindOf(e.type) || (morph.size > 0 && isMorphing(e)) || isSetPiece(e)) continue;
     seen.add(e.id);
     const moving = Math.abs(e.vx) > 5;
     const subjectKey = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0];

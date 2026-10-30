@@ -47,9 +47,9 @@ interface Puff { dx: number; dy: number; vy: number; r: number; delay: number; s
 interface Blast { x: number; y: number; age: number; size: number; sparks: Spark[]; puffs: Puff[] }
 interface Splash { x: number; y: number; age: number }
 
-const BLAST_LIFE = 0.9;
+const BLAST_LIFE = 1.1;
 const SPLASH_LIFE = 0.45;
-const MAX_PUFFS = 220;
+const MAX_PUFFS = 280;
 
 export class Fx {
   private layer = new Container();
@@ -362,19 +362,26 @@ export class Fx {
     for (const c of clusters) {
       if (c.count < 6) continue;
       const n = c.count;
-      const size = Math.min(2.4, 0.8 + n / 18);
+      const size = Math.min(2.5, 0.9 + n / 16);
       const sparks: Spark[] = [];
-      for (let i = 0; i < Math.min(40, n * 2); i++) {
+      const sparkCount = Math.min(50, Math.round(n * 2.2));
+      for (let i = 0; i < sparkCount; i++) {
         const a = Math.random() * Math.PI * 2;
-        const sp = (140 + Math.random() * 260) * size * 0.7;
-        sparks.push({ vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60, hot: Math.random() });
+        const sp = (180 + Math.random() * 320) * size * 0.75;
+        sparks.push({ vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 70, hot: Math.random() });
       }
       const puffs: Puff[] = [];
-      for (let i = 0; i < 5; i++) puffs.push({ dx: (Math.random() - 0.5) * 30 * size, dy: (Math.random() - 0.5) * 24 * size, vy: -20 - Math.random() * 30, r: (22 + Math.random() * 14) * size, delay: 0, smoke: false });
-      for (let i = 0; i < 4; i++) puffs.push({ dx: (Math.random() - 0.5) * 40 * size, dy: (Math.random() - 0.5) * 20 * size, vy: -28 - Math.random() * 30, r: (20 + Math.random() * 12) * size, delay: 0.12, smoke: true });
+      // Fire core puffs (dense, expanding fast)
+      for (let i = 0; i < 6; i++) {
+        puffs.push({ dx: (Math.random() - 0.5) * 36 * size, dy: (Math.random() - 0.5) * 28 * size, vy: -25 - Math.random() * 35, r: (24 + Math.random() * 16) * size, delay: i * 0.02, smoke: false });
+      }
+      // Billowing smoke puffs (rising, churning outward)
+      for (let i = 0; i < 8; i++) {
+        puffs.push({ dx: (Math.random() - 0.5) * 48 * size, dy: (Math.random() - 0.5) * 32 * size, vy: -38 - Math.random() * 45, r: (26 + Math.random() * 20) * size, delay: 0.06 + i * 0.03, smoke: true });
+      }
       this.blasts.push({ x: c.sx / n, y: c.sy / n, age: 0, size, sparks, puffs });
       if (this.blasts.length > 12) this.blasts.shift();
-      this.shake = Math.max(this.shake, 3 + 3 * size);
+      this.shake = Math.max(this.shake, 6 + 4 * size);
     }
   }
 
@@ -384,27 +391,39 @@ export class Fx {
       b.age += dt;
       const a = b.age, k = a / BLAST_LIFE;
       const x = b.x - this.camX, y = b.y - this.camY;
-      if (a < 0.16) this.puff(x, y, (30 + a * 700) * b.size, 0xfff2c0, (1 - a / 0.16) * 0.95, true);
+      const isLegacy = typeof window !== "undefined" && Boolean((window as any).__LEGACY_RENDER__);
+      if (isLegacy) {
+        if (a < 0.4) {
+          const q = a / 0.4;
+          g.circle(x, y, (14 + q * 70) * b.size).stroke({ width: Math.max(1, 5 * (1 - q)), color: 0xffe9b0, alpha: (1 - q) * 0.7 });
+        }
+      } else {
+        // Punchy flash bloom (bright white-hot core expanding and vanishing in 0.18s)
+        if (a < 0.18) {
+          const fq = a / 0.18;
+          this.puff(x, y, (45 + a * 600) * b.size, 0xffffff, (1 - fq) * 1.0, true);
+          this.puff(x, y, (28 + a * 350) * b.size, 0xffd044, (1 - fq) * 0.9, true);
+        }
+      }
       for (const p of b.puffs) {
         const pa = a - p.delay;
         if (pa < 0) continue;
-        const q = pa / (p.smoke ? 0.8 : 0.45);
+        const q = pa / (p.smoke ? 0.95 : 0.45);
         if (q >= 1) continue;
-        const r = p.r * (0.6 + q * (p.smoke ? 1.5 : 1.1));
+        const r = p.r * (0.6 + q * (p.smoke ? 1.6 : 1.2));
         const px = x + p.dx, py = y + p.dy + p.vy * pa;
-        if (p.smoke) this.puff(px, py, r, 0x3a3d45, (1 - q) * 0.45);
-        else this.puff(px, py, r, ramp(q), (1 - q) * 0.9, true);
-      }
-      if (a < 0.4) {
-        const q = a / 0.4;
-        g.circle(x, y, (14 + q * 70) * b.size).stroke({ width: Math.max(1, 5 * (1 - q)), color: 0xffe9b0, alpha: (1 - q) * 0.7 });
+        if (p.smoke) this.puff(px, py, r, 0x2b2e35, (1 - q) * 0.55);
+        else this.puff(px, py, r, ramp(q), (1 - q) * 0.95, true);
       }
       for (const s of b.sparks) {
         const q = Math.min(1, k * 1.15 + s.hot * 0.15);
         if (q >= 1) continue;
-        const px = x + s.vx * a, py = y + s.vy * a + 260 * a * a;
-        const vy = s.vy + 520 * a;
-        g.moveTo(px - s.vx * 0.028, py - vy * 0.028).lineTo(px, py).stroke({ width: 2.2 * (1 - q * 0.6), color: ramp(q * 0.8), alpha: 1 - q * q, cap: "round" });
+        const px = x + s.vx * a, py = y + s.vy * a + 280 * a * a;
+        const vy = s.vy + 560 * a;
+        g.moveTo(px - s.vx * 0.028, py - vy * 0.028).lineTo(px, py).stroke({ width: 2.6 * (1 - q * 0.6), color: ramp(q * 0.8), alpha: 1 - q * q, cap: "round" });
+        if (q < 0.4) {
+          g.circle(px, py, 1.2).fill({ color: 0xffffff, alpha: (1 - q / 0.4) });
+        }
       }
     }
     this.blasts = this.blasts.filter((b) => b.age < BLAST_LIFE);

@@ -2,6 +2,7 @@
 import type { Graphics } from "pixi.js";
 import type { Entity, Look, ShapeName } from "../contract";
 import { HOOP, isHoopType } from "../sim/hoop";
+import { isSetPieceSubject } from "./setpieces";
 
 const OUTLINE = 0x0b0e13;
 
@@ -40,7 +41,7 @@ export type Kind = { kind: "shape"; shape: ShapeName } | { kind: "effect" };
 /** The code-drawn kind of an entity type, or undefined for sprites and the engine's own looks. */
 export function kindOf(type: string): Kind | undefined {
   const t = type.toLowerCase();
-  if (t === "player" || t === "ground" || t.includes("platform") || t.includes("coin") || PROJECTILE_RE.test(t)) return undefined;
+  if (t === "player" || t === "ground" || t.includes("platform") || t.includes("coin") || PROJECTILE_RE.test(t) || isSetPieceSubject(t)) return undefined;
   if (isHoopType(t)) return undefined; // a goal has its own structure (drawHoop), never a ring or a ball
   for (const l of looks) {
     if (l.types.some((x) => t.includes(x))) return l.visual === "effect" ? { kind: "effect" } : { kind: "shape", shape: l.shape ?? "circle" };
