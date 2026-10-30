@@ -32,11 +32,15 @@ export function framesFor(
   if (!canUseSpriteSheet(entityType)) return [];
   const lower = entityType.toLowerCase();
   if (isProjectileType(lower)) return [];
+  // A flying sheet is keyed "<base>-fly" (ADR 0053): match on the base, and prefer the longest
+  // matching key so "cat-fly" wins over a cached walking "cat" for the same subject.
+  let best: string | undefined;
   for (const key of Object.keys(framesBySubject).sort()) {
     if (!canUseSpriteSheet(key)) continue;
-    if (lower.includes(key.toLowerCase())) return framesBySubject[key];
+    const base = key.toLowerCase().replace(/-fly$/, "");
+    if (lower.includes(base) && (best === undefined || key.length > best.length)) best = key;
   }
-  return [];
+  return best === undefined ? [] : framesBySubject[best];
 }
 
 export function computePrimaries(
