@@ -13,8 +13,14 @@ export const ACTION_KEYS = ["KeyB", "KeyX", "KeyJ", "KeyF"] as const;
 /** Use / pick up / interact: everything the action keys do, plus E. */
 export const USE_KEYS = ["KeyB", "KeyF", "KeyE", "KeyX", "KeyJ"] as const;
 
+/** Loadout (ADR 0070): Q next item, R reload, G drop, 1-9 pick an item. The mouse wheel is handled in main.ts. */
+export const NEXT_ITEM_KEYS = ["KeyQ"] as const;
+export const RELOAD_KEYS = ["KeyR"] as const;
+export const DROP_KEYS = ["KeyG"] as const;
+export const SLOT_KEYS = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7", "Digit8", "Digit9"] as const;
+
 /** Every code any of the above lists mentions (for help text and tests). */
-export const GAME_KEYS: readonly string[] = [...new Set([...LEFT_KEYS, ...RIGHT_KEYS, ...JUMP_KEYS, ...ACTION_KEYS, ...USE_KEYS])];
+export const GAME_KEYS: readonly string[] = [...new Set([...LEFT_KEYS, ...RIGHT_KEYS, ...JUMP_KEYS, ...ACTION_KEYS, ...USE_KEYS, ...NEXT_ITEM_KEYS, ...RELOAD_KEYS, ...DROP_KEYS, ...SLOT_KEYS])];
 
 /** Hotkeys that are not movement: mute (M) and volume ([/]), plus the pipeline panel (P). */
 export const HOTKEY_CODES = ["KeyM", "BracketLeft", "BracketRight", "KeyP"] as const;
@@ -74,5 +80,10 @@ export function inputFromKeys(held: ReadonlySet<string>): InputState {
   input.jump = any(held, JUMP_KEYS);
   input.shoot = any(held, ACTION_KEYS);
   input.use = any(held, USE_KEYS);
+  if (any(held, NEXT_ITEM_KEYS)) input.nextItem = true; // loadout keys exist only while held, so the plain shape stays as before
+  if (any(held, RELOAD_KEYS)) input.reload = true;
+  if (any(held, DROP_KEYS)) input.drop = true;
+  const slot = SLOT_KEYS.findIndex((c) => held.has(c));
+  if (slot >= 0) input.slot = slot + 1;
   return input;
 }

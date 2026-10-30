@@ -651,6 +651,9 @@ async function boot(): Promise<void> {
     world.input.jump = keys.has("Space") || keys.has("ArrowUp") || keys.has("KeyW");
     world.input.shoot = keys.has("KeyX");
     world.input.use = keys.has("KeyF") || keys.has("KeyE") || keys.has("KeyJ");
+    world.input.nextItem = keys.has("KeyQ");
+    world.input.reload = keys.has("KeyR");
+    world.input.drop = keys.has("KeyG");
   }
 }
 

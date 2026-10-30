@@ -7,6 +7,10 @@ import { World } from "../src/sim/world";
 import { ModLoader } from "../src/sim/loader";
 import groundMod from "../src/mods/ground";
 import playerMod from "../src/mods/player";
+import { GAME_KEYS, HOTKEY_CODES, inputFromKeys } from "../src/client/keys";
+import { PAD, PadTracker, TALK_BUTTONS, inputFromPad, mergeInputs, type PadLike } from "../src/client/gamepad";
+import { MOD_API_REFERENCE } from "../server/prompt";
+import { runModTest } from "../src/sim/loader";
 import { blasterMod, carMod, grappleMod, tankMod } from "./fixtures/playtest-gear-mods";
 
 function setup(...mods: ModDefinition[]) {
@@ -325,5 +329,111 @@ describe("unloading", () => {
     w.despawn(w.entities.find((e) => e.type === "pistol")!.id);
     step(2);
     expect(hud("gear")).toBeUndefined();
+  });
+});
+
+describe("controls (ADR 0070)", () => {
+  const pad = (...pressed: number[]): PadLike => ({
+    axes: [0, 0],
+    buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: pressed.includes(i) })),
+  });
+
+  it("keyboard: Q next, R reload, G drop, 1-9 pick a slot; a plain press has none of them", () => {
+    expect(inputFromKeys(new Set(["KeyQ"])).nextItem).toBe(true);
+    expect(inputFromKeys(new Set(["KeyR"])).reload).toBe(true);
+    expect(inputFromKeys(new Set(["KeyG"])).drop).toBe(true);
+    expect(inputFromKeys(new Set(["Digit3"])).slot).toBe(3);
+    const idle = inputFromKeys(new Set(["KeyD", "KeyX"]));
+    expect(idle.nextItem).toBeUndefined();
+    expect(idle.reload).toBeUndefined();
+    expect(idle.drop).toBeUndefined();
+    expect(idle.slot).toBeUndefined();
+  });
+
+  it("no loadout key clashes with movement, the action keys or the hotkeys", () => {
+    const loadout = ["KeyQ", "KeyR", "KeyG", "Digit1", "Digit9"];
+    const others = ["ArrowLeft", "KeyA", "ArrowRight", "KeyD", "ArrowUp", "KeyW", "Space", "KeyB", "KeyX", "KeyJ", "KeyF", "KeyE", ...HOTKEY_CODES];
+    for (const k of loadout) { expect(GAME_KEYS).toContain(k); expect(others).not.toContain(k); }
+  });
+
+  it("gamepad: L1 next, d-pad up previous, d-pad down drop, L2 reload; L1 no longer talks, R1 and Triangle still do", () => {
+    expect(inputFromPad(pad(PAD.L1)).nextItem).toBe(true);
+    expect(inputFromPad(pad(PAD.UP)).prevItem).toBe(true);
+    expect(inputFromPad(pad(PAD.DOWN)).drop).toBe(true);
+    expect(inputFromPad(pad(PAD.L2)).reload).toBe(true);
+    expect(TALK_BUTTONS).not.toContain(PAD.L1);
+    expect(TALK_BUTTONS).toEqual(expect.arrayContaining([PAD.R1, PAD.TRIANGLE]));
+    const f = new PadTracker().poll([pad(PAD.L1)]);
+    expect(f.talk).toBe(false);
+    expect(f.input.nextItem).toBe(true);
+    const talk = new PadTracker().poll([pad(PAD.R1)]);
+    expect(talk.talk).toBe(true);
+    expect(talk.input.nextItem).toBeUndefined();
+  });
+
+  it("keyboard and pad merge: any source holding a loadout control holds it", () => {
+    const m = mergeInputs(inputFromKeys(new Set(["KeyR"])), inputFromPad(pad(PAD.DOWN)));
+    expect(m.reload).toBe(true);
+    expect(m.drop).toBe(true);
+  });
+});
+
+describe("a tank written the way the prompt teaches", () => {
+  const cannonTank: ModDefinition = {
+    id: "cannon-tank", title: "Cannon tank",
+    setup(api) {
+      const p = api.player();
+      const tank = api.spawn({ type: "tank", x: (p ? p.x : 100) - 140, y: 360, w: 110, h: 46, solid: false, gravityScale: 1, color: 0x4a5d3a, data: { interact: "Drive", mounted: false } });
+      const cannon = api.gear!({ label: "Cannon", icon: "💥", magSize: 2, reserve: 4, reloadTicks: 30, cooldown: 10 });
+      api.onTick(() => {
+        const pl = api.player();
+        const inp = api.input();
+        if (pl && !tank.data.mounted && api.touches(pl, tank)) tank.data.mounted = true;
+        if (!tank.data.mounted || !pl) { tank.vx = 0; return; }
+        tank.vx = (inp.right ? 1 : 0) * 200 - (inp.left ? 1 : 0) * 200;
+        if (tank.vx !== 0) tank.facing = tank.vx > 0 ? 1 : -1;
+        pl.x = tank.x + tank.w / 2 - pl.w / 2; pl.y = tank.y - pl.h + 6;
+        if (inp.shoot && cannon.fire()) api.spawn({ type: "shell", x: tank.x + tank.w / 2 + tank.facing * 60, y: tank.y + 8, w: 14, h: 10, vx: tank.facing * 640, solid: false, gravityScale: 0, data: { fromPlayer: true, life: 60 } });
+      });
+    },
+    dispose(api) { for (const e of [...api.byType("tank"), ...api.byType("shell")]) api.despawn(e.id); },
+  };
+
+  it("while driving, the cannon has its own ammo, R reloads it, and the player's gun stays stowed", () => {
+    const { w, step, tap, player, hud } = setup(pistol(), cannonTank);
+    const tank = w.entities.find((e) => e.type === "tank")!;
+    player().x = tank.x + 10; player().y = tank.y - 10;
+    step(3);
+    expect(tank.data.mounted).toBe(true);
+    expect(hud("gear")?.label).toBe("Cannon");
+    expect(hud("gear")?.value).toBe("2/2  ·  4 spare");
+    step(1, { shoot: true }); step(11); step(1, { shoot: true }); step(11);
+    expect(bullets(w, "shell")).toBe(2);
+    expect(bullets(w, "pistol-bullet")).toBe(0);
+    step(1, { shoot: true });
+    step(1);
+    expect(hud("gear")?.value).toBe("reloading..."); // empty: pressing fire reloads
+    step(40);
+    expect(hud("gear")?.value).toBe("2/2  ·  2 spare");
+    // Out of the tank: the player's own pistol is back in hand, and the cannon is nowhere in the rotation.
+    tank.data.mounted = false;
+    player().x = tank.x + 400;
+    step(2);
+    expect(hud("gear")?.label).toBe("Pistol");
+    step(1, { shoot: true });
+    expect(bullets(w, "pistol-bullet")).toBe(1);
+    expect(bullets(w, "shell")).toBe(2);
+    tap("nextItem");
+    expect(hud("gear")?.label).toBe("Pistol"); // Q never selects a parked vehicle's cannon
+  });
+
+  it("the verifier test of a lone vehicle mod still passes", () => {
+    expect(runModTest(cannonTank).errors).toEqual([]);
+  });
+
+  it("the Wonder prompt teaches api.gear, R / G / Q, the mounted flag and run-over", () => {
+    for (const needle of ["api.gear", "gear.fire()", "LOADOUT", "data.mounted = true", "run over", "input.reload", "vehicle.facing"]) {
+      expect(MOD_API_REFERENCE).toContain(needle);
+    }
   });
 });

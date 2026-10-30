@@ -1029,6 +1029,7 @@ function stepAndRender(now: number): void {
   } else { delete world.input.pointerX; delete world.input.pointerY; delete world.input.pointerDown; }
   while (acc >= stepMs) {
     world.step(); acc -= stepMs;
+    if (wheelTap.nextItem || wheelTap.prevItem) { wheelTap.nextItem = wheelTap.prevItem = false; syncInput(); } // a wheel notch lasts one step
     for (const [id, mult] of scaleOverride) {
       const ent = world.entities.find((x) => x.id === id);
       if (ent && ent.data?.targetW && ent.data?.targetH) {
@@ -1089,10 +1090,20 @@ function pollPad(): void {
   padInput = f.input;
   syncInput();
 }
+// The mouse wheel over the game switches items (ADR 0070): a tap, held for one sim step.
+const wheelTap = { nextItem: false, prevItem: false };
+app.canvas.addEventListener("wheel", (ev) => {
+  if (ev.deltaY === 0) return;
+  if (ev.deltaY > 0) wheelTap.nextItem = true; else wheelTap.prevItem = true;
+  syncInput();
+  ev.preventDefault();
+}, { passive: false });
 function syncInput(): void {
   // One pure mapping for every key (src/client/keys.ts, ADR 0046): B is an action key, so
   // "pick it up and shoot with B" works without a special case per prompt.
   Object.assign(world.input, mergeInputs(inputFromKeys(keys), padInput));
+  if (wheelTap.nextItem) world.input.nextItem = true;
+  if (wheelTap.prevItem) world.input.prevItem = true;
 }
 
 // --- mod cards -----------------------------------------------------------------
