@@ -19,6 +19,7 @@ describe("genre change pattern (ADR 0066)", () => {
     expect(MOD_API_REFERENCE).toContain("api.damageHit(bolt");
     expect(MOD_API_REFERENCE).toMatch(/NEVER set data\.visual/);
     expect(MOD_API_REFERENCE).toContain("never restore them yourself in dispose()");
+    expect(MOD_API_REFERENCE).toContain("kill one target with t.api.damage(target.id, 999)");
   });
 
   it("the router keeps named things out of 'shape'", () => {
