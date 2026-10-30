@@ -331,6 +331,8 @@ export type ClientMsg =
   /** "How does this work?" (ADR 0043): explain one loaded mod's source in plain words. The
    *  server answers from its own copy of the source, so no code travels on this message. */
   | { kind: "explain"; modId: string }
+  /** "How was this made?" (ADR 0060): the receipt for one loaded mod. Only the id travels. */
+  | { kind: "receipt"; modId: string }
   // Voice (ADR 0012). Mic audio itself travels as binary frames: PCM16 mono 16 kHz.
   | { kind: "voiceWarm" }
   | { kind: "voiceStart" }
@@ -451,6 +453,8 @@ export type ServerMsg =
   /** A plain-words explanation of one mod (ADR 0043): `text` is three short sentences and
    *  `lines` are the key lines of its source, already resolved from the source itself. */
   | { kind: "explainResult"; modId: string; title: string; text: string; lines: { n: number; code: string }[]; cached: boolean; ms: number }
+  /** The whole chain behind one creation (ADR 0060), from the server's own records. No model call. */
+  | { kind: "receiptResult"; receipt: BuildReceipt }
   // Visitor mode (no key, kill-switch, or budget spent): the game still plays; offer these instead.
   | { kind: "visitor"; reason: "nokey" | "killswitch" | "budget"; demos: DemoWorld[] };
 
@@ -461,6 +465,40 @@ export interface VerifyResult {
   msPerFrame: number;
   frames: number;
   entities: number;
+}
+
+/** How Spark routed a build (ADR 0060). `model` is what actually answered (hosted or open weights). */
+export interface ReceiptRoute { action: string; model: string; open: boolean; fellBack: boolean; ms: number; visual?: string; rules: string[] }
+/** One tool call in Wonder's loop. */
+export interface ReceiptTool { name: string; ms: number; ok?: boolean }
+/** The art behind a creation: Muse Image's prompt and sheet, or a code-drawn look with no image. */
+export interface ReceiptArt {
+  model: string;
+  subject: string;
+  /** The sprite-sheet prompt as Muse Image receives it (before learned art rules are appended). */
+  prompt?: string;
+  url?: string;
+  state: "drawing" | "drawn" | "cached" | "code-drawn" | "none";
+  ms?: number;
+}
+/** "How was this made?" (ADR 0060): the chain from words to a verified, playable mod. */
+export interface BuildReceipt {
+  modId: string;
+  title: string;
+  /** ai = Wonder wrote it this session; builtin = hand-written engine sample; loaded = came with a shared world. */
+  origin: "ai" | "builtin" | "loaded";
+  command?: string;
+  route?: ReceiptRoute;
+  agent?: { turns: number; tools: ReceiptTool[] };
+  /** Every version, first draft first; the last is live. A turned-away draft carries why. */
+  versions: { source: string; rejected?: string[] }[];
+  /** The mod's own test(t) and what it claims to check. */
+  test: { source: string; checks: string[] } | null;
+  /** What the verifier ran before this could load. */
+  proof: { healthFrames: number; msBudget: number; msPerFrame: number; playtestSeeds: number; playtests: number; fixed: boolean };
+  art?: ReceiptArt;
+  timings?: { route: number; write: number; compile: number; verify: number; total: number };
+  at?: string;
 }
 
 export const SIM = {

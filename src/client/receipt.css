@@ -1,0 +1,133 @@
+/* "How was this made?" (ADR 0060): the chain from your words to a verified, playable mod.
+   It sits on the right of the stage, clear of the orb bar and the ghost window (bottom-left),
+   and scrolls inside itself. */
+#receipt-panel {
+  position: absolute;
+  top: 84px;
+  right: 14px;
+  z-index: 31;
+  width: min(460px, calc(100% - 28px));
+  max-height: calc(100% - 140px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-radius: 10px;
+  background: rgba(12, 16, 23, 0.95);
+  border: 1px solid rgba(255, 201, 77, 0.55);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #e8e4d8;
+  font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
+}
+#receipt-panel[hidden] { display: none; }
+
+.receipt-head { display: flex; align-items: center; gap: 8px; flex: none; }
+.receipt-badge {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 999px; white-space: nowrap;
+  background: rgba(255, 201, 77, 0.14); border: 1px solid rgba(255, 201, 77, 0.55); color: #ffe2a0;
+}
+.receipt-title {
+  margin: 0; flex: 1; min-width: 0; font-size: 13px; font-weight: 700; color: #f3efe4;
+  text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.receipt-close {
+  flex: none; width: 24px; height: 24px; padding: 0; border-radius: 50%; cursor: pointer;
+  background: rgba(22, 29, 40, 0.9); border: 1px solid #3a4454; color: #c9c4b8; font-size: 16px; line-height: 1;
+}
+.receipt-close:hover { color: #fff; border-color: #ffc94d; }
+
+.receipt-body { overflow-y: auto; min-height: 0; padding-right: 2px; }
+.receipt-wait { margin: 4px 0; color: #b7b2a6; }
+
+.receipt-chain { list-style: none; margin: 0; padding: 0 0 0 4px; }
+.receipt-step {
+  position: relative; margin: 0 0 8px; padding: 6px 8px 7px 26px;
+  border-radius: 8px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06);
+  animation: receipt-in 0.28s ease backwards;
+}
+/* The connector between links of the chain. */
+.receipt-step + .receipt-step::before {
+  content: ""; position: absolute; left: 12px; top: -9px; width: 2px; height: 9px; background: rgba(255, 201, 77, 0.45);
+}
+.receipt-step:nth-child(2) { animation-delay: 60ms; }
+.receipt-step:nth-child(3) { animation-delay: 120ms; }
+.receipt-step:nth-child(4) { animation-delay: 180ms; }
+.receipt-step:nth-child(5) { animation-delay: 240ms; }
+.receipt-step:nth-child(n + 6) { animation-delay: 300ms; }
+@keyframes receipt-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.receipt-step-top { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.receipt-icon { position: absolute; left: 7px; top: 6px; width: 14px; text-align: center; font-size: 12px; }
+.receipt-by {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 999px;
+  background: rgba(127, 208, 255, 0.12); border: 1px solid rgba(127, 208, 255, 0.4); color: #bfe6ff;
+}
+.receipt-secs { margin-left: auto; font: 11px ui-monospace, SFMono-Regular, Consolas, monospace; color: #9fb0c4; }
+.receipt-line { margin: 3px 0 0; color: #d8d3c6; overflow-wrap: anywhere; }
+
+.tone-you { border-color: rgba(255, 201, 77, 0.35); }
+.tone-rejected { border-color: rgba(255, 107, 107, 0.55); background: rgba(255, 80, 80, 0.07); }
+.tone-rejected .receipt-icon { color: #ff8a8a; }
+.tone-proof { border-color: rgba(98, 224, 140, 0.5); background: rgba(70, 200, 120, 0.06); }
+.tone-proof .receipt-icon, .tone-live .receipt-icon { color: #7cf0a2; }
+.tone-note { border-style: dashed; }
+
+/* The proof: each row ticks green in turn. */
+.receipt-checks { list-style: none; margin: 5px 0 0; padding: 0; }
+.receipt-checks li {
+  position: relative; padding: 2px 0 2px 20px; color: #d9f5e2;
+  animation: receipt-tick 0.32s ease backwards;
+}
+.receipt-checks li::before {
+  content: "✓"; position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; border-radius: 50%;
+  font-size: 10px; line-height: 14px; text-align: center; color: #0c1a12; background: #5fe08f;
+}
+.receipt-checks li.bad::before { content: "✗"; background: #ff7a7a; }
+@keyframes receipt-tick { from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; transform: none; } }
+
+.receipt-code { margin-top: 5px; }
+.receipt-code summary { cursor: pointer; color: #9fd4ff; font-size: 12px; }
+.receipt-code pre {
+  margin: 5px 0 0; max-height: 220px; overflow: auto; padding: 7px 8px; border-radius: 6px;
+  background: #0a0e14; border: 1px solid #263040; color: #d6e2f0;
+  font: 11px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+.receipt-art { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+.receipt-art figure { margin: 0; }
+.receipt-art img, .receipt-art canvas {
+  display: block; width: 100%; height: auto; border-radius: 5px; image-rendering: pixelated; border: 1px solid #263040;
+}
+/* A checkerboard behind the cut-out shows the magenta really is gone. */
+.receipt-cut canvas { background: repeating-conic-gradient(#2a3140 0% 25%, #1b2029 0% 50%) 0 0 / 12px 12px; }
+.receipt-art figcaption { margin-top: 2px; font-size: 10px; color: #9fb0c4; text-align: center; }
+
+.receipt-time { display: flex; gap: 2px; margin-top: 4px; border-radius: 6px; overflow: hidden; flex: none; }
+.receipt-time .seg {
+  min-width: 0; padding: 3px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; color: #0c1118;
+}
+.seg-route { background: #7fd0ff; }
+.seg-write { background: #ffc94d; }
+.seg-verify { background: #5fe08f; }
+
+@media (prefers-reduced-motion: reduce) {
+  .receipt-step, .receipt-checks li { animation: none; }
+}
+
+/* Radial button: gold, like the receipt. */
+#radial-menu button[data-action="receipt"] { background: rgba(40, 32, 12, 0.86); border-color: rgba(255, 201, 77, 0.65); color: #ffe2a0; }
+#radial-menu button[data-action="receipt"]:hover,
+#radial-menu button[data-action="receipt"]:focus-visible {
+  background: rgba(130, 96, 24, 0.94); border-color: #ffe9b5; color: #fff;
+  box-shadow: 0 0 18px rgba(255, 201, 77, 0.6), 0 4px 14px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+/* Nine buttons now share the ring: a touch more radius keeps them apart. */
+#radial-menu { --r: clamp(72px, 9.4vh, 82px); }
+
+@media (max-width: 900px) {
+  #receipt-panel { top: 76px; left: 10px; right: 10px; width: auto; max-height: 60%; }
+}

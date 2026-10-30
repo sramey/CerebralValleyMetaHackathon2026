@@ -10,7 +10,7 @@ import { detectMoodCommand, entityKind, extractSpawnedEntities, isHeldItemType, 
 import { moodKey, moodSpecFor, pool, restyleSheet, sheetPath } from "./mood";
 import { fallbackVisual, lookFor, parseShape, parseVisual } from "./visual";
 import type { Visual } from "./visual";
-import type { ClientMsg, KnobDefs, Look, MoodSpec, ShapeName, KnobValue, ServerMsg, TimelineStep, WorldMod } from "../src/contract";
+import type { BuildReceipt, ClientMsg, ReceiptArt, ReceiptRoute, KnobDefs, Look, MoodSpec, ShapeName, KnobValue, ServerMsg, TimelineStep, WorldMod } from "../src/contract";
 import { routerChat } from "./router-model";
 import type { Routed } from "./router-model";
 import { chat, hasApiKey, loadEnv, SPARK, WONDER } from "./meta";
@@ -31,7 +31,8 @@ import type { Recent } from "./context";
 import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, formatManifest, ROUTER_SYSTEM, WONDER_SYSTEM } from "./prompt";
 import { activeLogFile, logBuild, logMood, saveModSources } from "./createlog";
 import { createStatsHandler } from "./stats-feed";
-import { artCachedUrl, artKeyForType, clearCachedArt, deriveSubject, generateSubjectArt, isFlyingRequest, isScenerySubject, pickArtType, purgeLegacyArt } from "./art";
+import { artCachedUrl, artKeyForType, clearCachedArt, deriveSubject, generateSubjectArt, isFlyingRequest, isScenerySubject, pickArtType, purgeLegacyArt, subjectArtPrompt, IMAGE_MODEL } from "./art";
+import { aiReceipt, plainReceipt } from "./receipt";
 import { learnFromFix, learnRuleFromFeedback, learnSkillFromFeedback } from "./learn";
 import { segmentPhoto } from "./photo";
 import { Budget, readLimits } from "./budget";
@@ -60,6 +61,8 @@ interface ManifestRec {
   knobs: KnobDefs;
   art?: { key: string; url: string; scenery?: boolean };
   look?: Look;
+  /** How this mod was made (ADR 0060), when it was built in this session. */
+  receipt?: BuildReceipt;
 }
 
 // Each connection has its own world (ADR 0014): a public server must never mix visitors' mods.
@@ -705,6 +708,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
 
   // 1. Route with Spark.
   let route: Route | null = null;
+  let routed: ReceiptRoute | undefined;
   try {
     const r0 = performance.now();
     const res = await (routing ?? routerChat(routerMessages(ws, command), 1024));
@@ -712,6 +716,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     send(ws, { kind: "routed", command, model: res.model, open: res.open, ms: res.ms, fellBack: res.fellBack });
     const resolved = resolveRoute(parseRoute(res.text), routeCtx(ws, command, forceEditModId));
     route = resolved.route;
+    if (resolved.route) routed = { action: resolved.route.action, model: res.model, open: res.open, fellBack: res.fellBack, ms: res.ms, ...(resolved.route.visual ? { visual: resolved.route.visual } : {}), rules: resolved.rules };
     if (resolved.rules.length > 0) console.log(`[route] ${resolved.rules.join("; ")} for: ${command}`);
   } catch (err) {
     send(ws, { kind: "say", text: `Router hiccup: ${err instanceof Error ? err.message : String(err)}. Try again?` });
@@ -1040,6 +1045,22 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
       }
     }
     const rec: ManifestRec = { id: def.id, title: def.title, source, compiled: first.js, knobs: def.knobs ?? {}, ...(art ? { art } : {}), ...(look ? { look } : {}) };
+    // The receipt (ADR 0060): the whole chain behind this mod, kept with it for "How was this made?".
+    const receiptArt: ReceiptArt | undefined = look
+      ? { model: "code", subject: artType ?? def.title, state: "code-drawn" }
+      : pendingArt
+        ? { model: IMAGE_MODEL, subject: pendingArt.subject, prompt: subjectArtPrompt(pendingArt.subject, pendingArt.key, pendingArt.scenery, pendingArt.flying), state: "drawing" }
+        : art
+          ? { model: IMAGE_MODEL, subject: artType ?? def.title, url: art.url, state: "cached" }
+          : undefined;
+    rec.receipt = aiReceipt({
+      modId: def.id, title: def.title, command,
+      route: routed ?? { action: route.action, model: SPARK, open: false, fellBack: false, ms: routeMs, rules: [] },
+      sources, firstErrors, tools: agentTrace.map((t) => ({ name: t.name, ms: t.ms, ...(t.ok === undefined ? {} : { ok: t.ok }) })), turns: agentTurns,
+      playtests, msPerFrame: first.res.msPerFrame,
+      timings: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) },
+      ...(receiptArt ? { art: receiptArt } : {}),
+    });
     // Edit keeps the same id so the client loader replaces it; if Wonder
     // renamed it anyway, drop the stale entry instead of duplicating.
     if (editRec && def.id !== editRec.id) { manifest.delete(editRec.id); send(ws, { kind: "removed", modId: editRec.id }); }
@@ -1049,7 +1070,11 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     send(ws, { kind: "mod", mod: { id: def.id, title: def.title, source, compiled: first.js, knobs: rec.knobs, ...(art ? { art } : {}), ...(artPending ? { artPending } : {}), ...(look ? { look } : {}) } });
     if (pendingArt) {
       const { subject, type, key, scenery, flying } = pendingArt;
-      generateSubjectArt(subject, type, scenery, flying).then(url => { if (url) { rec.art = { key, url, ...(scenery ? { scenery: true } : {}) }; try { send(ws, { kind: "art", modId: def.id, art: { key, url, ...(scenery ? { scenery: true } : {}) } }); } catch {} } }).catch(() => {});
+      const a0 = performance.now();
+      generateSubjectArt(subject, type, scenery, flying).then(url => {
+        const ra = rec.receipt?.art;
+        if (ra) Object.assign(ra, url ? { state: "drawn", url, ms: Math.round(performance.now() - a0) } : { state: "none" });
+        if (url) { rec.art = { key, url, ...(scenery ? { scenery: true } : {}) }; try { send(ws, { kind: "art", modId: def.id, art: { key, url, ...(scenery ? { scenery: true } : {}) } }); } catch {} } }).catch(() => {});
       send(ws, { kind: "say", text: `Drawing ${subject}...` });
     }
     const files = saveModSources(sources, def.id);
@@ -1181,6 +1206,17 @@ async function handleExplain(ws: WebSocket, msg: Extract<ClientMsg, { kind: "exp
   send(ws, { kind: "explainResult", modId: rec.id, title: rec.title, text: e.text, lines: e.lines, cached: e.cached, ms: e.ms });
 }
 
+/** "How was this made?" (ADR 0060): the receipt this session kept for a mod. No model call, no spend. */
+async function handleReceipt(ws: WebSocket, msg: Extract<ClientMsg, { kind: "receipt" }>): Promise<void> {
+  await adoptingOf.get(ws);
+  const manifest = sess(ws).manifest;
+  if (!manifest.has(msg.modId)) await adoptBuiltins(manifest, [msg.modId]);
+  const rec = manifest.get(msg.modId);
+  if (!rec) { send(ws, { kind: "say", text: "I don't have that object's record in this world — build it first, then click it." }); return; }
+  const builtin = BUILTINS.some((b) => b.id === rec.id);
+  send(ws, { kind: "receiptResult", receipt: rec.receipt ?? plainReceipt(rec.id, rec.title, rec.source, builtin ? "builtin" : "loaded") });
+}
+
 async function handleFeedback(ws: WebSocket, msg: Extract<ClientMsg, { kind: "feedback" }>): Promise<void> {
   await adoptingOf.get(ws);
   const manifest = sess(ws).manifest;
@@ -1267,6 +1303,11 @@ function dispatchClientMsg(ws: WebSocket, msg: ClientMsg): void {
     if (row) { s.tester = { n: row.tester, sid }; appendTester(row); }
   }
   else if (msg.kind === "timelineRestore") handleTimelineRestore(ws, Number(msg.n));
+  else if (msg.kind === "receipt") {
+    handleReceipt(ws, msg).catch((err) => {
+      send(ws, { kind: "say", text: `Couldn't open that record: ${err instanceof Error ? err.message : String(err)}` });
+    });
+  }
   else if (msg.kind === "explain") {
     handleExplain(ws, msg).catch((err) => {
       send(ws, { kind: "say", text: `Explanation failed: ${err instanceof Error ? err.message : String(err)}` });

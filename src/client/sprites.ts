@@ -6,7 +6,7 @@ import { loadAll } from "./art-late";
 // it into frames by empty columns, trims each frame, and returns Pixi textures
 // in left-to-right order. Falls back to [] on any failure (rect art remains).
 
-function isMagenta(r: number, g: number, b: number): boolean {
+export function isMagenta(r: number, g: number, b: number): boolean {
   return r > 180 && g < 110 && b > 180;
 }
 
