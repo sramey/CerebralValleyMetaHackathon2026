@@ -22,6 +22,23 @@ const WEAK = /\b(a bit|a little|a little bit|slightly|somewhat|a tad)\b/;
 const FILLER = "(?:(?:a lot|lots|much|way|super|really|very|a bit|a little(?: bit)?|slightly|somewhat|a tad|even|bit|little)\\s+)*";
 const WHO = "(it|them|me|us|him|her|my\\s+[a-z-]+|the\\s+[a-z -]+?|that|those|these|[a-z-]+s)";
 
+/** Pronouns stand for the mod touched last; they never mean the player (bug cps). */
+const PRONOUN_ASK = /\b(?:it|them|they|those|these|that)\b/;
+/** "make me faster", "make my guy faster": the ask is about the player, whatever was touched last. */
+const FIRST_PERSON = /\b(?:me|my|mine|myself|i)\b/;
+
+/**
+ * True when a relative ask points at the mod touched last with a pronoun ("make them faster")
+ * rather than naming a thing or the player. Such an ask outranks a router target of `player`,
+ * because "them/they/those" can never mean the player (bug cps: "make them faster" after adding
+ * slimes sped the player up).
+ */
+export function pronounAskMeansRecent(command: string, ask: Ask | null = parseRelativeAsk(command)): boolean {
+  if (!ask || ask.noun) return false;
+  const c = command.toLowerCase().replace(/[.!?]+/g, " ").replace(/\s+/g, " ");
+  return PRONOUN_ASK.test(c) && !FIRST_PERSON.test(c);
+}
+
 /** The thing a "make X faster" names, when it names one ("the enemies" -> "enemies"); pronouns name nothing. */
 function nounOf(who: string): string | undefined {
   const m = /^(?:the|my)\s+([a-z -]+)$/.exec(who) ?? /^([a-z-]+s)$/.exec(who);

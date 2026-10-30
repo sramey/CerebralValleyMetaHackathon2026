@@ -1103,8 +1103,13 @@ function handleLocal(text: string): boolean {
   if (n === "parallax" || n === "parallax background" || n === "parallax forest" || n === "parallax vista") { loadLocal(parallaxMod); return true; }
   if (n === "chicken") { loadLocal(chickenMod); return true; }
   if (n === "swarm" || n === "swarms" || n === "wave" || n === "waves") { loadLocal(swarmMod); return true; }
-  if (t.includes("jump higher")) { tweak("player", "jump", 880, "Jump raised."); return true; }
-  if (t.includes("faster")) {
+  // A bare pronoun ("make them faster") names whatever the player added last, which is the server's
+  // short-term memory: it goes there instead of speeding the player up (bug cps). "make me / my
+  // character faster" is about the player, and the local paths below answer that with no server.
+  const aboutPlayer = /\b(?:me|my|mine|myself|i|player|character|hero|ninja|avatar)\b/.test(t);
+  const pronounAsk = /\b(?:it|them|they|those|these|that)\b/.test(t) && !aboutPlayer;
+  if (!pronounAsk && t.includes("jump higher")) { tweak("player", "jump", 880, "Jump raised."); return true; }
+  if (!pronounAsk && t.includes("faster")) {
     if (loader.has("enemies")) tweak("enemies", "speed", 140, "Walkers sped up.");
     else tweak("player", "speed", 380, "Player sped up.");
     return true;
