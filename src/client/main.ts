@@ -36,6 +36,8 @@ import { createSpeech } from "./speech";
 import { createSketch } from "./sketch";
 import { CAMERA_LABEL, CAPTURE_LABEL, UPLOAD_LABEL, defaultAction, dialogCssVars, dialogLayout, fitInside, photoFindMessage, photoWorkSize, stageHint, wantsCameraStream } from "./camera-dialog";
 import type { DialogPhase } from "./camera-dialog";
+import { FINDER_IDLE, finderLine, finderNext } from "./camera-finder";
+import type { FinderEvent, FinderState } from "./camera-finder";
 import { compactPaperImage, paperImageSize, paperLevelMessage } from "./paper-image";
 import { matchPaperIntent, matchSketchIntent } from "./phrases";
 import { World } from "../sim/world";
@@ -1271,6 +1273,19 @@ function setCameraPhase(phase: DialogPhase, note?: string): void {
 function setCameraStatus(text: string): void {
   cameraStatus.textContent = text;
 }
+// The find-the-object line is the one the panel got wrong (bead q4u): "Couldn't find it" outlived
+// the photo that produced it and survived a close. ./camera-finder owns which line is true now;
+// these two functions are the only way the finder writes to the strip.
+let finder: FinderState = FINDER_IDLE;
+function cameraFinder(ev: FinderEvent): void {
+  finder = finderNext(finder, ev);
+  const line = finderLine(finder);
+  if (line !== null) setCameraStatus(line);
+}
+/** True when there is no builder to ask, so the panel has to say the AI is offline. */
+function builderOffline(): boolean {
+  return ws?.readyState !== WebSocket.OPEN;
+}
 function updateCameraConfirm(): void {
   if (cameraPaper?.checked) {
     cameraConfirm.textContent = "Build this level";
@@ -1391,6 +1406,8 @@ function computeDiff(): void {
   }
   updateCameraConfirm();
   if (diffComponents.length > 0) {
+    // The person already has a cut to click: that line outranks anything the finder waits for.
+    cameraFinder({ kind: "covered" });
     setCameraStatus(`Found ${diffComponents.length} new thing(s). Click yours if I picked wrong, then Bring it in.`);
   }
 }
@@ -1454,6 +1471,8 @@ function computeWand(fx: number, fy: number): void {
   if (count < 300) {
     setCameraStatus("That highlighted almost nothing — try the background method: capture the empty scene first." + tip);
   } else {
+    // A usable highlight of their own: keep its line even if a late SAM answer arrives.
+    cameraFinder({ kind: "covered" });
     setCameraStatus("Highlighted your object — Bring it in, or click again to retry." + tip);
   }
   updateCameraConfirm();
@@ -1504,6 +1523,8 @@ function closeCameraModal(clearBg = true): void {
   stopCamera();
   cameraModal.hidden = true;
   if (clearBg) bgCanvas = null;
+  // The line goes with the panel: reopening starts blank instead of showing the last photo's answer.
+  cameraFinder({ kind: "close" });
 }
 function pixelateCut(cut: HTMLCanvasElement): { canvas: HTMLCanvasElement; pixelInfo: string } {
   const pixelOn = (cameraPixel?.checked ?? (document.querySelector("#camera-pixel") as HTMLInputElement | null)?.checked) !== false;
@@ -1581,7 +1602,7 @@ async function openCameraModal(paperMode = false): Promise<void> {
   currentKey = null;
   bgCanvas = null;
   clearDetection();
-  setCameraStatus("");
+  cameraFinder({ kind: "open" });
   cameraLabel.value = "";
   cameraPreview.width = 1; cameraPreview.height = 1;
   cameraPreview.getContext("2d")?.clearRect(0, 0, 1, 1);
@@ -1636,12 +1657,9 @@ function setPendingCapture(source: CanvasImageSource, sw: number, sh: number): v
     setCameraStatus("Drawing photo ready! Click 'Build this level' to make it playable.");
     return;
   }
+  // A fresh look starts here, so any earlier "Couldn't find it" goes with the old photo.
+  cameraFinder({ kind: "attempt", offline: builderOffline() });
   if (bgCanvas) computeDiff();
-  if (diffComponents.length === 0) {
-    // With no builder connected the SAM box never arrives: say so and point at the cut that works offline.
-    const offline = ws?.readyState !== WebSocket.OPEN;
-    setCameraStatus(offline ? "The AI is offline — click your object in the photo to cut it out yourself." : "Looking for it...");
-  }
   send(photoFindMessage(currentKey, dataUrl, currentPrompt()));
 }
 function cutoutTexture(key: string, src: HTMLCanvasElement, box: SegmentBox): HTMLCanvasElement | null {
@@ -1722,7 +1740,7 @@ function handleSegment(key: string, rawBox: unknown): void {
   if (box === null) {
     foundBox = null;
     cameraBoxEl.hidden = true;
-    if (diffComponents.length === 0 && !wandMask) setCameraStatus("Couldn't find it. Get closer, use a plain background, or click the object in the photo.");
+    cameraFinder({ kind: "missed" });
     updateCameraConfirm();
     return;
   }
@@ -1732,12 +1750,14 @@ function handleSegment(key: string, rawBox: unknown): void {
   cameraBoxEl.style.width = `${box.w / 16}%`;
   cameraBoxEl.style.height = `${box.h / 16}%`;
   cameraBoxEl.hidden = false;
-  if (diffComponents.length === 0 && !wandMask) setCameraStatus("Found it — the green box is what enters the game.");
+  cameraFinder({ kind: "found" });
   updateCameraConfirm();
 }
 cameraPaper?.addEventListener("change", () => {
   if (cameraPaper.checked) {
     cameraLabel.placeholder = "Level name (optional, e.g. Sky Castle)";
+    // A drawing is read whole (ADR 0040): there is no finder answer to wait for on this photo.
+    cameraFinder({ kind: "covered" });
     if (pendingCapture) { cameraConfirm.disabled = false; setCameraStatus("Drawing photo ready! Click 'Build this level' to make it playable."); }
     else setCameraStatus("Level drawing mode: upload or capture your paper drawing.");
   } else {
@@ -1774,7 +1794,7 @@ cameraUpload.addEventListener("change", () => {
 });
 cameraFind.addEventListener("click", () => {
   if (!currentKey || !pendingCapture) return;
-  setCameraStatus("Looking for it...");
+  cameraFinder({ kind: "attempt", offline: builderOffline() });
   sendPhotoFind();
 });
 cameraBg.addEventListener("click", () => {
@@ -1787,6 +1807,8 @@ cameraBg.addEventListener("click", () => {
   foundBox = null; clickPoint = null; cameraBoxEl.hidden = true; cameraDot.hidden = true;
   redrawPreview();
   updateCameraConfirm();
+  // Clear the masks and let this hint own the strip; a late answer about the old photo stays out.
+  cameraFinder({ kind: "covered" });
   setCameraStatus(cameraStream ? "Background remembered. Hold the object up and press Capture again." : "Background remembered — pick the photo with the object in it.");
 });
 wandSensEl?.addEventListener("input", () => {
