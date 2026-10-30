@@ -162,6 +162,10 @@ export function logReview(rec: {
   issues: string[];
   accepted: boolean;
   ms: number;
+  /** What the patch changed, as a few removed/added line hunks (ADR 0069). Mod code only. */
+  diff?: { at: number; del: string[]; add: string[] }[];
+  /** Rule texts the accepted fix taught (server/learn.ts). */
+  rules?: string[];
 }): void {
   try {
     mkdirSync(dirname(activeLog), { recursive: true });

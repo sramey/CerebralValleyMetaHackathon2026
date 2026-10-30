@@ -216,6 +216,7 @@ Never commit keys. `.env` is gitignored.
 - **Themed backdrops, item quality, UI:** "change the background to medieval" repaints the sky and scenery with no model call ([ADR 0067](docs/adr/0067-themed-parallax-backdrops.md)); named props get real art with pose-bound sheet slicing, not flat shapes; the health bar draws above every sprite and follows size changes; undoing a mood restores the world cleanly.
 - **Rehearsed:** the eight demo commands ran 20 times each against the live server, with pass rates and timings in [docs/process/rehearsal-20x.md](docs/process/rehearsal-20x.md).
 - **Open-weights reviewer:** Muse Spark Open reviews finished builds in the background and swaps in verified fixes ([ADR 0068](docs/adr/0068-open-weights-build-reviewer.md)).
+- **What it has learned:** the side-panel button opens a live scorecard of the reviewer, each fix with its code diff and the rule it taught, plus the rules and skills library; works without the open-weights key ([ADR 0069](docs/adr/0069-what-it-has-learned-area.md)).
 - Tests: 900+ passing (`npm test`, green in a fresh clone with no keys), typecheck clean, production build green.
 
 **Art pipeline: first proof (2026-10-27)**

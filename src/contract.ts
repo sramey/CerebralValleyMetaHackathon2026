@@ -457,6 +457,50 @@ export interface StatsFeed {
   };
 }
 
+/**
+ * "What it has learned" (ADR 0069): how the open-weights reviewer is doing, each fix it made,
+ * and the rules and skills the game has learned. Served by `GET /api/brain`. Carries mod ids,
+ * issue sentences, rule sentences and the changed lines of mod code; never a player command,
+ * a prompt, a key or a file path.
+ */
+export interface BrainFix {
+  ts: string;
+  modId: string;
+  issues: string[];
+  accepted: boolean;
+  ms: number;
+  diff: { at: number; del: string[]; add: string[] }[];
+  /** Rule sentences this fix taught (accepted fixes only). */
+  rules: string[];
+}
+export interface BrainRule { id: string; subsystem: "router" | "wonder" | "art"; source: "feedback" | "autofix" | "seed" | "review"; rule: string; modId?: string; createdAt: string }
+export interface BrainSkill { slug: string; title: string; keywords: string[]; summary: string; modId?: string; learnedAt?: string }
+export interface BrainFeed {
+  openWeights: { on: boolean; model: string | null; note: string };
+  scorecard: {
+    reviews: number;
+    clean: number;
+    fixesFound: number;
+    accepted: number;
+    rejected: number;
+    /** Mean open-weights review latency in ms, or null with no reviews. */
+    avgMs: number | null;
+    /** Median hosted route time in this log, or null. */
+    hostedRouteMs: number | null;
+    /** ADR 0032 router benchmark: hosted Spark against Muse Spark Open. */
+    bench: { hostedP50: number; openP50: number; hostedP95: number; openP95: number; runs: number };
+    /** Verifier auto-fix rounds (hosted Wonder repairing its own draft): attempts and saves. */
+    autoFixAttempts: number;
+    autoFixSaves: number;
+  };
+  fixes: BrainFix[];
+  rules: BrainRule[];
+  skills: BrainSkill[];
+  counts: { source: Record<string, number>; subsystem: Record<string, number> };
+  /** Changes whenever a review, rule or skill lands, so the client animates only what is new. */
+  version: string;
+}
+
 export type BuildStage = "routing" | "writing" | "compiling" | "verifying" | "rejected" | "fixing" | "done" | "failed";
 
 export type ServerMsg =
