@@ -6,12 +6,13 @@
 // chroma-keys the flat magenta background and slices frames by columns).
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { logArt } from "../server/createlog";
+import { spritePrompt } from "../server/art";
 
 const key = readFileSync(".env", "utf8").match(/^MODEL_API_KEY=(.*)$/m)![1].trim();
 const subject = process.argv[2] ?? "small ninja";
 const name = process.argv[3] ?? "sheet";
 const H = { "Content-Type": "application/json", Authorization: "Bearer " + key };
-const prompt = `Pixel art game sprite sheet of ${subject}, side view, 4 poses in a row: idle, running, running, jumping. Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text`;
+const prompt = spritePrompt(subject, { held: false, scenery: false });
 
 const t = Date.now();
 const gen = await fetch("https://api.meta.ai/v1/images/generations", {
