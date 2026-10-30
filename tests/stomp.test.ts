@@ -88,8 +88,16 @@ describe("stomp", () => {
     expect(p.vy).toBe(-520);
   });
 
-  it("only counts a landing from above, close to the head", () => {
-    const make = (feetOffset: number, vy: number) => {
+  it("works on a hostile that only has a hostile-sounding name (no flags at all)", () => {
+    const w = world();
+    const walker = w.spawn({ type: "walker", x: 300, y: 372, w: 28, h: 28, gravityScale: 1 }, "classic");
+    const p = playerAt(w, 300, walker.y - 30, 400);
+    w.step();
+    expect(w.entities.some((e) => e.id === walker.id)).toBe(false);
+    expect(p.vy).toBe(-STOMP.bounce);
+  });
+
+  it("only counts a landing from above, close to the head", () => {    const make = (feetOffset: number, vy: number) => {
       const w = world();
       const e = w.spawn({ type: "goblin", x: 300, y: 340, w: 40, h: 40, gravityScale: 1, data: { hostile: true } }, "m");
       const p = w.spawn({ type: "player", x: 300, y: 340 + feetOffset - 34, w: 26, h: 34, vy, gravityScale: 1 }, "player");
