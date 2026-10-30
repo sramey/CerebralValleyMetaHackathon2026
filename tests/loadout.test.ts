@@ -265,7 +265,8 @@ describe("ammo and reload", () => {
 
 describe("vehicles run hostiles over", () => {
   const zombie = (w: World, x: number, extra: Record<string, number | string | boolean> = {}) =>
-    w.spawn({ type: "zombie", x, y: 360, w: 28, h: 40, solid: false, gravityScale: 1, health: 100, data: { hostile: true, ...extra } }, "test");
+    w.spawn({ type: "zombie", x, y: 378, w: 28, h: 22, // low enough to sit below the rider's feet, so only the vehicle (not a stomp, ADR 0071) can hurt it
+       solid: false, gravityScale: 1, health: 100, data: { hostile: true, ...extra } }, "test");
 
   it("a tank at speed damages and eventually kills a zombie it drives through", () => {
     const { w, step, player } = setup(tankMod);
