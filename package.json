@@ -3,6 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "description": "Talk-to-build platformer: you talk, AI writes verified mods, they hot-load live.",
   "scripts": {
     "dev": "vite",

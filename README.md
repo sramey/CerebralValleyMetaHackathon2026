@@ -70,6 +70,15 @@ Move with A/D or the arrows, jump with W or Space, shoot with X, use items with 
 
 **No key?** The game still runs: built-in mods and curated demo worlds (for example `http://127.0.0.1:8787/?w=demo-bouncy`) play without any AI calls. Developing instead? `npm run dev` (Vite on :5173) plus `npm run server` (:8787) in a second terminal, then `npm test`. Both ports come from `.env` (`VITE_PORT` / `PORT` / `VITE_WS_URL`), so a second checkout can run beside the first. Port 8787 busy? Set `PORT=8788` in `.env` and reopen on that port — the production build finds its server on the page's own origin, no rebuild needed.
 
+**Did it start right?** The server log should say `Meta key: found` and print the URL to open. `Meta key: not set` means AI is off: check `.env` sits in the repo root with `MODEL_API_KEY=<key>` (no quotes needed), then restart. A Meta API error in the orb usually means the key has no card on file yet.
+
+### Known limitations
+
+- **Local, single-user, your own key.** The game is meant to run on your machine with your own Meta key. It is not hardened for hosting strangers' prompts on a shared key.
+- **The mod sandbox is not a security boundary.** AI-written mods pass a forbidden-token check and are verified in the server process, so a determined mod could reach Node globals (and the server's environment, including your key) by indirection. A public host would need the verifier moved into a worker thread with no environment and a timeout ([ADR 0003](docs/adr/0003-verifier-in-process-empty-world.md)).
+- **AI calls cost money.** Each build is a few Meta calls billed to your key. The spend guard caps builds, images, camera and voice per day (`BUDGET_*` in `.env.example`), and `AI_KILL_SWITCH=1` turns every AI call off.
+- **Chrome is the tested browser.** Voice and camera need mic and webcam permission; typing works everywhere.
+
 ## Built during the event
 
 All code, docs and assets in this repo were created during the hackathon. Kickoff ended Mon Oct 26 2026, 12:24 PM ET; the first commit is `990a62c` (Tue Oct 27, 1:26 PM ET), and the full history is public. No pre-hackathon code is included.
@@ -126,7 +135,7 @@ The spike passed its go/no-go early (10/10). The remaining plan, in priority ord
 | Client | Vite + PixiJS (WebGL), on-demand generated art with digitize placeholder while it loads |
 | Game server | Node + `ws` WebSocket on port 8787, esbuild compiles mods, verifier steps the sim headless in-process |
 | Sim core | Pure deterministic 60 Hz simulation (`src/sim`), no DOM/clock/`Math.random` — identical in browser and server verifier |
-| Models (Meta Model API, `https://api.meta.ai/v1`) | **Muse Spark `muse-spark-1.2`** routes commands and picks each thing's visual kind · **Muse Wonder `muse-wonder-1.0`** writes/edits mods and fixes rejected ones as a tool-calling agent (`inspect_world`, `run_playtest`); compound commands build in parallel (`MAX_PARALLEL`, default 4) · **Muse Image `muse-image-1.0`** sprite sheets on demand · **SAM 3.1** finds objects in camera photos · **Muse Voice Transcribe** hold-to-talk, realtime. All text calls use `reasoning_effort: minimal` — see [ADR 0001](docs/adr/0001-reasoning-effort-minimal.md) |
+| Models (Meta Model API, `https://api.meta.ai/v1`) | **Muse Spark `muse-spark-1.2`** routes commands and picks each thing's visual kind · **Muse Wonder `muse-wonder-1.0`** writes/edits mods and fixes rejected ones as a tool-calling agent (`inspect_world`, `run_playtest`); compound commands build in parallel (`MAX_PARALLEL`, default 3) · **Muse Image `muse-image-1.0`** sprite sheets on demand · **SAM 3.1** finds objects in camera photos · **Muse Voice Transcribe** hold-to-talk, realtime. All text calls use `reasoning_effort: minimal` — see [ADR 0001](docs/adr/0001-reasoning-effort-minimal.md) |
 
 Key decisions and why: [docs/adr/](docs/adr/README.md) · Product/architecture: [docs/DESIGN.md](docs/DESIGN.md) · Current milestone: [docs/SPIKE.md](docs/SPIKE.md) · Model notes: [docs/META-API.md](docs/META-API.md) · Build log: [progress.md](progress.md)
 
@@ -161,7 +170,7 @@ Never commit keys. `.env` is gitignored.
 - **Share links, spend guard, visitor mode:** a live check builds 3 AI mods, saves the world, reopens the link in a fresh session with byte-identical code, and remixes it (`scripts/deploy-check.ts`, 8/8 on main).
 - **Crash containment:** a mod that throws mid-game is taken out and the orb says so; the rest of the world keeps running. Every loop in an AI-written mod gets an iteration guard at compile time, so an infinite loop fails verification in milliseconds instead of hanging the server or the tab ([ADR 0056](docs/adr/0056-contain-crashing-and-looping-mods.md)).
 - **Engine budget:** a 500-entity level steps in ~0.4 ms (2 ms budget) with a grid broad phase that gives identical results to a full scan ([ADR 0057](docs/adr/0057-engine-rules-gear-shots-ground-broad-phase.md)).
-- Tests: 535 passing (`npm test`, green in a fresh clone), typecheck clean, production build green.
+- Tests: 671 passing (`npm test`, green in a fresh clone), typecheck clean, production build green.
 
 **Art pipeline: first proof (2026-10-27)**
 
@@ -171,5 +180,4 @@ Never commit keys. `.env` is gitignored.
 - Goal-reachability search (the playtest bot runs right and jumps; it doesn't prove a goal is reachable).
 - Endless level generator (cut for the hackathon).
 - Public hosting (deploy-ready; host not chosen yet), worker-thread verifier isolation ([ADR 0003](docs/adr/0003-verifier-in-process-empty-world.md)).
-- Known limitation: the mod sandbox is a forbidden-token check plus in-process verification, not a security boundary. A determined mod can reach Node globals (and so the server's environment) by indirection. That is fine for its intended use, a local single-user run with your own key; it is not hardened for hosting strangers' prompts on a shared key (that would need the worker-thread verifier above, with no environment and a timeout).
 - Relative tweaks: "make them faster", "jump higher" and "more chickens" now tweak a knob instantly ([ADR 0058](docs/adr/0058-faster-builds-fewer-sequential-model-turns.md)); other relative wording ("make it bigger") can still build a new mod or rewrite one ([ADR 0005](docs/adr/0005-tweak-edit-fallbacks.md)).

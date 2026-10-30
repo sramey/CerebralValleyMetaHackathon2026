@@ -1441,5 +1441,7 @@ const purgedArt = purgeLegacyArt();
 if (purgedArt.length > 0) console.log(`purged legacy art sheets: ${purgedArt.join(", ")}`);
 httpServer.listen(PORT, HOST, () => {
   console.log(`meta server listening on ws://${HOST}:${PORT} (client + websocket on one port)`);
+  console.log(`open http://${HOST}:${PORT}/ in Chrome`);
+  console.log(hasApiKey() ? "Meta key: found" : "Meta key: not set, AI is off (demo worlds still play); set MODEL_API_KEY in .env and restart");
 });
 for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => { budget.stop(); process.exit(0); });
