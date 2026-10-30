@@ -35,6 +35,8 @@ import {
   isDaytimeSky,
 } from "../client/depth";
 import { drawScenery } from "../client/scenery";
+import { isSetPiece, isSetPieceSubject, SetPieceLayer } from "../client/setpieces";
+import { drawDebris, drawDebrisParticle, isDebrisOrHazard } from "../client/debris";
 import { drawFluffyCloud, drawParallaxEntities, isParallaxOrSkyEntity, isSkyOrBackgroundEntity } from "../client/parallax";
 
 declare global {
@@ -83,6 +85,12 @@ async function boot(): Promise<void> {
     preference: "webgl",
   });
   stageEl.appendChild(app.canvas);
+
+  const bgGfx = new Graphics();
+  bgGfx.zIndex = -200;
+  app.stage.addChild(bgGfx);
+  const setPieceLayer = new SetPieceLayer();
+  app.stage.addChild(setPieceLayer.container);
 
   const gfx = new Graphics();
   app.stage.addChild(gfx);
@@ -320,10 +328,12 @@ async function boot(): Promise<void> {
 
   function drawEntityRaw(e: Entity, camX: number, camY: number): void {
     if (isParallaxOrSkyEntity(e)) return;
+    if (isSetPiece(e)) return;
     const x = e.x - camX;
     const y = e.y - camY;
     const W = app.screen.width;
     const H = app.screen.height;
+    if (isDebrisOrHazard(e)) { drawDebris(gfx, e, x, y, world.tickCount); return; }
     if (x + e.w < -40 || x > W + 40 || y + e.h < -40 || y > H + 40) return;
     const t = e.type;
     const look = kindOf(t);
@@ -390,7 +400,7 @@ async function boot(): Promise<void> {
 
   const ridgeFar: number[] = [];
   const ridgeNear: number[] = [];
-  function drawRidge(pts: number[], camX: number, par: number, baseY: number, seed: number, color: number): void {
+  function drawRidge(target: Graphics, pts: number[], camX: number, par: number, baseY: number, seed: number, color: number): void {
     const W = app.screen.width;
     const H = app.screen.height;
     pts.length = 0;
@@ -400,10 +410,10 @@ async function boot(): Promise<void> {
     }
     const topCount = pts.length;
     pts.push(W + step, H, -step, H);
-    gfx.poly(pts).fill(color);
+    target.poly(pts).fill(color);
     const rim = mixC(color, pal.moon, 0.22);
     for (let i = 0; i + 3 < topCount; i += 2) {
-      gfx.moveTo(pts[i], pts[i + 1]).lineTo(pts[i + 2], pts[i + 3]).stroke({ width: 1.5, color: rim, alpha: 0.3 });
+      target.moveTo(pts[i], pts[i + 1]).lineTo(pts[i + 2], pts[i + 3]).stroke({ width: 1.5, color: rim, alpha: 0.3 });
     }
   }
 
@@ -439,6 +449,7 @@ async function boot(): Promise<void> {
   const order: Entity[] = [];
 
   function render(): void {
+    bgGfx.clear();
     gfx.clear();
     const W = app.screen.width;
     const H = app.screen.height;
@@ -464,29 +475,30 @@ async function boot(): Promise<void> {
     const skyEntity = world.entities.find((e) => isSkyOrBackgroundEntity(e) && typeof e.color === "number" && e.color > 0);
     const skyEntityCol = !mood && skyEntity ? skyEntity.color : undefined;
 
-    drawSkyAndCelestials(gfx, W, H, camX, SKY_BANDS, SKY, pal, isDaytime, Boolean(sunEntity), skyEntityCol);
+    drawSkyAndCelestials(bgGfx, W, H, camX, SKY_BANDS, SKY, pal, isDaytime, Boolean(sunEntity), skyEntityCol);
 
     if (isDaytime && !world.entities.some((e) => e.type.toLowerCase().includes("cloud"))) {
       const skyBottomCol = SKY[SKY_BANDS - 1];
       const c1x = ((((140 - camX * 0.08) % (W + 220)) + W + 220) % (W + 220)) - 110;
-      drawFluffyCloud(gfx, c1x, 38, 120, 36, 0xffffff, pal.moon, skyBottomCol, 1);
+      drawFluffyCloud(bgGfx, c1x, 38, 120, 36, 0xffffff, pal.moon, skyBottomCol, 1);
       const c2x = ((((W * 0.48 - camX * 0.12) % (W + 260)) + W + 260) % (W + 260)) - 130;
-      drawFluffyCloud(gfx, c2x, 62, 150, 42, 0xffffff, pal.moon, skyBottomCol, 2);
+      drawFluffyCloud(bgGfx, c2x, 62, 150, 42, 0xffffff, pal.moon, skyBottomCol, 2);
       const c3x = ((((W * 0.82 - camX * 0.06) % (W + 200)) + W + 200) % (W + 200)) - 100;
-      drawFluffyCloud(gfx, c3x, 28, 95, 30, 0xffffff, pal.moon, skyBottomCol, 3);
+      drawFluffyCloud(bgGfx, c3x, 28, 95, 30, 0xffffff, pal.moon, skyBottomCol, 3);
     }
 
     const horizon = H * 0.62 - camYSmooth * 0.1;
-    drawDistantMountains(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
+    drawDistantMountains(bgGfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
     const fog = depthFog(mood?.name);
-    drawRidge(ridgeFar, camX, 0.3, horizon, 0, mixC(pal.ridgeFar, SKY[SKY_BANDS - 1], fog.far));
-    drawRidge(ridgeNear, camX, 0.55, horizon + 34, 1, mixC(pal.ridgeNear, SKY[SKY_BANDS - 1], fog.near));
+    drawRidge(bgGfx, ridgeFar, camX, 0.3, horizon, 0, mixC(pal.ridgeFar, SKY[SKY_BANDS - 1], fog.far));
+    drawRidge(bgGfx, ridgeNear, camX, 0.55, horizon + 34, 1, mixC(pal.ridgeNear, SKY[SKY_BANDS - 1], fog.near));
 
     if (world.entities.some((e) => e.type === "ground") && !world.entities.some(isParallaxOrSkyEntity)) {
-      drawScenery(gfx, camX, camYSmooth, W, pal, SKY[SKY_BANDS - 1], fog.far, isDaytime, mood?.name);
+      drawScenery(bgGfx, camX, camYSmooth, W, pal, SKY[SKY_BANDS - 1], fog.far, isDaytime, mood?.name);
     }
-    drawParallaxEntities(gfx, world.entities, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1], grade);
-    drawHorizonMist(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
+    drawParallaxEntities(bgGfx, world.entities, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1], grade);
+    drawHorizonMist(bgGfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
+    setPieceLayer.render(world.entities, camX, camYSmooth, framesBySubject);
 
     order.length = 0;
     for (let i = 0; i < world.entities.length; i++) order.push(world.entities[i]);
@@ -503,15 +515,16 @@ async function boot(): Promise<void> {
     if (!shadowsDrawn) drawContactShadows(gfx, world.entities, camX, camYSmooth, W, H, isEffectType, celestialPos(W).x);
 
     for (const p of world.particles) {
-      gfx.rect(p.x - camX, p.y - camYSmooth, p.size, p.size).fill({ color: p.color, alpha: Math.max(0, 1 - p.life / p.maxLife) });
+      drawDebrisParticle(gfx, p, camX, camYSmooth);
     }
 
-    const primaries = computePrimaries(world.entities, framesBySubject, (type) => Boolean(kindOf(type)));
+    const primaries = computePrimaries(world.entities, framesBySubject, (type) => Boolean(kindOf(type)) || isSetPieceSubject(type));
     const seen = new Set<number>();
     const spriteDraw: { e: Entity; frame: Texture; subjectKey: string | undefined }[] = [];
 
     for (const e of world.entities) {
       if (isParallaxOrSkyEntity(e)) continue;
+      if (isSetPiece(e)) continue;
       const frames = framesFor(framesBySubject, e.type, e.type === "player");
       if (frames.length < 1 || !primaries.has(e.id) || kindOf(e.type)) continue;
       seen.add(e.id);
