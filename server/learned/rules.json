@@ -38,5 +38,14 @@
     "command": "add a jetpack",
     "note": "test: jetpack thrust lifts player high while jump held, minY=344",
     "createdAt": "2026-10-29T22:24:04.946Z"
+  },
+  {
+    "id": "autofix-1793325061040-1ovj",
+    "subsystem": "wonder",
+    "rule": "Bind jetpack thrust to held jump input only — never to shoot/fire — and gate thrust with fuel >0 and cooldown checks.",
+    "source": "autofix",
+    "command": "add a jetpack",
+    "note": "test: jetpack thrust on separate shoot input, vy=158.33333333333354 y=203.75000000000006",
+    "createdAt": "2026-10-30T01:51:01.040Z"
   }
 ]

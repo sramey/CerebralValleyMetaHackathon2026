@@ -11,6 +11,7 @@ Automatically distilled by Muse Spark (`muse-spark-1.2`, `reasoning_effort: "min
 - **[seed]** Dynamic ground entities must spawn at y = 400 - h with solid: false and gravityScale: 1 so they never trap or block the player.
 - **[feedback]** Weather rain drops must fall with wind-driven slant/angle and spawn a small splash burst effect on ground impact. _(from `rain`)_
 - **[autofix]** Jetpack must require separate input + fuel/cooldown and clamp vertical velocity/altitude; never apply continuous thrust while jump is held.
+- **[autofix]** Bind jetpack thrust to held jump input only — never to shoot/fire — and gate thrust with fuel >0 and cooldown checks.
 
 ## Sprite Sheet & Art Generation (`art`)
 
