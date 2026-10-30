@@ -63,6 +63,7 @@ Open **http://127.0.0.1:8787/** (or your configured `PORT`) in Chrome, click the
 | **⬇ Download game** (side panel) | Saves your world as one HTML file that plays offline in any browser, no server or AI needed |
 | Click anything → **How does this work?** in the radial menu | Muse Spark explains that object's code in three plain sentences and highlights the three lines that matter |
 | "build a grappling hook" | Click where you want to go (or aim with the mouse and press **B**); a rope latches onto any solid and reels you in, Jump vaults off |
+| Changed your mind mid-build? | Click the **×** on the build's chip under the orb; just that build stops and nothing lands ([ADR 0060](docs/adr/0060-cancel-a-running-build.md)) |
 | Press **P** | Pipeline view with live build numbers (landed %, first-try %, median time) |
 | Click **👍** or **👎** on any mod card or radial menu | Feedback modal lets you teach the engine rules, distill skills, or auto-fix the mod live |
 

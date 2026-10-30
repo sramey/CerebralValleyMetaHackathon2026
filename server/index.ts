@@ -48,6 +48,8 @@ import { clampKnobValue, gateMessage } from "./validate";
 import { screenRequest, lateVerdict } from "./safety";
 import type { PendingVerdict } from "./safety";
 import { cachedExplanation, explainMod } from "./explain";
+import { anySignal, CANCEL_DETAIL, createCancelRegistry } from "./cancel";
+import type { CancelRegistry } from "./cancel";
 
 loadEnv();
 const PORT = Number(process.env.PORT ?? 8787);
@@ -65,12 +67,28 @@ interface ManifestRec {
 // Each connection has its own world (ADR 0014): a public server must never mix visitors' mods.
 /** A screen verdict the build path may still read, tagged with the command it belongs to (ADR 0044). */
 interface PendingScreen { command: string; verdict: PendingVerdict }
-interface Session { /** Family-test tester index and session id once the page said ?tester=N (ADR 0034). */ tester?: { n: number; sid: string }; manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string>; mood?: MoodSpec; moodMods?: Set<string>; /** Level mods a sketch replaced, by the sketch mod id, so undo can put them back (bug j2t). */ levelStash?: Map<string, ManifestRec[]>; restyled?: Record<string, string>; /** Time-travel steps and the command that probably explains the next one (ADR 0041). */ timeline?: Timeline; lastCommand?: { text: string; at: number }; tlTimer?: ReturnType<typeof setTimeout>; /** Kid-safe verdict the screen did not wait for (ADR 0044). */ pendingSafety?: PendingScreen }
+interface Session { /** Family-test tester index and session id once the page said ?tester=N (ADR 0034). */ tester?: { n: number; sid: string }; manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string>; mood?: MoodSpec; moodMods?: Set<string>; /** Level mods a sketch replaced, by the sketch mod id, so undo can put them back (bug j2t). */ levelStash?: Map<string, ManifestRec[]>; restyled?: Record<string, string>; /** Time-travel steps and the command that probably explains the next one (ADR 0041). */ timeline?: Timeline; lastCommand?: { text: string; at: number }; tlTimer?: ReturnType<typeof setTimeout>; /** Kid-safe verdict the screen did not wait for (ADR 0044). */ pendingSafety?: PendingScreen; /** Builds this connection can still cancel, keyed by command (ADR 0060). */ cancel?: CancelRegistry }
 const sessions = new WeakMap<WebSocket, Session>();
 function sess(ws: WebSocket): Session {
   let s = sessions.get(ws);
   if (!s) { s = { manifest: new Map(), ip: "unknown", recent: newRecent(), reserved: new Set(), inflight: new Set() }; sessions.set(ws, s); }
   return s;
+}
+
+/** This connection's cancel registry (ADR 0060): one per socket, created on its first build. */
+function cancels(ws: WebSocket): CancelRegistry {
+  const s = sess(ws);
+  return (s.cancel ??= createCancelRegistry());
+}
+
+/**
+ * End a cancelled build on the wire (ADR 0060): the chip reads "cancelled", the timing message
+ * closes it, and the build log records it as neither a landed mod nor a failure.
+ */
+function sendCancelled(ws: WebSocket, command: string, ms: { route: number; write: number; compile: number; verify: number; total: number }, route: string, fixAttempted = false): void {
+  stage(ws, { kind: "stage", stage: "failed", detail: CANCEL_DETAIL, command });
+  send(ws, { kind: "timing", command, ms });
+  logBuild({ command, route, outcome: "cancelled", timings: ms, fixAttempted });
 }
 
 const HOST = process.env.HOST ?? "127.0.0.1";
@@ -186,6 +204,9 @@ async function deliverMod(ws: WebSocket, command: string, source: string, routeL
 
 function send(ws: WebSocket, msg: ServerMsg): void {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+  // A build's timing message is its end marker: nothing under that command is in flight after
+  // it, so its cancel job closes here rather than at every return of the pipeline (ADR 0060).
+  if (msg.kind === "timing") sessions.get(ws)?.cancel?.done(msg.command);
   if (msg.kind === "removed") worldOf.set(ws, (worldOf.get(ws) ?? []).filter((m) => m.id !== msg.modId));
   if (msg.kind === "mod" || msg.kind === "removed" || msg.kind === "mood") noteTimelineSoon(ws);
 }
@@ -295,8 +316,12 @@ async function buildPhotoMod(ws: WebSocket, key: string, prompt: string, aspect:
   const t0 = performance.now();
   const safePrompt = typeof prompt === "string" ? prompt : "";
   const command = `photo: ${safePrompt}`;
+  // Photo builds show a chip as well, so the x works on them too (ADR 0060). The SAM call has
+  // no signal of its own, so the cancel is read before anything reaches the world.
+  const job = cancels(ws).begin(command);
   let compileMs = 0;
   let verifyMs = 0;
+  const ms = () => ({ route: 0, write: 0, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) });
   try {
     if (typeof key !== "string" || !key) {
       send(ws, { kind: "say", text: "That photo didn't come through — try taking it again." });
@@ -323,6 +348,8 @@ async function buildPhotoMod(ws: WebSocket, key: string, prompt: string, aspect:
       return;
     }
     const def = verified.def;
+    // Verified or not, a cancelled photo build must not land (ADR 0060).
+    if (job.cancelled) { sendCancelled(ws, command, ms(), "new"); return; }
     const rec: ManifestRec = { id: def.id, title: def.title, source, compiled: compiled.js, knobs: def.knobs ?? {} };
     manifest.set(def.id, rec);
     stage(ws, { kind: "stage", stage: "done", detail: `loaded ${def.id} (${SIM.healthFrames} frames OK)`, command });
@@ -336,6 +363,9 @@ async function buildPhotoMod(ws: WebSocket, key: string, prompt: string, aspect:
     try {
       logBuild({ command, route: "new", outcome: "failed", timings: { route: 0, write: 0, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) }, fixAttempted: false });
     } catch { /* ignore */ }
+  } finally {
+    // This path sends no timing message, so its cancel job closes here (ADR 0060).
+    cancels(ws).done(command);
   }
 }
 
@@ -452,8 +482,12 @@ async function handleSketchMessage(ws: WebSocket, msg: Extract<ClientMsg, { kind
   const manifest = sess(ws).manifest;
   await adoptingOf.get(ws);
   await adoptBuiltins(manifest, ["ground"]); // so the starter ground can be stashed and restored
+  // A sketch build is a build chip too, so it can be cancelled like any other (ADR 0060).
+  const job = cancels(ws).begin(command);
   const timings: DeliverTimings = { route: 0, write: 0, compile: 0, verify: 0 };
   const deliver = async (source: string): Promise<{ ok: boolean; errors: string[] }> => {
+    // The last gate before the level changes: a sketch cancelled while it read can never land.
+    if (job.cancelled) return { ok: false, errors: [CANCEL_DETAIL] };
     stage(ws, { kind: "stage", stage: "compiling", detail: "building your level", command });
     const c0 = performance.now();
     const compiled = compileMod(source);
@@ -481,19 +515,22 @@ async function handleSketchMessage(ws: WebSocket, msg: Extract<ClientMsg, { kind
   try {
     await runSketchBuild({
       // The signal is the sketch pipeline's own deadline (bug q8x): a hung vision call is
-      // cancelled here instead of holding the build until the client gives up.
-      ask: (messages, signal) => chat(WONDER, messages, 1400, "minimal", signal).then((r) => { timings.write += r.ms; return r.text; }),
+      // cancelled here instead of holding the build until the client gives up. The player's
+      // cancel joins that race (ADR 0060).
+      ask: (messages, signal) => chat(WONDER, messages, 1400, "minimal", anySignal(signal, job.signal)).then((r) => { timings.write += r.ms; return r.text; }),
       deliver,
       say: (text) => send(ws, { kind: "say", text }),
       stage: (s, detail) => stage(ws, { kind: "stage", stage: s, detail, command }),
       note: (text) => console.log(`[sketch] ${text}`),
     }, msg);
   } catch (err) {
+    if (job.cancelled) { sendCancelled(ws, command, { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) }, "new"); return; }
     const why = err instanceof Error ? err.message : String(err);
     send(ws, { kind: "say", text: `Sketch failed: ${why}` });
     stage(ws, { kind: "stage", stage: "failed", detail: why.slice(0, 200), command });
     logBuild({ command, route: "new", outcome: "failed", timings: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) }, fixAttempted: false });
   }
+  if (job.cancelled) { sendCancelled(ws, command, { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) }, "new"); return; }
   send(ws, { kind: "timing", command, ms: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) } });
 }
 
@@ -522,8 +559,11 @@ async function handlePaperLevelMessage(ws: WebSocket, msg: Extract<ClientMsg, { 
   const manifest = sess(ws).manifest;
   await adoptingOf.get(ws);
   await adoptBuiltins(manifest, ["ground"]);
+  // A paper level is a build chip too, so it can be cancelled like any other (ADR 0060).
+  const job = cancels(ws).begin(command);
   const timings: DeliverTimings = { route: 0, write: 0, compile: 0, verify: 0 };
   const deliver = async (source: string): Promise<{ ok: boolean; errors: string[] }> => {
+    if (job.cancelled) return { ok: false, errors: [CANCEL_DETAIL] };
     stage(ws, { kind: "stage", stage: "compiling", detail: "building your paper level", command });
     const c0 = performance.now();
     const compiled = compileMod(source);
@@ -549,19 +589,21 @@ async function handlePaperLevelMessage(ws: WebSocket, msg: Extract<ClientMsg, { 
   };
   try {
     await runPaperBuild({
-      ask: (messages, signal) => chat(WONDER, messages, 1400, "minimal", signal).then((r) => { timings.write += r.ms; return r.text; }),
+      ask: (messages, signal) => chat(WONDER, messages, 1400, "minimal", anySignal(signal, job.signal)).then((r) => { timings.write += r.ms; return r.text; }),
       deliver,
       say: (text) => send(ws, { kind: "say", text }),
       stage: (s, detail) => stage(ws, { kind: "stage", stage: s, detail, command }),
       note: (text) => console.log(`[paper] ${text}`),
     }, msg);
   } catch (err) {
+    if (job.cancelled) { sendCancelled(ws, command, { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) }, "new"); return; }
     const why = err instanceof Error ? err.message : String(err);
     send(ws, { kind: "say", text: `Paper level failed: ${why}` });
     // A thrown build must not leave the orb waiting for a stage that never comes (ADR 0054).
     stage(ws, { kind: "stage", stage: "failed", detail: why.slice(0, 200), command });
     logBuild({ command, route: "new", outcome: "failed", timings: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) }, fixAttempted: false });
   }
+  if (job.cancelled) { sendCancelled(ws, command, { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) }, "new"); return; }
   send(ws, { kind: "timing", command, ms: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) } });
 }
 
@@ -697,6 +739,12 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
 
   stage(ws, { kind: "stage", stage: "routing", detail: "routing your command", command });
 
+  // The player can stop this build while it runs (ADR 0060). Its command text keys the job -
+  // the same text the client stamps on the chip - so one lane of a compound stops alone.
+  const job = cancels(ws).begin(command);
+  const cancelled = (): boolean => job.cancelled;
+  const timings = () => ({ route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) });
+
   if (!spend(ws, "build")) {
     send(ws, { kind: "timing", command, ms: { route: 0, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
     logBuild({ command, route: "new", outcome: "say", timings: { route: 0, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) }, fixAttempted: false });
@@ -707,18 +755,22 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
   let route: Route | null = null;
   try {
     const r0 = performance.now();
-    const res = await (routing ?? routerChat(routerMessages(ws, command), 1024));
+    const res = await (routing ?? routerChat(routerMessages(ws, command), 1024, job.signal));
     routeMs = Math.round(performance.now() - r0);
     send(ws, { kind: "routed", command, model: res.model, open: res.open, ms: res.ms, fellBack: res.fellBack });
     const resolved = resolveRoute(parseRoute(res.text), routeCtx(ws, command, forceEditModId));
     route = resolved.route;
     if (resolved.rules.length > 0) console.log(`[route] ${resolved.rules.join("; ")} for: ${command}`);
   } catch (err) {
+    // A cancel aborts the router call too, and that is not a hiccup to apologize for (ADR 0060).
+    if (cancelled()) { sendCancelled(ws, command, timings(), "new"); return; }
     send(ws, { kind: "say", text: `Router hiccup: ${err instanceof Error ? err.message : String(err)}. Try again?` });
     send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
     logBuild({ command, route: "new", outcome: "say", timings: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) }, fixAttempted: false });
     return;
   }
+  // Cancelled while the router was thinking: stop before Wonder is asked anything.
+  if (cancelled()) { sendCancelled(ws, command, timings(), "new"); return; }
   if (!route) {
     send(ws, { kind: "say", text: "I didn't quite get that — try something like 'add a player' or 'make it rain'." });
     send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
@@ -801,6 +853,8 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
 
   // Built-in fast path: exact simple "new" commands use hand-written mods.
   // Any read/compile/verify failure falls through to Wonder below.
+  // A build cancelled during routing never reaches it: the hand-written mods are no exception.
+  if (cancelled()) { sendCancelled(ws, command, timings(), "new"); return; }
   if (route.action === "new") {
     const key = normalizeBuiltinCommand(command);
     const builtinTimings: DeliverTimings = { route: routeMs, write: 0, compile: 0, verify: 0 };
@@ -949,19 +1003,24 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
       // Requests that touch what already exists get the world snapshot up front, a local call of a few ms,
       // instead of spending a whole Wonder turn asking for it (ADR 0058).
       const touchesWorld = !!editRec || isPlayerCommand(command) || !!resolvePronoun(command, session.recent);
-      const ag = await runAgent({ system: `${WONDER_SYSTEM}\n\n${TOOL_RULES}`, user, tools: tools(), maxCalls: 3, onTool, onStep, onText, ...(touchesWorld ? { prefetch: ["inspect_world"] } : {}) });
+      const ag = await runAgent({ system: `${WONDER_SYSTEM}\n\n${TOOL_RULES}`, user, tools: tools(), maxCalls: 3, onTool, onStep, onText, signal: job.signal, ...(touchesWorld ? { prefetch: ["inspect_world"] } : {}) });
       agentTrace.push(...ag.trace);
       agentTurns += ag.turns;
       text = ag.text;
     } catch (agentErr) {
+      // The cancel aborts the model turn itself; a plain completion would be a new call (ADR 0060).
+      if (cancelled()) throw agentErr;
       console.log(`[agent] tool loop failed, plain completion instead: ${agentErr instanceof Error ? agentErr.message : String(agentErr)}`);
-      text = (await chat(WONDER, [{ role: "system", content: WONDER_SYSTEM }, { role: "user", content: user }], 4096)).text;
+      text = (await chat(WONDER, [{ role: "system", content: WONDER_SYSTEM }, { role: "user", content: user }], 4096, "minimal", job.signal)).text;
     }
     writeMs = Math.round(performance.now() - w0) - (compileMs + verifyMs - spent0);
+    // Cancelled while Wonder was writing: the source is dropped, not compiled (ADR 0060).
+    if (cancelled()) { releaseBuild(); sendCancelled(ws, command, timings(), routeAction); return; }
     source = keepId(stripFences(text));
     sources.push(source);
   } catch (err) {
     releaseBuild();
+    if (cancelled()) { sendCancelled(ws, command, timings(), routeAction); return; }
     send(ws, { kind: "say", text: `The writer failed: ${err instanceof Error ? err.message : String(err)}` });
     send(ws, { kind: "timing", command, ms: { route: routeMs, write: writeMs, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
     logBuild({ command, route: routeAction, outcome: "say", timings: { route: routeMs, write: writeMs, compile: 0, verify: 0, total: Math.round(performance.now() - t0) }, fixAttempted: false, ...agentInfo(), ...batchInfo });
@@ -989,16 +1048,19 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
         onTool,
         onStep,
         onText,
+        signal: job.signal,
       });
       agentTrace.push(...fix.trace);
       agentTurns += fix.turns;
       writeMs += Math.round(performance.now() - w0) - (compileMs + verifyMs - spent0);
+      if (cancelled()) { releaseBuild(); sendCancelled(ws, command, timings(), routeAction, true); return; }
       source = keepId(stripFences(fix.text));
       sources.push(source);
       stage(ws, { kind: "stage", stage: "compiling", detail: "recompiling the fix", command });
       first = await attempt(source);
     } catch (err) {
       releaseBuild();
+      if (cancelled()) { sendCancelled(ws, command, timings(), routeAction, true); return; }
       send(ws, { kind: "say", text: `Fix attempt failed: ${err instanceof Error ? err.message : String(err)}` });
       send(ws, { kind: "timing", command, ms: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) } });
       const files = saveModSources(sources);
@@ -1006,6 +1068,9 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
       return;
     }
   }
+  // The last gate before the world changes (ADR 0060): a cancel during compile, verify or the
+  // playtest drops the result here, so nothing the player stopped is ever hot-loaded.
+  if (cancelled()) { releaseBuild(); sendCancelled(ws, command, timings(), routeAction, fixAttempted); return; }
   releaseBuild();
   if (fixAttempted && firstErrors.length > 0) {
     void learnFromFix(command, firstErrors, badSource, first.ok ? source : undefined);
@@ -1267,6 +1332,13 @@ function dispatchClientMsg(ws: WebSocket, msg: ClientMsg): void {
     if (row) { s.tester = { n: row.tester, sid }; appendTester(row); }
   }
   else if (msg.kind === "timelineRestore") handleTimelineRestore(ws, Number(msg.n));
+  else if (msg.kind === "cancel") {
+    // The x on a build chip (ADR 0060): abort that build's in-flight model calls. Its own
+    // checkpoints send the "failed / cancelled" stage and the timing that closes the chip, so
+    // nothing is answered here; a command that already finished has nothing to stop.
+    const stopped = cancels(ws).cancel(msg.command);
+    if (stopped > 0) console.log(`[cancel] stopped ${stopped} build(s) for: ${msg.command}`);
+  }
   else if (msg.kind === "explain") {
     handleExplain(ws, msg).catch((err) => {
       send(ws, { kind: "say", text: `Explanation failed: ${err instanceof Error ? err.message : String(err)}` });

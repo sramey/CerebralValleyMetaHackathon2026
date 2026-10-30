@@ -3,6 +3,10 @@
 // a chip with its own trail of stages, and the orb stays "building" until every
 // in-flight build has settled. Builds are keyed by their (sub-)command text,
 // which the server stamps on every stage and timing message.
+//
+// A running chip carries a small x (ADR 0060): it sends {kind:"cancel", command}
+// so the player can stop a build they no longer want, and settles the chip even if
+// the server never answers, so the orb can never be left building forever.
 import "./builds.css";
 
 type Phase = "running" | "landed" | "failed";
@@ -15,10 +19,14 @@ interface Build {
   chip: HTMLElement;
   startedAt: number;
   timer: number;
+  /** The player clicked the x: no second click, and the chip says so until the server answers. */
+  cancelling: boolean;
 }
 
 const STALE_MS = 120_000; // a build whose server never reports back is dropped, so the orb cannot stick
 const LINGER_MS = 2500; // how long a settled chip stays visible
+const CANCEL_GRACE_MS = 8000; // a clicked x settles the chip by itself if no stage ever comes back
+const CANCEL_LABEL = "cancelled";
 
 const STAGE_LABEL: Record<string, string> = {
   routing: "routing",
@@ -42,7 +50,8 @@ export interface Builds {
   headline(): string;
 }
 
-export function createBuilds(host: HTMLElement, onChange: () => void): Builds {
+/** `onCancel`: called with a build's command when the player clicks the x on its chip (ADR 0060). */
+export function createBuilds(host: HTMLElement, onChange: () => void, onCancel?: (command: string) => void): Builds {
   const list = document.createElement("div");
   list.className = "builds";
   list.setAttribute("aria-live", "polite");
@@ -62,6 +71,8 @@ export function createBuilds(host: HTMLElement, onChange: () => void): Builds {
     b.chip.dataset.phase = b.phase;
     b.chip.title = b.detail;
     b.chip.setAttribute("aria-label", `${b.command}: ${b.trail.join(" › ")}`);
+    if (b.cancelling && b.phase === "running") b.chip.dataset.cancelling = "1";
+    else delete b.chip.dataset.cancelling;
     b.chip.replaceChildren();
     const name = document.createElement("span");
     name.className = "builds-name";
@@ -81,6 +92,28 @@ export function createBuilds(host: HTMLElement, onChange: () => void): Builds {
     stage.textContent = b.trail[b.trail.length - 1] ?? "";
     trail.append(dots, stage);
     b.chip.append(name, trail);
+    if (b.phase === "running") b.chip.append(cancelButton(b));
+  }
+
+  /** The x that stops a build still running (ADR 0060). Clicking it once is enough: the button
+   *  disables, and a grace timer settles the chip if the server never reports back. */
+  function cancelButton(b: Build): HTMLButtonElement {
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = "builds-cancel";
+    x.textContent = "×";
+    x.title = `Cancel "${b.command}"`;
+    x.setAttribute("aria-label", `Cancel ${b.command}`);
+    x.disabled = b.cancelling;
+    x.addEventListener("click", () => {
+      if (b.phase !== "running" || b.cancelling) return;
+      b.cancelling = true;
+      paint(b);
+      onChange();
+      onCancel?.(b.command);
+      window.setTimeout(() => { markCancelled(b); onChange(); }, CANCEL_GRACE_MS);
+    });
+    return x;
   }
 
   /** Number of chips on screen drives the row widths (.builds[data-count]). */
@@ -100,6 +133,15 @@ export function createBuilds(host: HTMLElement, onChange: () => void): Builds {
     }, LINGER_MS);
   }
 
+  /** End a chip the player stopped: the trail says "cancelled", not "failed" (ADR 0060). */
+  function markCancelled(b: Build): void {
+    if (b.phase !== "running") return;
+    b.cancelling = true;
+    b.detail = CANCEL_LABEL;
+    if (b.trail[b.trail.length - 1] !== CANCEL_LABEL) b.trail.push(CANCEL_LABEL);
+    settle(b, "failed");
+  }
+
   return {
     stage(command, stage, detail) {
       let b = builds.get(command);
@@ -109,12 +151,12 @@ export function createBuilds(host: HTMLElement, onChange: () => void): Builds {
         chip.className = "builds-chip";
         list.appendChild(chip);
         count();
-        b = { command, phase: "running", trail: [], detail, chip, startedAt: performance.now(), timer: 0 };
+        b = { command, phase: "running", trail: [], detail, chip, startedAt: performance.now(), timer: 0, cancelling: false };
         builds.set(command, b);
         const mine = b;
         b.timer = window.setTimeout(() => { settle(mine, "failed"); onChange(); }, STALE_MS);
       }
-      const label = STAGE_LABEL[stage] ?? stage;
+      const label = stage === "failed" && detail === CANCEL_LABEL ? CANCEL_LABEL : STAGE_LABEL[stage] ?? stage;
       if (b.trail[b.trail.length - 1] !== label) b.trail.push(label);
       b.detail = detail;
       paint(b);

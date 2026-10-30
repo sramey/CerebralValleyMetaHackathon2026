@@ -56,6 +56,7 @@ class FakeEl {
     this.parent = null;
   }
   setAttribute(k: string, v: string): void { this.attrs[k] = v; }
+  addEventListener(): void { /* the cancel x (ADR 0060) is not clicked in these layout tests */ }
   getAttribute(k: string): string | undefined { return this.attrs[k]; }
   /** Every descendant whose class list contains `cls`. */
   all(cls: string): FakeEl[] {

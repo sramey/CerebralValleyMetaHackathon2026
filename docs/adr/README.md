@@ -87,3 +87,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0057](0057-engine-rules-gear-shots-ground-broad-phase.md) | Engine rules for gear, shots and the ground slab; a broad phase for collision | Draft |
 | [0058](0058-faster-builds-fewer-sequential-model-turns.md) | Faster builds: relative tweaks, split beside the router, prefetched world snapshot | Draft |
 | [0059](0059-living-creations-events-speech-orders-and-route-rules.md) | Living creations: mod events, speech bubbles, voice orders to any creature, route rules as a named pipeline | Draft |
+| [0060](0060-cancel-a-running-build.md) | Cancel a running build: an x on its chip aborts that one build and drops its result | Draft |

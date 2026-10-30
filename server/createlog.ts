@@ -9,7 +9,7 @@
 //
 // LINE FORMATS (one JSON object per line):
 //   Build: { kind? (absent = build), ts ISO, command, route: "new"|"tweak"|"edit",
-//            outcome: "mod"|"tweak"|"edit"|"failed"|"say",
+//            outcome: "mod"|"tweak"|"edit"|"failed"|"say"|"cancelled",
 //            modId?, title?, knob?, value?,
 //            timings { route, write, compile, verify, total } (ms),
 //            verify? { ok, errors[], msPerFrame }, fixAttempted, sourceFile?,
@@ -21,6 +21,8 @@
 //     outcome "say"  = no build attempted (missing key, router miss/hiccup,
 //                      question, writer/fix error). Undo removals are NOT logged
 //                      (not builds; no "undo" outcome exists).
+//     outcome "cancelled" = the player stopped it from the build chip (ADR 0060): neither
+//                      a landed build nor a failure, so the success rate is not skewed.
 //     sourceFile = latest saved Wonder source; sourceFiles = all saved
 //     versions (initial + fixed) for this build.
 //   Art: { kind: "art", ts ISO, subject, file, ms, samOk } (see logArt).
@@ -58,7 +60,7 @@ export interface BuildTimings {
   total: number;
 }
 
-export type BuildOutcome = "mod" | "tweak" | "edit" | "failed" | "say";
+export type BuildOutcome = "mod" | "tweak" | "edit" | "failed" | "say" | "cancelled";
 
 export interface BuildEntry {
   command: string;
