@@ -4,7 +4,7 @@
 // the server proxies to Muse Voice Transcribe, so the API key never reaches the browser.
 import type { ClientMsg, ServerMsg } from "../contract";
 import { Downsampler, orbLevel, rms } from "./pcm";
-import { HOLD_MAX_MS, shiftStillHeld, voiceTextOk } from "./voicegate";
+import { HOLD_MAX_MS, shiftStillHeld, voiceShouldReprompt, voiceTextOk } from "./voicegate";
 
 export interface VoiceDeps {
   /** Orb bar element; gets class `voice-live` / `voice-wait` and the --level CSS variable. */
@@ -43,6 +43,7 @@ export function initVoice(deps: VoiceDeps) {
   let releaseAt = 0;
   let firstPartialAt = -1;
   let capturing = false;
+  let audioSent = false;
   let failsafe: ReturnType<typeof setTimeout> | null = null;
   let holdCap: ReturnType<typeof setTimeout> | null = null;
   let mic: Promise<boolean> | null = null;
@@ -65,6 +66,7 @@ export function initVoice(deps: VoiceDeps) {
     phase = "idle";
     heldBy = null;
     capturing = false;
+    audioSent = false;
     if (failsafe) clearTimeout(failsafe);
     failsafe = null;
     if (holdCap) clearTimeout(holdCap);
@@ -127,7 +129,10 @@ export function initVoice(deps: VoiceDeps) {
     if (!capturing || !ds) return;
     paint("live", orbLevel(rms(samples)));
     const pcm = ds.process(samples);
-    if (pcm.length && deps.isOpen()) deps.sendBinary(pcm.buffer as ArrayBuffer);
+    if (pcm.length && deps.isOpen()) {
+      audioSent = true;
+      deps.sendBinary(pcm.buffer as ArrayBuffer);
+    }
   }
 
   function press(source: "key" | "pad" | "api"): void {
@@ -137,6 +142,7 @@ export function initVoice(deps: VoiceDeps) {
     heldBy = source;
     pressAt = performance.now();
     firstPartialAt = -1;
+    audioSent = false;
     paint("live");
     micDenied = false; // an explicit press may re-ask
     deps.feedback.textContent = "Listening…";
@@ -168,7 +174,10 @@ export function initVoice(deps: VoiceDeps) {
   function release(source: "key" | "pad" | "api"): void {
     if (phase !== "holding" || heldBy !== source) return;
     releaseAt = performance.now();
-    if (!micReady || releaseAt - pressAt < TAP_MS) {
+    const isTap = source === "api"
+      ? releaseAt - pressAt < TAP_MS && !audioSent
+      : !micReady || releaseAt - pressAt < TAP_MS || !audioSent;
+    if (isTap) {
       const first = !micReady;
       deps.sendJson({ kind: "voiceEnd", cancel: true });
       reset();
@@ -214,7 +223,7 @@ export function initVoice(deps: VoiceDeps) {
     deps.log(`voice: "${text}" press→first partial ${stat.pressToFirstPartialMs}ms, release→final ${stat.releaseToFinalMs}ms`);
     reset();
     if (voiceTextOk(text)) deps.submit(text);
-    else deps.say("Didn't catch that — hold Shift and try again.");
+    else if (voiceShouldReprompt(text)) deps.say("Didn't catch that — hold Shift and try again.");
     return true;
   }
 
@@ -226,13 +235,19 @@ export function initVoice(deps: VoiceDeps) {
 
   // Keyboard: Shift, but never while typing in a text box.
   addEventListener("keydown", (e) => {
+    if (isTypingTarget(e.target) && phase === "holding") cancelHold();
     if ((e.code === "ShiftLeft" || e.code === "ShiftRight") && !e.repeat && !isTypingTarget(e.target)) press("key");
   });
   addEventListener("keyup", (e) => {
     if (e.code === "ShiftLeft" || e.code === "ShiftRight") release("key");
   });
   addEventListener("blur", () => { if (phase === "holding" && heldBy === "key") cancelHold(); });
-  document.addEventListener("visibilitychange", () => { if (document.hidden && phase === "holding") cancelHold(); });
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", () => { if (document.hidden && phase === "holding") cancelHold(); });
+  }
+  addEventListener("focusin", (e) => {
+    if (isTypingTarget(e.target) && phase === "holding") cancelHold();
+  });
   // A lost keyup (focus moved while Shift was down) leaves "holding" stuck: any later key or pointer event without Shift ends it.
   const lostShift = (e: KeyboardEvent | PointerEvent): void => { if (phase === "holding" && heldBy === "key" && !shiftStillHeld(e)) cancelHold(); };
   addEventListener("keydown", lostShift, { capture: true });
@@ -260,14 +275,21 @@ export function initVoice(deps: VoiceDeps) {
   addEventListener("pointerdown", warmOnActivity);
 
   // Test hooks: drive a turn without a physical key, read measured latencies.
-  (window as unknown as Record<string, unknown>).__voice = {
-    press: () => press("api"),
-    release: () => release("api"),
-    stats,
-    get phase() { return phase; },
-    releaseMic,
-    get mic() { return micReady ? "ready" : micError || "pending"; },
-  };
+  if (typeof window !== "undefined") {
+    (window as unknown as Record<string, unknown>).__voice = {
+      press: (opts?: { tap?: boolean; noAudio?: boolean }) => {
+        press("api");
+        if (!opts?.tap) pressAt = performance.now() - TAP_MS - 10;
+        if (!opts?.noAudio) audioSent = true;
+      },
+      release: () => release("api"),
+      stats,
+      get phase() { return phase; },
+      setAudioSent: (sent: boolean) => { audioSent = sent; },
+      releaseMic,
+      get mic() { return micReady ? "ready" : micError || "pending"; },
+    };
+  }
 
   // Connecting does not warm a session: nothing is billed until the first key or pointer gesture (bug ahv).
   return { onServerMsg, onOpen: () => {} };
