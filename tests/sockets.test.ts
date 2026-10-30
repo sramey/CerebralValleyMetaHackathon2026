@@ -149,4 +149,19 @@ describe("gear follow-ups (bead mz1)", () => {
     expect(hat.y + hat.h).toBeLessThanOrEqual(visualBox(blob).y + 6); // 60 px drawn: higher
     expect(hat.y).toBeLessThan(blob.y - 15);
   });
+
+  it("scales visual height appropriately for props/held items vs creatures", () => {
+    // Props and held items scale by 1.2x with min 10, avoiding massive 34px blowup on small items
+    expect(visualHeight({ type: "sword", h: 12 })).toBe(14); // 12 * 1.2 = 14.4 -> 14
+    expect(visualHeight({ type: "key", h: 8 })).toBe(10); // clamped to min 10 (not 34)
+    expect(visualHeight({ type: "chest", h: 20 })).toBe(24); // 20 * 1.2 = 24
+    expect(visualHeight({ type: "jetpack", h: 22 })).toBe(26); // 22 * 1.2 = 26.4 -> 26
+
+    // Creatures maintain min 34px and 1.5x scale
+    expect(visualHeight({ type: "dragon", h: 60 })).toBe(90); // 60 * 1.5 = 90
+    expect(visualHeight({ type: "slime", h: 16 })).toBe(34); // clamped to creature min 34
+
+    // Without art, returns hitbox height
+    expect(visualHeight({ type: "sword", h: 12 }, false)).toBe(12);
+  });
 });

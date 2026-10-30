@@ -32,6 +32,8 @@ const PROJECTILE_RE = /bullet|shot|projectile|arrow|fireball|laser|bolt|pellet|p
 /** Round leather balls: drawn as a sphere with seams, never squashed into an egg (bead z1d). */
 const BALL_RE = /ball|sphere|marble/;
 const BASKETBALL_RE = /basket/;
+export const ASTEROID_RE = /asteroid|meteor|comet|boulder|crag/i;
+export const TARGET_RE = /target|bullseye|archery|shooting-dummy/i;
 
 export type Kind = { kind: "shape"; shape: ShapeName } | { kind: "effect" };
 
@@ -63,6 +65,9 @@ function poly(g: Graphics, pts: number[], color: number): void {
 export function drawShape(g: Graphics, e: Entity, x: number, y: number, shape: ShapeName): void {
   const c = e.color;
   const w = e.w, h = e.h;
+  const t = e.type.toLowerCase();
+  if (ASTEROID_RE.test(t)) { drawAsteroidRock(g, e, x, y); return; }
+  if (TARGET_RE.test(t)) { drawBullseyeTarget(g, e, x, y); return; }
   switch (shape) {
     case "circle": {
       const r = Math.min(w, h) / 2;
@@ -140,6 +145,86 @@ export function drawShape(g: Graphics, e: Entity, x: number, y: number, shape: S
 /** True for the level's cliff overhang: a platform far taller than any ledge (the starter ground's `overhang` knob). */
 export function isCliff(e: Entity): boolean {
   return e.type.toLowerCase().includes("platform") && e.h >= 300 && e.w >= 120;
+}
+
+/** A faceted, craggy asteroid with craters and light/shadow facets (no flat squares). */
+export function drawAsteroidRock(g: Graphics, e: Entity, x: number, y: number): void {
+  const k = gradeFn;
+  const c = e.color || 0x8a7f72;
+  const w = e.w, h = e.h;
+  const cx = x + w / 2, cy = y + h / 2;
+  const rx = w / 2, ry = h / 2;
+  
+  const seed = (e.id * 17 + Math.floor(e.x * 0.1) * 31) & 0xffff;
+  const numPts = 9;
+  const pts: number[] = [];
+  for (let i = 0; i < numPts; i++) {
+    const angle = (i / numPts) * Math.PI * 2 - Math.PI / 2;
+    const variance = 0.82 + 0.22 * (((seed + i * 43) % 100) / 100);
+    pts.push(cx + Math.cos(angle) * rx * variance, cy + Math.sin(angle) * ry * variance);
+  }
+  
+  g.poly(pts).fill(OUTLINE).stroke({ width: 3, color: OUTLINE, join: "round" });
+  g.poly(pts).fill(k(c));
+  
+  const hiPts: number[] = [cx, cy];
+  for (let i = 5; i <= 9; i++) {
+    const idx = (i % numPts) * 2;
+    hiPts.push(pts[idx], pts[idx + 1]);
+  }
+  g.poly(hiPts).fill({ color: k(scale(c, 1.35)), alpha: 0.45 });
+
+  const shPts: number[] = [cx, cy];
+  for (let i = 1; i <= 5; i++) {
+    const idx = (i % numPts) * 2;
+    shPts.push(pts[idx], pts[idx + 1]);
+  }
+  g.poly(shPts).fill({ color: k(scale(c, 0.55)), alpha: 0.55 });
+
+  const c1x = cx - rx * 0.28, c1y = cy - ry * 0.2;
+  const c1r = Math.max(2, Math.min(rx, ry) * 0.22);
+  g.circle(c1x, c1y, c1r).fill(k(scale(c, 0.45)));
+  g.circle(c1x + c1r * 0.25, c1y + c1r * 0.25, c1r * 0.7).fill(k(scale(c, 0.35)));
+
+  const c2x = cx + rx * 0.25, c2y = cy + ry * 0.22;
+  const c2r = Math.max(1.5, Math.min(rx, ry) * 0.18);
+  g.circle(c2x, c2y, c2r).fill(k(scale(c, 0.45)));
+  g.circle(c2x + c2r * 0.25, c2y + c2r * 0.25, c2r * 0.7).fill(k(scale(c, 0.35)));
+
+  if (rx > 18) {
+    const c3x = cx - rx * 0.1, c3y = cy + ry * 0.35;
+    const c3r = Math.max(1.5, Math.min(rx, ry) * 0.14);
+    g.circle(c3x, c3y, c3r).fill(k(scale(c, 0.45)));
+  }
+}
+
+/** A procedural bullseye target: wooden stand and concentric red/white rings. */
+export function drawBullseyeTarget(g: Graphics, e: Entity, x: number, y: number): void {
+  const k = gradeFn;
+  const w = e.w, h = e.h;
+  const cx = x + w / 2;
+  
+  const standH = Math.max(4, h * 0.25);
+  const targetH = h - standH;
+  const targetR = Math.min(w / 2, targetH / 2);
+  const cy = y + targetR;
+  
+  const woodCol = 0x6e4a27;
+  g.rect(cx - 2, cy, 4, h - targetR).fill(OUTLINE);
+  g.rect(cx - 1.5, cy, 3, h - targetR).fill(k(woodCol));
+  g.rect(cx - w * 0.35, y + h - 3, w * 0.7, 3).fill(OUTLINE);
+  g.rect(cx - w * 0.35 + 1, y + h - 2.5, w * 0.7 - 2, 2).fill(k(woodCol));
+
+  g.circle(cx, cy, targetR + 1.5).fill(OUTLINE);
+  
+  const outerCol = e.color || 0xdd3333;
+  const whiteCol = 0xf5f5f5;
+  
+  g.circle(cx, cy, targetR).fill(k(outerCol));
+  g.circle(cx, cy, targetR * 0.75).fill(k(whiteCol));
+  g.circle(cx, cy, targetR * 0.5).fill(k(outerCol));
+  g.circle(cx, cy, targetR * 0.25).fill(k(0xffffff));
+  g.circle(cx, cy, Math.max(1.5, targetR * 0.12)).fill(k(0xdd2222));
 }
 
 /** A round leather ball: pebbled shading plus the iconic seams, so it reads as a basketball at any size. */

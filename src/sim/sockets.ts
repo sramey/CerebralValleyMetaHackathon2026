@@ -3,6 +3,7 @@
 // both feet-anchored. Gear must follow what the eye sees, so the numbers live here and the client
 // imports them. Pure: no DOM, no clock, no randomness.
 import type { Entity } from "../contract";
+import { entityKind, isHeldItemType } from "../ontology";
 
 export type Socket = "hand" | "back" | "head" | "feet" | "belt";
 export const SOCKETS: readonly Socket[] = ["hand", "back", "head", "feet", "belt"];
@@ -20,10 +21,15 @@ const SCALE_MAX = 8;
 
 export interface VisualBox { x: number; y: number; w: number; h: number; bottom: number }
 
-/** Drawn height of a character with art: the player 56 * (h / 34), anything else 1.5x its hitbox (34..630). */
+/** Drawn height of a character or prop with art: player 56*(h/34), props/held-items 1.2x (10..630), creatures 1.5x (34..630). */
 export function visualHeight(e: Pick<Entity, "type" | "h">, hasArt = true): number {
   if (!hasArt) return e.h; // code-drawn: the client draws the hitbox itself
-  return e.type === "player" ? 56 * (e.h / 34) : Math.min(630, Math.max(34, e.h * 1.5));
+  if (e.type === "player") return 56 * (e.h / 34);
+  const kind = entityKind(e.type);
+  if (kind === "prop" || isHeldItemType(e.type)) {
+    return Math.min(630, Math.max(10, Math.round(e.h * 1.2)));
+  }
+  return Math.min(630, Math.max(34, e.h * 1.5));
 }
 
 /** The box the eye sees: hitbox width, drawn height, feet anchored a hair below the hitbox. */
