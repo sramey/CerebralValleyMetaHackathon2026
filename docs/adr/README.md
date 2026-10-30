@@ -77,3 +77,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0040](0040-paper-to-level.md) | Paper to level: photograph a drawn level and it gets built | Draft |
 | [0048](0048-camera-dialog-film-ready-layout.md) | Film-ready camera dialog; upload is the default door | Draft |
 | [0049](0049-game-weapons-are-safe.md) | Game weapons and fighting are explicitly allowed by the kid-safe screen | Draft |
+| [0051](0051-creature-steering.md) | Creatures steer: fliers turn at walls, walkers stop at ledges, hostiles get engine AI states | Draft |
