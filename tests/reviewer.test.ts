@@ -379,3 +379,33 @@ describe("gate protection", () => {
     expect(mockHits).toBe(1);
   });
 });
+
+describe("reviewer prompt (bead 4t7)", () => {
+  it("carries the game's checklist, worked examples and the engine facts that stop false alarms", async () => {
+    const { REVIEWER_SYSTEM } = await import("../server/reviewer-prompt");
+    for (const word of ["LOOK:", "LANDMARKS:", "LEAKS:", "DISPOSE:", "PLACEMENT:", "ITEMS:", "HOSTILES:", "MATH:", "TEST:", "Example 1", "Example 3", "plain numbers"]) expect(REVIEWER_SYSTEM).toContain(word);
+    expect(REVIEWER_SYSTEM).toContain("Real bugs only");
+    // Worked answers must themselves parse as reviewer JSON.
+    const answers = REVIEWER_SYSTEM.split("\n").filter((l) => l.startsWith("ANSWER: ")).map((l) => parseReviewJson(l.slice(8)));
+    expect(answers).toHaveLength(3);
+    for (const a of answers) expect(a?.verdict).toBe("fix");
+  });
+});
+
+describe("reviewer worked examples", () => {
+  it("every patched example passes compile and verify, and every bad one compiles", async () => {
+    const { EXAMPLES } = await import("../server/reviewer-prompt");
+    const { compileMod } = await import("../server/compile");
+    const { verifyMod } = await import("../server/verify");
+    for (const e of EXAMPLES) {
+      const bad = compileMod(e.bad);
+      expect(bad.ok, `bad: ${e.why}`).toBe(true);
+      const good = compileMod(e.good);
+      expect(good.ok, `good compile: ${e.why}`).toBe(true);
+      if (good.ok) {
+        const v = await verifyMod(e.good, good.js);
+        expect(v.ok, `good verify: ${e.why} ${v.ok ? "" : v.errors.join("; ")}`).toBe(true);
+      }
+    }
+  }, 60000);
+});

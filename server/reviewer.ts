@@ -13,25 +13,9 @@ import { forceModId } from "./modid";
 import { playtestMod, type PlaytestWorldMod } from "./playtest";
 import { openChat, openConfig, type OpenConfig } from "./router-model";
 import { verifyMod } from "./verify";
+import { REVIEWER_SYSTEM } from "./reviewer-prompt";
 
-export const REVIEWER_SYSTEM = `You are an automated code reviewer for a 2D pixel-art platformer engine.
-Review mods written in pure TypeScript against the mod API.
-Look for real bugs and clear improvements:
-- Crashes, runtime exceptions, NaN coordinates or velocities
-- Entities that never despawn or spawn endlessly (memory leaks / entity cap exhaustion)
-- Broken or incomplete dispose() (undo leaving orphaned entities or uncleaned state)
-- visual: "shape" erroneously used on nameable creatures/items/characters that should be sprites, or vice versa
-- Items or weapons that cannot be used (missing "use" key or pointer input handlers)
-- Off-screen spawns (y > 400 or x outside the screen)
-- Solid collision issues (trapping the player, missing solid: true on platforms)
-
-Output STRICT JSON ONLY. No markdown fences, no explanatory text outside JSON:
-If the mod is clean and has no real bugs or clear improvements:
-{"verdict":"ok","issues":[]}
-
-If the mod has real bugs or clear improvements:
-{"verdict":"fix","issues":["concise 1-sentence description of the issue fixed"],"patchedSource":"<full valid TypeScript code of the patched mod>"}
-`;
+export { REVIEWER_SYSTEM };
 
 export function buildReviewerPrompt(command: string, source: string, playtest?: { ok: boolean; msPerFrame?: number; plain?: string }): string {
   const ptInfo = playtest
@@ -141,7 +125,7 @@ export async function reviewBuild(input: BuildReviewInput): Promise<BuildReviewO
   const t0 = performance.now();
   let rawText = "";
   try {
-    const res = await openChat(openCfg, messages, 3000);
+    const res = await openChat(openCfg, messages, 5000);
     rawText = res.text;
   } catch (err) {
     console.log(`[reviewer] open weights call failed/timed out: ${err instanceof Error ? err.message : String(err)}`);
