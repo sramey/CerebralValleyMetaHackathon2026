@@ -12,7 +12,7 @@ import { fallbackVisual, lookFor, parseShape, parseVisual } from "./visual";
 import type { Visual } from "./visual";
 import type { ClientMsg, KnobDefs, Look, MoodSpec, ShapeName, KnobValue, ServerMsg, TimelineStep, WorldMod } from "../src/contract";
 import { routerChat } from "./router-model";
-import { chat, hasApiKey, loadEnv, SPARK, WONDER } from "./meta";
+import { chat, hasApiKey, loadEnv, WONDER } from "./meta";
 import { compileMod } from "./compile";
 import { importMod, verifyMod } from "./verify";
 import { inspectWorld, playtestMod } from "./playtest";
@@ -21,6 +21,7 @@ import { inspectTool, playtestTool, runAgent } from "./agent";
 import type { AgentStep, AgentTrace } from "./agent";
 import { forceModId, modIdOf } from "./modid";
 import { runPool } from "./pool";
+import { splitCompound } from "./compound";
 import { forget, newRecent, noteCommand, noteTouched, recentText, resolvePronoun } from "./context";
 import type { Recent } from "./context";
 import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, formatManifest, ROUTER_SYSTEM, WONDER_SYSTEM } from "./prompt";
@@ -586,32 +587,6 @@ function stripFences(src: string): string {
   return s;
 }
 
-/** Ask Spark to split a compound build command into standalone add-commands. */
-async function trySplitCompound(command: string): Promise<string[] | null> {
-  try {
-    const res = await chat(SPARK, [
-      {
-        role: "system",
-        content: "Reply with ONLY a JSON array of strings, each a standalone add-command. Split the request into at most 4 independent single-add commands. No markdown, no prose.",
-      },
-      { role: "user", content: command },
-    ], 512);
-    const start = res.text.indexOf("[");
-    const end = res.text.lastIndexOf("]");
-    if (start < 0 || end <= start) return null;
-    const arr: unknown = JSON.parse(res.text.slice(start, end + 1));
-    if (!Array.isArray(arr)) return null;
-    const items = arr
-      .filter((s): s is string => typeof s === "string")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0)
-      .slice(0, 4);
-    return items.length >= 2 ? items : null;
-  } catch {
-    return null;
-  }
-}
-
 async function handleCommand(ws: WebSocket, text: string): Promise<void> {
   // Kid-safe screen first (ADR 0044): a declined request never reaches the router, so it can
   // never spend a Wonder build or become a mod. The reply is one kind sentence with an
@@ -627,21 +602,22 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
   }
   // A verdict that missed the deadline is read before the build writes anything (step 3 below).
   sess(ws).pendingSafety = safety.pending ? { command: text.slice(0, 400), verdict: safety.pending } : undefined;
-  // Compound split: only for build-shaped commands that join requests with
-  // "," or " and ". Anything else takes the normal single-command path.
-  if (/^\s*(add|make|create|spawn|build)\b/i.test(text) && (text.includes(",") || text.toLowerCase().includes(" and "))) {
-    const items = await trySplitCompound(text);
-    if (items && items.length >= 2) {
-      const limit = Math.max(1, Number(process.env.MAX_PARALLEL ?? 3));
-      noteCommand(sess(ws).recent, text);
-      const t0 = performance.now();
-      await runPool(items, limit, (item) => handleSingle(ws, item, { size: items.length, parallel: Math.min(limit, items.length) }));
-      console.log(`[batch] ${items.length} builds, parallel ${Math.min(limit, items.length)}, ${Math.round(performance.now() - t0)} ms`);
-      // End marker for the whole compound command (the sub-builds each sent their own), so clients and the rehearsal harness can tell it is done.
-      const total = Math.round(performance.now() - t0);
-      send(ws, { kind: "timing", command: text, ms: { route: 0, write: 0, compile: 0, verify: 0, total } });
-      return;
-    }
+  // Compound requests (ADR 0053): split ONLY when the command names genuinely independent
+  // things. One subject with several traits or behaviors stays ONE build, so parallel
+  // builds never race over the same mod id in front of the player. Deterministic: no model call.
+  const parts = splitCompound(text);
+  if (parts) {
+    // A mood part restyles the whole world, so a mood + build pair runs in order, not in parallel.
+    const sequential = parts.some((p) => detectMoodCommand(p) !== null);
+    const limit = sequential ? 1 : Math.max(1, Number(process.env.MAX_PARALLEL ?? 3));
+    noteCommand(sess(ws).recent, text);
+    const t0 = performance.now();
+    console.log(`[split] ${parts.length} independent requests, parallel ${Math.min(limit, parts.length)}: ${parts.join(" | ")}`);
+    await runPool(parts, limit, (item) => handleSingle(ws, item, { size: parts.length, parallel: Math.min(limit, parts.length) }));
+    // End marker for the whole compound command (the sub-builds each sent their own), so clients and the rehearsal harness can tell it is done.
+    const total = Math.round(performance.now() - t0);
+    send(ws, { kind: "timing", command: text, ms: { route: 0, write: 0, compile: 0, verify: 0, total } });
+    return;
   }
   await handleSingle(ws, text);
 }
