@@ -232,7 +232,7 @@ $("#sketch-btn").addEventListener("click", () => sketch.open());
 };
 const layerOverride = new Map<number, number>();
 function subjectKeyFor(e: Entity): string | undefined {
-  const frames = framesFor(framesBySubject, e.type, e.type === "player");
+  const frames = framesFor(framesBySubject, e.type, e.type === "player", world.scene.playerSkin);
   if (frames.length < 1) return undefined;
   return Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0];
 }
@@ -429,7 +429,7 @@ let cachedPrimaries = new Set<number>();
 function getActivePrimaries(): Set<number> {
   if (lastPrimariesTick !== world.tickCount) {
     lastPrimariesTick = world.tickCount;
-    cachedPrimaries = computePrimaries(world.entities, framesBySubject, (type) => !!kindOf(type));
+    cachedPrimaries = computePrimaries(world.entities, framesBySubject, (type) => !!kindOf(type), world.scene.playerSkin);
   }
   return cachedPrimaries;
 }
@@ -523,6 +523,22 @@ function applyMood(m: MoodSpec | null): void {
   fx.setMood(m);
   portal.setMood(m);
   sound.setMood(m);
+}
+// --- scene backdrop: a genre change paints its own sky (ADR 0066), under any mood ---------------
+const SPACE_BACKDROP = { skyTop: 0x01020a, skyBottom: 0x0a1030, moon: 0x7f9ad0, star: 0xdfe8ff };
+let paintedBackdropKey = "";
+/** Repaint the code-drawn sky when the scene's backdrop (or the mood on top of it) changes; a mood always wins. */
+function syncBackdrop(): void {
+  const key = mood ? `mood:${mood.name}` : world.scene.backdrop ?? "";
+  if (key === paintedBackdropKey) return;
+  paintedBackdropKey = key;
+  if (mood) return; // applyMood painted it
+  if (world.scene.backdrop === "space") {
+    pal.moon = SPACE_BACKDROP.moon; pal.star = SPACE_BACKDROP.star;
+    setSky(SPACE_BACKDROP.skyTop, SPACE_BACKDROP.skyBottom);
+  } else {
+    applyMood(null); // back to the starter sky
+  }
 }
 function revertMood(): void {
   restoreSheets();
@@ -621,7 +637,7 @@ function formatRadialLabel(type: string): string {
 const scaleOverride = new Map<number, number>();
 
 function hasDrawnArt(e: Entity): boolean {
-  return framesFor(framesBySubject, e.type, e.type === "player").length >= 1 && !kindOf(e.type);
+  return framesFor(framesBySubject, e.type, e.type === "player", world.scene.playerSkin).length >= 1 && !kindOf(e.type);
 }
 world.hasArt = hasDrawnArt; // gear sockets measure the body the eye sees (ADR 0061)
 
@@ -798,6 +814,8 @@ function render(): void {
     if (!target) closeRadialMenu();
     else positionRadialMenu(target, camX, camYSmooth);
   }
+  syncBackdrop();
+  const inSpace = world.scene.backdrop === "space";
   const isDaytime = isDaytimeSky(mood, world.entities, SKY[0]);
   const sunEntity = world.entities.find((e) => {
     const t = e.type.toLowerCase();
@@ -830,16 +848,18 @@ function render(): void {
   }
   // far hill silhouettes + parallax layers + atmospheric horizon mist (bead 1z7 & rm1)
   const horizon = H * 0.62 - camYSmooth * 0.1;
-  drawDistantMountains(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
   const fog = depthFog(mood?.name);
-  drawRidge(ridgeFar, camX, 0.3, horizon, 0, mixC(pal.ridgeFar, SKY[SKY_BANDS - 1], fog.far));
-  drawRidge(ridgeNear, camX, 0.55, horizon + 34, 1, mixC(pal.ridgeNear, SKY[SKY_BANDS - 1], fog.near));
+  if (!inSpace) {
+    drawDistantMountains(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
+    drawRidge(ridgeFar, camX, 0.3, horizon, 0, mixC(pal.ridgeFar, SKY[SKY_BANDS - 1], fog.far));
+    drawRidge(ridgeNear, camX, 0.55, horizon + 34, 1, mixC(pal.ridgeNear, SKY[SKY_BANDS - 1], fog.near));
+  }
   // Starter-world scenery, unless a mod brings its own parallax backdrop (bead 5fl)
-  if (world.entities.some((e) => e.type === "ground") && !world.entities.some(isParallaxOrSkyEntity)) {
+  if (!inSpace && world.entities.some((e) => e.type === "ground") && !world.entities.some(isParallaxOrSkyEntity)) {
     drawScenery(gfx, camX, camYSmooth, W, pal, SKY[SKY_BANDS - 1], fog.far, isDaytime, mood?.name);
   }
   drawParallaxEntities(gfx, world.entities, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1], grade);
-  drawHorizonMist(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
+  if (!inSpace) drawHorizonMist(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
   // solids-first, then contact shadows on solid surfaces, then dynamic entities
   order.length = 0;
   for (let i = 0; i < world.entities.length; i++) order.push(world.entities[i]);
@@ -864,7 +884,7 @@ function render(): void {
     const groups = new Map<string, { maxArea: number; items: { id: number; area: number }[] }>();
     for (const e of world.entities) {
       if (isParallaxOrSkyEntity(e)) continue;
-      const frames = framesFor(framesBySubject, e.type, e.type === "player");
+      const frames = framesFor(framesBySubject, e.type, e.type === "player", world.scene.playerSkin);
       if (frames.length < 1 || kindOf(e.type) || isTetherGear(e)) continue;
       const subject = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0] ?? e.type;
       const gk = `${e.owner}|${subject}`;
@@ -883,7 +903,7 @@ function render(): void {
   const spriteDraw: { e: Entity; frame: Texture; subjectKey: string | undefined; bob: number }[] = [];
   for (const e of world.entities) {
     if (isParallaxOrSkyEntity(e)) continue;
-    const frames = framesFor(framesBySubject, e.type, e.type === "player");
+    const frames = framesFor(framesBySubject, e.type, e.type === "player", world.scene.playerSkin);
     if (frames.length < 1 || !primaries.has(e.id) || kindOf(e.type) || (morph.size > 0 && isMorphing(e))) continue;
     seen.add(e.id);
     const moving = Math.abs(e.vx) > 5;
@@ -1901,6 +1921,7 @@ async function applyWorld(msg: Extract<ServerMsg, { kind: "world" }>): Promise<v
         registerLook(m.look);
         loader.load(await importMod(m.compiled), m.values);
         if (m.art) { pendingArt.add(m.art.key); loadArtWithRetry(m.art.key, m.art.url, m.art.scenery === true); }
+        if (m.skinArt) { pendingArt.add(m.skinArt.key); loadArtWithRetry(m.skinArt.key, m.skinArt.url, false); }
       }
       loaded++;
     } catch { /* one bad mod must not stop the rest of the world loading */ }
@@ -2081,6 +2102,10 @@ function connect(): void {
           pendingArt.add(art.key);
           loadArtWithRetry(art.key, art.url, (art as { scenery?: boolean }).scenery === true);
         }
+        const skinArt = (msg.mod as { skinArt?: { key: string; url: string } }).skinArt;
+        if (skinArt) { pendingArt.add(skinArt.key); loadArtWithRetry(skinArt.key, skinArt.url, false); }
+        const skinPending = (msg.mod as { skinPending?: string }).skinPending;
+        if (skinPending) pendingArt.add(skinPending);
       } catch (err) {
         say(`That build failed to load here: ${err instanceof Error ? err.message : String(err)}`, "failed");
       }

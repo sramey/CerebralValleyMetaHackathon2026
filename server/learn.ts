@@ -250,7 +250,7 @@ export async function learnRuleFromFeedback(input: FeedbackInput, dir?: string):
             "Reply with ONLY a single JSON object, no markdown, no prose:",
             '{"subsystem":"router"|"wonder"|"art","rule":"<concise 1-line imperative rule, max 140 chars>","clearArt":true|false,"editInstruction":"<1-sentence instruction to fix this specific mod right now>"}',
             "Subsystems:",
-            '- "router": visual classification rules (e.g. balls, orbs, bubbles, rings, and simple shapes must route with visual:"shape" instead of creature/prop sprite art; weather/fog/rain must route with visual:"effect").',
+            '- "router": visual classification rules (e.g. only literal primitives (a ball, orb, bubble, ring) route with visual:"shape"; any nameable thing (volcano, rock, lava, tower, asteroid, ship) is prop or creature art, never shape; weather/fog/rain must route with visual:"effect").',
             '- "art": sprite sheet generation rules (e.g. solid #FF00FF magenta background, separated frames, scenery vs character poses).',
             '- "wonder": mod code, physics, entity sizing, collision, controls, spawning, or gameplay behavior.',
             'Set "clearArt": true if the complaint says an object got unwanted/bad sprite art or should be a code-drawn shape/effect instead of a sprite.',

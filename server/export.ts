@@ -70,6 +70,10 @@ export function collectSprites(world: ExportWorldData, root = process.cwd()): Re
       const uri = fileToDataUri(fullPath);
       if (uri) sprites[m.art.key] = uri;
     }
+    if (!m.builtin && m.skinArt?.key && m.skinArt.url) {
+      const uri = fileToDataUri(join(root, "public", m.skinArt.url.replace(/^\/?/, "")));
+      if (uri) sprites[m.skinArt.key] = uri;
+    }
   }
 
   // Restyled sprites (mood)
