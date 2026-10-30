@@ -7,6 +7,7 @@
 //
 // Every accepted message is rebuilt field by field (a whitelist, not a cast), so unknown
 // fields the client sends are dropped and a handler can trust the shape it receives.
+import { isHomeWorldId } from "../src/contract";
 import type { ClientMsg, KnobDef, KnobValue, SketchStroke, SketchTag } from "../src/contract";
 
 /** Hard ceiling for one text frame (the socket's maxPayload), so a giant frame is refused before JSON.parse. */
@@ -241,11 +242,23 @@ export function validateClientMsg(value: unknown): Validation {
     case "worldSave":
     case "worldExport": {
       const mods = modList(value.mods);
-      return mods ? accept({ kind, mods }) : reject(REPLY.bad);
+      if (!mods) return reject(REPLY.bad);
+      if (kind === "worldSave") {
+        // The browser's autosave slot (ADR 0070): only a `home-` id may rewrite a file in place. A
+        // malformed one is dropped rather than refused, so the save still works as a normal share.
+        return accept(isHomeWorldId(value.slot) ? { kind: "worldSave", mods, slot: value.slot } : { kind: "worldSave", mods });
+      }
+      if (kind === "worldState" && value.reset === true) return accept({ kind: "worldState", mods, reset: true });
+      return accept({ kind, mods });
     }
     case "worldLoad": {
       const id = key(value.id);
       return id ? accept({ kind: "worldLoad", id }) : reject(REPLY.bad);
+    }
+    case "worldResume": {
+      // The client's own slot id: it only ever indexes this server's world files.
+      const id = value.id;
+      return isHomeWorldId(id) ? accept({ kind: "worldResume", id }) : reject(REPLY.bad);
     }
     case "voiceWarm":
       return accept({ kind: "voiceWarm" });

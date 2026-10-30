@@ -4,9 +4,10 @@ For whoever sits next to the tester. You do not need to know how Metabuild works
 
 ## Before each person (2 min)
 1. Open `http://127.0.0.1:5182/?tester=N&coach`, with `N` the next number (1, 2, 3…). The number is the only thing recorded about them. **Never write a name anywhere, not in the address, not on the notes.**
-2. Check that the speaker button (top right of the game) shows sound on and the volume is comfortable.
-3. Start a screen recording only after you have their yes (see "Clips").
-4. Sit beside them, not behind them. Put the keyboard and mouse in front of the tester.
+2. Click **New world** (top right of the game) so the person starts blank: the game now keeps the last world it was building, so without this they would inherit the previous tester's world.
+3. Check that the speaker button (top right of the game) shows sound on and the volume is comfortable.
+4. Start a screen recording only after you have their yes (see "Clips").
+5. Sit beside them, not behind them. Put the keyboard and mouse in front of the tester.
 
 ## What to say (read it out, then be quiet)
 > "This is a game that builds itself while you play. You can tell it what you want, by typing or by holding Shift and talking, and it makes it. I'm testing the game, not you, so nothing you do can be wrong. I can't help while you try it, but I'll be right here. Please think out loud: say what you expect and what surprises you. Ready?"
@@ -31,7 +32,7 @@ If they finish early, say: "Ask for anything else you would want in a game."
 - Do **not** explain errors or rejections. If the game turns something down, let them react. Write down what they said and did.
 - Do not apologise for the game or defend it.
 
-You **may** step in only for: a crash or frozen screen (reload the same address, same `N`), a safety problem, or if they ask to stop.
+You **may** step in only for: a crash or frozen screen (reload the same address, same `N`; the world they built comes back by itself), a safety problem, or if they ask to stop.
 
 ## Stuck rule
 If they have made no progress for **3 minutes** on a task, say once: "Want to skip to the next one?" and move on. Mark the task in your notes as "skipped". Do not hint.
