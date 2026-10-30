@@ -64,6 +64,7 @@ export const basketballMod: ModDefinition = {
     let lastScoreTick = -999;
     let returnAt = -1;
     let shownBall = "";
+    let shotCharge = 0;
 
     const setScoreHud = (): void => {
       api.setHud("hoop-score", {
@@ -95,21 +96,30 @@ export const basketballMod: ModDefinition = {
       return { vx: dx / T, vy: (dy - 0.5 * GRAVITY * T * (T + DT)) / T };
     };
 
-    const throwBall = (): void => {
+    const throwBall = (shotAssist = assist, multX = 1, multY = 1): void => {
       const p = api.player();
       const dir = p ? p.facing : 1;
       const aim = aimedThrow();
-      const rawVx = dir * 430;
-      const rawVy = -620;
+      const rawVx = dir * 430 * multX;
+      const rawVy = -620 * multY;
       // Aim assist only helps a shot toward the goal; facing away is a plain pass.
       const facingGoal = Math.sign(rim.x + rim.w / 2 - (ball.x + ball.w / 2)) === dir;
-      const a = facingGoal ? assist : 0;
+      const a = facingGoal ? shotAssist : 0;
       held = false;
       prevCy = null;
       ball.gravityScale = 1;
-      ball.vx = rawVx + (aim.vx - rawVx) * a;
-      ball.vy = rawVy + (aim.vy - rawVy) * a;
+      if (a === 1 && multX === 1 && multY === 1) {
+        ball.vx = aim.vx;
+        ball.vy = aim.vy;
+      } else if (a > 0) {
+        ball.vx = (rawVx + (aim.vx - rawVx) * a) * multX;
+        ball.vy = (rawVy + (aim.vy - rawVy) * a) * multY;
+      } else {
+        ball.vx = aim.vx * multX;
+        ball.vy = aim.vy * multY;
+      }
       api.burst(ball.x + ball.w / 2, ball.y + ball.h / 2, 0xffc94d, 5);
+      returnAt = api.tick() + 150;
       setBallHud();
     };
 
@@ -156,7 +166,48 @@ export const basketballMod: ModDefinition = {
           ball.x = dir > 0 ? p.x + p.w - ball.w * 0.4 : p.x - ball.w * 0.6;
           ball.y = p.y + p.h * 0.26 - ball.h * 0.4;
         }
-        if (fresh) throwBall();
+        // 2K-style shot meter: hold shoot to fill, release in green zone (65..85%)
+        if (pressed) {
+          shotCharge = Math.min(100, shotCharge + 100 * DT);
+          if (shotCharge > 5) {
+            const inGreen = shotCharge >= 65 && shotCharge <= 85;
+            const meterColor = inGreen ? 0x3fd06a : (shotCharge > 85 ? 0xe8452c : 0xf2a541);
+            api.setHud("shot-meter", {
+              kind: "bar",
+              label: inGreen ? "Shot 🟢 SWEET SPOT" : "Shot Meter",
+              icon: "🏀",
+              value: Math.round(shotCharge),
+              max: 100,
+              color: meterColor,
+              position: "bottom-center",
+            });
+          }
+        } else if (shotCharge > 0) {
+          api.removeHud("shot-meter");
+          if (shotCharge <= 8) {
+            // Quick tap: standard throw with aim assist
+            throwBall();
+          } else {
+            // Timed shot release: green zone swishes, early/late misses
+            const inGreen = shotCharge >= 65 && shotCharge <= 85;
+            if (inGreen) {
+              throwBall(1.0, 1, 1);
+              api.burst(ball.x + ball.w / 2, ball.y, 0x3fd06a, 14);
+              api.setHud("hoop-swish", { kind: "banner", text: "🟢 PERFECT RELEASE!", duration: 1.2, position: "top-center" });
+            } else if (shotCharge < 65) {
+              // Miss short
+              throwBall(0, 0.72, 0.85);
+              api.burst(ball.x + ball.w / 2, ball.y, 0xf2a541, 6);
+              api.setHud("hoop-swish", { kind: "banner", text: "TOO EARLY!", duration: 1, position: "top-center" });
+            } else {
+              // Miss long
+              throwBall(0, 1.35, 1.15);
+              api.burst(ball.x + ball.w / 2, ball.y, 0xe8452c, 6);
+              api.setHud("hoop-swish", { kind: "banner", text: "TOO LATE!", duration: 1, position: "top-center" });
+            }
+          }
+          shotCharge = 0;
+        }
       } else {
         if (fresh && p && api.touches(p, ball)) {
           held = true;
@@ -202,6 +253,7 @@ export const basketballMod: ModDefinition = {
     api.removeHud("hoop-score");
     api.removeHud("hoop-ball");
     api.removeHud("hoop-swish");
+    api.removeHud("shot-meter");
   },
   test(t) {
     // The verifier runs this mod alone in an empty world (ADR 0003): build the ground first.
