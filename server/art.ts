@@ -394,7 +394,8 @@ export function artKeyForType(type: string, variant?: string): string {
   const lower = type.toLowerCase().trim();
   if (!lower || isSkippedType(lower)) return "";
   const parts = lower.split("-").filter(Boolean);
-  const base = parts.length > 1 ? (parts[parts.length - 1] ?? lower) : lower;
+  const last = parts[parts.length - 1];
+  const base = parts.length > 1 ? (last === "player" ? lower : (last ?? lower)) : lower;
   const key = sanitizeArtKey(base || lower);
   if (!key || isSkippedType(key)) return "";
   // A pose variant (e.g. "fly") gets its own sheet, so a cached walking cat never stands in

@@ -241,6 +241,10 @@ const SHAPE_TOKENS: ReadonlySet<string> = new Set([
   "pearl",
   "cube",
   "prism",
+  "meter",
+  "meters",
+  "gauge",
+  "gauges",
 ]);
 
 const HELD_ITEM_TOKENS: ReadonlySet<string> = new Set([
@@ -1022,11 +1026,30 @@ const CREATURE_TOKENS: ReadonlySet<string> = new Set([
   "guy",
   "character",
   "npc",
+  "rival",
+  "rivals",
+  "opponent",
+  "opponents",
+  "guard",
+  "guards",
+  "player",
+  "players",
+  "defender",
+  "defenders",
+  "teammate",
+  "teammates",
+  "competitor",
+  "competitors",
+  "athlete",
+  "athletes",
+  "referee",
+  "referees",
+  "coach",
+  "coaches",
 ]);
 
 function classifyToken(tok: string): EntityKind | undefined {
   if (!tok) return undefined;
-  if (tok === "player") return "player";
   if (TERRAIN_TOKENS.has(tok)) return "terrain";
   if (PROJECTILE_TOKENS.has(tok)) return "projectile";
   if (EFFECT_TOKENS.has(tok)) return "effect";

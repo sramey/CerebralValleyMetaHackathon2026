@@ -92,4 +92,27 @@ describe("art orders for a multi-subject build (bead 852)", () => {
     expect(capped.pending.map((o) => o.key)).toEqual(["dragon-fly"]);
     expect(spent).toHaveLength(2); // the second refusal stops the rest
   });
+  it("orders character art (not scenery, not shapes) for basketball rival and player", () => {
+    const src1 = 'api.spawn({ type: "basketball-rival", x: 280, y: 366, w: 26, h: 34, color: 0x3a7bd5, solid: false, gravityScale: 1 });';
+    const orders1 = planArtOrders(src1, "add a basketball rival");
+    expect(orders1).toHaveLength(1);
+    expect(orders1[0]).toMatchObject({
+      type: "basketball-rival",
+      key: "rival",
+      subject: "basketball rival",
+      scenery: false,
+      flying: false,
+    });
+
+    const src2 = 'api.spawn({ type: "basketball-player", x: 280, y: 366, w: 26, h: 34, color: 0x3a7bd5, solid: false, gravityScale: 1 });';
+    const orders2 = planArtOrders(src2, "add a basketball player");
+    expect(orders2).toHaveLength(1);
+    expect(orders2[0]).toMatchObject({
+      type: "basketball-player",
+      key: "basketball-player",
+      subject: "basketball player",
+      scenery: false,
+      flying: false,
+    });
+  });
 });
