@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_ART_PER_BUILD, pickSkin, spritePrompt, subjectArtPrompt } from "../server/art";
+import { pickSkin, planArtOrders, spritePrompt, subjectArtPrompt } from "../server/art";
 import { genreWarnings, isGenreChange } from "../server/genre";
 import { MOD_API_REFERENCE, ROUTER_SYSTEM } from "../server/prompt";
 import { runModTest } from "../src/sim/loader";
@@ -35,10 +35,12 @@ describe("genre change pattern (ADR 0066)", () => {
     expect(genreWarnings("make it rain", "api.spawn({})")).toEqual([]);
   });
 
-  it("reads the skin from the source and orders it as its own flight sheet, capped at two images", () => {
+  it("reads the skin from the source and orders it as its own flight sheet, uncapped", () => {
     expect(pickSkin('api.setScene({ hideTerrain: true, playerSkin: "Space Ship" })')).toBe("space-ship");
     expect(pickSkin("api.setScene({ hideTerrain: true })")).toBeNull();
-    expect(MAX_ART_PER_BUILD).toBe(2);
+    // No per-build image cap: the skin plus every creature the mod spawns each get a sheet (bead 852).
+    const orders = planArtOrders('api.spawn({ type: "dragon", x: 0 }); api.spawn({ type: "knight", x: 9 });', "add a dragon and a knight");
+    expect(orders.map((o) => o.type)).toEqual(["dragon", "knight"]);
     const p = subjectArtPrompt("spaceship", "spaceship-skin", false, false, true);
     expect(p).toContain("the player's own character");
     expect(p).toContain("hovering level, flying forward with thrust");
