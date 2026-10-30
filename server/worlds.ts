@@ -97,6 +97,7 @@ export function restyledForWorld(
     if (m.id === "player") keys.add("ninja");
     else if (m.id === "chicken") keys.add("chicken");
     if (!m.builtin && m.art?.key) keys.add(m.art.key);
+    if (!m.builtin && m.skinArt?.key) keys.add(m.skinArt.key);
   }
   const mk = moodKey(mood.name);
   for (const k of keys) {
@@ -115,6 +116,7 @@ export interface SessionMod {
   compiled: string;
   knobs: KnobDefs;
   art?: { key: string; url: string; scenery?: boolean };
+  skinArt?: { key: string; url: string };
   look?: Look;
 }
 
@@ -141,7 +143,7 @@ export function snapshotWorld(
     if (!rec) continue;
     const values: KnobValues = {};
     for (const [k, d] of Object.entries(rec.knobs)) values[k] = d.value;
-    mods.push({ id: rec.id, title: rec.title, source: rec.source, compiled: rec.compiled, knobs: rec.knobs, values, ...(rec.art ? { art: rec.art } : {}), ...(rec.look ? { look: rec.look } : {}) });
+    mods.push({ id: rec.id, title: rec.title, source: rec.source, compiled: rec.compiled, knobs: rec.knobs, values, ...(rec.art ? { art: rec.art } : {}), ...(rec.skinArt ? { skinArt: rec.skinArt } : {}), ...(rec.look ? { look: rec.look } : {}) });
   }
   return mods;
 }

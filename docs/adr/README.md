@@ -93,3 +93,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0063](0063-fallen-creatures-go-back-on-the-ground.md) | Fallen creatures go back on the ground: a creature 900 px below the main slab is stood beside the player | Draft |
 | [0064](0064-friendly-fire-protection-and-clustered-burst-explosions.md) | Friendly fire protection and spatially clustered burst explosions | Draft |
 | [0065](0065-how-was-this-made-receipt.md) | "How was this made?": a receipt for every creation, from words to verified playable mod | Draft |
+| [0066](0066-genre-change-set-scene.md) | Genre change: `api.setScene` hides terrain and scenery, sets a backdrop and player skin, and undo restores it all | Proposed |
