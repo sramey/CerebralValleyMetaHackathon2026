@@ -3,6 +3,7 @@
 // final text as a normal command. Audio goes to our server as binary PCM16 16 kHz frames;
 // the server proxies to Muse Voice Transcribe, so the API key never reaches the browser.
 import type { ClientMsg, ServerMsg } from "../contract";
+import { TALK_BUTTONS } from "./gamepad";
 import { Downsampler, orbLevel, rms } from "./pcm";
 import { HOLD_MAX_MS, shiftStillHeld, voiceShouldReprompt, voiceTextOk } from "./voicegate";
 
@@ -28,7 +29,6 @@ type Phase = "idle" | "holding" | "transcribing";
 const TAP_MS = 250;
 const MIC_IDLE_MS = 2 * 60 * 1000;
 const FINAL_FAILSAFE_MS = 8000;
-const PAD_BUTTONS = [4, 5]; // LB / RB
 
 function isTypingTarget(t: EventTarget | null): boolean {
   const el = t as HTMLElement | null;
@@ -258,7 +258,7 @@ export function initVoice(deps: VoiceDeps) {
   let padLoop = false;
   function pollPad(): void {
     const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()) : [];
-    const down = pads.some((p) => p && PAD_BUTTONS.some((b) => p.buttons[b]?.pressed));
+    const down = pads.some((p) => p && TALK_BUTTONS.some((b) => p.buttons[b]?.pressed));
     if (down && !padDown) press("pad");
     else if (!down && padDown) release("pad");
     padDown = down;
