@@ -33,21 +33,21 @@ Entry for the Meta Global AI Developer Hackathon (solo, Indie track). **Deadline
 
 ## Run it in 5 minutes (judges start here)
 
-You need **Node 22+** and a **Meta Model API key**. Get one from the [Meta Model API docs](https://dev.meta.ai/docs/models). Calls are billed to your account through the standard billing setup, and a card must be on file before calls work. Every model the game calls at runtime is a Meta model; no other AI provider is used.
+You need **Node 22+**. To let the AI build things you also need a **Meta Model API key**, from the [Meta Model API docs](https://dev.meta.ai/docs/models); without one the game still runs (built-in mods and demo worlds, no AI calls, see **No key?** below). Calls are billed to your account through the standard billing setup, and a card must be on file before calls work. Every model the game calls at runtime is a Meta model; no other AI provider is used.
 
 ```sh
 git clone https://github.com/sramey/CerebralValleyMetaHackathon2026.git
 cd CerebralValleyMetaHackathon2026
 npm install                 # npm 11 may warn that install scripts were skipped (esbuild); the build still works
 cp .env.example .env        # Windows cmd: copy .env.example .env; then set MODEL_API_KEY=<your Meta key>
-npm run build && npm start  # game + AI server on one port
+npm run build && npm start  # game + AI server on one port; the log prints `Meta key: found` and the URL to open
 ```
 
 Open **http://127.0.0.1:8787/** (or your configured `PORT`) in Chrome, click the game once, and try:
 
 | Do this | What you'll see |
 |---|---|
-| Type `add a bouncing green slime` in the orb bar at the top (or **hold Shift and say it**) | Spark routes it, Wonder writes a mod, the verifier playtests it, and it hot-loads in ~10–20 s while you keep playing |
+| Type `add a bouncing green slime` in the orb bar at the top (or **hold Shift and say it**) | Spark routes it, Wonder writes a mod, the verifier playtests it, and it hot-loads in ~10–20 s while you keep playing; its sprite art is drawn after that (about 15–30 s, shown as a pixel-noise placeholder until it lands) |
 | `make me huge` | The playtest bot finds you can't fit through the gap, the change is **rejected with a reason**, Wonder fixes it as a tool-using agent, and it lands. Watch the ghost window |
 | `make it rain`, `add trees`, `add a dragon` | Muse Image draws art on demand; a digitize placeholder shows until it arrives. Dynamic HUD widgets appear on the top-left |
 | **Bring an object in (camera)** in the side panel: type what you're holding (e.g. `coffee mug`) and hold it to the webcam (or click **Upload a photo instead**) | SAM 3.1 finds it (green box; or click the object yourself), then it's cut out, pixelated and dropped into the game as a physics prop |
@@ -67,7 +67,7 @@ Open **http://127.0.0.1:8787/** (or your configured `PORT`) in Chrome, click the
 | Press **P** | Pipeline view with live build numbers (landed %, first-try %, median time) |
 | Click **👍** or **👎** on any mod card or radial menu | Feedback modal lets you teach the engine rules, distill skills, or auto-fix the mod live |
 
-Move with A/D or the arrows, jump with W or Space, shoot with X, use items with F. Sound is synthesized in the browser: M mutes, [ and ] change volume, ?mute starts muted, ?noshake turns off screen shake. First visit shows a skippable 3-step coach (?coach shows it again, ?nocoach hides it); in a scripted fresh-browser run the first build landed 15.5 s after page load. Watch the top-left HUD (health, mod counters). **Fresh-clone check (2026-10-29, brand-new Chrome profile, README steps only):** local clone ~1 s, `npm install` ~7 s, `npm run build` ~5 s, page connected 0.6 s after open, first AI build verified and landed 9.8 s after typing the command.
+Move with A/D or the arrows, jump with W or Space, shoot with X, use items with F. Sound is synthesized in the browser: M mutes, [ and ] change volume, ?mute starts muted, ?noshake turns off screen shake. First visit shows a skippable 3-step coach (?coach shows it again, ?nocoach hides it); in a scripted fresh-browser run the first build landed 15.5 s after page load. Watch the top-left HUD (health, mod counters). **Fresh-clone check (2026-10-30, a clean clone of `main`, README steps only, Windows, Node 24, npm 11):** clone 1.8 s, `npm install` 7.9 s, `npm run build` 6.1 s, server listening 1.3 s after `npm start`; "add a bouncing green slime" was verified and live 7.2 s after typing (Spark 1.0 s, Wonder 6.2 s), and its AI-drawn sprite replaced the placeholder 27 s after that. With no key the same page loads, shows the demo worlds, and the orb says the AI is not connected.
 
 **No key?** The game still runs: built-in mods and curated demo worlds (for example `http://127.0.0.1:8787/?w=demo-bouncy`) play without any AI calls. Developing instead? `npm run dev` (Vite on :5173) plus `npm run server` (:8787) in a second terminal, then `npm test`. Both ports come from `.env` (`VITE_PORT` / `PORT` / `VITE_WS_URL`), so a second checkout can run beside the first. Port 8787 busy? Set `PORT=8788` in `.env` and reopen on that port — the production build finds its server on the page's own origin, no rebuild needed.
 
@@ -84,12 +84,12 @@ Move with A/D or the arrows, jump with W or Space, shoot with X, use items with 
 
 All code, docs and assets in this repo were created during the hackathon. Kickoff ended Mon Oct 26 2026, 12:24 PM ET; the first commit is `990a62c` (Tue Oct 27, 1:26 PM ET), and the full history is public. No pre-hackathon code is included.
 
-- **Open-source libraries we build on** (npm, unmodified): [PixiJS](https://pixijs.com) (rendering), [ws](https://github.com/websockets/ws) (WebSocket), [esbuild](https://esbuild.github.io) (compiles AI-written mods), [Vite](https://vite.dev) (client build), [tsx](https://tsx.is), TypeScript and [Vitest](https://vitest.dev). Everything else (the engine, simulation, mod API, verifier and playtest bot, the agent loops, the art pipeline, voice proxy, camera import, share links and spend guard) is ours, written during the event.
+- **Open-source libraries we build on** (npm, unmodified): [PixiJS](https://pixijs.com) (rendering), [ws](https://github.com/websockets/ws) (WebSocket), [esbuild](https://esbuild.github.io) (compiles AI-written mods), [Vite](https://vite.dev) (client build), [tsx](https://github.com/privatenumber/tsx), TypeScript and [Vitest](https://vitest.dev). Everything else (the engine, simulation, mod API, verifier and playtest bot, the agent loops, the art pipeline, voice proxy, camera import, share links and spend guard) is ours, written during the event.
 - **Assets:** every sprite in the game is generated at runtime by Muse Image or cut from your own camera photo. There are no third-party images, fonts (system fonts only) or sound files.
 
 ## Does it work? The numbers
 
-Every build is logged as it happens. [docs/evidence/build-stats.md](docs/evidence/build-stats.md) aggregates that log (numbers only, no prompts): about 96% of AI builds land verified and hot-loaded, most on the first try, with a median of about 10 s from request to playable. Regenerate it with `npm run stats`.
+Every build is logged as it happens. [docs/evidence/build-stats.md](docs/evidence/build-stats.md) aggregates that log (numbers only, no prompts): about 93% of AI builds land verified and hot-loaded (162 of 175 requests, 146 on the first try), with a median of about 11 s from request to playable. Regenerate it with `npm run stats`.
 
 ## Testing with non-coders
 
@@ -137,7 +137,7 @@ The spike passed its go/no-go early (10/10). The remaining plan, in priority ord
 | Client | Vite + PixiJS (WebGL), on-demand generated art with digitize placeholder while it loads |
 | Game server | Node + `ws` WebSocket on port 8787, esbuild compiles mods, verifier steps the sim headless in-process |
 | Sim core | Pure deterministic 60 Hz simulation (`src/sim`), no DOM/clock/`Math.random` — identical in browser and server verifier |
-| Models (Meta Model API, `https://api.meta.ai/v1`) | **Muse Spark `muse-spark-1.2`** routes commands and picks each thing's visual kind · **Muse Wonder `muse-wonder-1.0`** writes/edits mods and fixes rejected ones as a tool-calling agent (`inspect_world`, `run_playtest`); compound commands build in parallel (`MAX_PARALLEL`, default 3) · **Muse Image `muse-image-1.0`** sprite sheets on demand · **SAM 3.1** finds objects in camera photos · **Muse Voice Transcribe** hold-to-talk, realtime. All text calls use `reasoning_effort: minimal` — see [ADR 0001](docs/adr/0001-reasoning-effort-minimal.md) |
+| Models (Meta Model API, `https://api.meta.ai/v1`) | **Muse Spark `muse-spark-1.2`** routes commands and picks each thing's visual kind · **Muse Wonder `muse-wonder-1.0`** writes/edits mods and fixes rejected ones as a tool-calling agent (`inspect_world`, `run_playtest`); compound commands build in parallel (`MAX_PARALLEL`, default 4) · **Muse Image `muse-image-1.0`** sprite sheets on demand · **SAM 3.1** finds objects in camera photos · **Muse Voice Transcribe** hold-to-talk, realtime. All text calls use `reasoning_effort: minimal` — see [ADR 0001](docs/adr/0001-reasoning-effort-minimal.md) |
 
 Key decisions and why: [docs/adr/](docs/adr/README.md) · Product/architecture: [docs/DESIGN.md](docs/DESIGN.md) · Current milestone: [docs/SPIKE.md](docs/SPIKE.md) · Model notes: [docs/META-API.md](docs/META-API.md) · Build log: [progress.md](progress.md)
 
@@ -173,11 +173,11 @@ Never commit keys. `.env` is gitignored.
 - **Crash containment:** a mod that throws mid-game is taken out and the orb says so; the rest of the world keeps running. Every loop in an AI-written mod gets an iteration guard at compile time, so an infinite loop fails verification in milliseconds instead of hanging the server or the tab ([ADR 0056](docs/adr/0056-contain-crashing-and-looping-mods.md)).
 - **Engine budget:** a 500-entity level steps in ~0.4 ms (2 ms budget) with a grid broad phase that gives identical results to a full scan ([ADR 0057](docs/adr/0057-engine-rules-gear-shots-ground-broad-phase.md)).
 - **Voice orders and living creations:** "chickens, follow me", "everyone stay", "dragon, go away" route locally in 1–4 ms with no model call (works with no key) and the engine steers the creatures; mods get events, speech bubbles and an action-key interaction ([ADR 0059](docs/adr/0059-living-creations-events-speech-orders-and-route-rules.md), `tests/interact.test.ts`, `tests/route-rules.test.ts`).
-- Tests: 708 passing (`npm test`, green in a fresh clone), typecheck clean, production build green.
+- Tests: 792 passing (`npm test`, green in a fresh clone), typecheck clean, production build green.
 
 **Art pipeline: first proof (2026-10-27)**
 
-- Muse Image (`muse-image-1.0`) generates a sprite sheet in ~8s; the client chroma-keys the magenta background, slices frames, and animates the player as a real AI-drawn ninja (idle/run/jump). Regenerate with `npx tsx scripts/art-sheet.ts`. SAM 3.1 answers in ~1.2s with box + encoded mask (mask decode pending — [ADR 0007](docs/adr/0007-art-pipeline-chroma-key-first.md)). Art is now generated on demand per mod subject and streams asynchronously with a digitize placeholder while it loads ([ADR 0008](docs/adr/0008-async-art-digitize-placeholder.md)); scenery subjects render as static variants with no animation cycling ([ADR 0009](docs/adr/0009-scenery-vs-creature-art.md)).
+- Muse Image (`muse-image-1.0`) generates a sprite sheet in ~17 s (p50 over 77 logged sheets, p90 23 s); the client chroma-keys the magenta background, slices frames, and animates the player as a real AI-drawn ninja (idle/run/jump). Regenerate with `npx tsx scripts/art-sheet.ts`. SAM 3.1 answers in ~1.2s with box + encoded mask (mask decode pending — [ADR 0007](docs/adr/0007-art-pipeline-chroma-key-first.md)). Art is now generated on demand per mod subject and streams asynchronously with a digitize placeholder while it loads ([ADR 0008](docs/adr/0008-async-art-digitize-placeholder.md)); scenery subjects render as static variants with no animation cycling ([ADR 0009](docs/adr/0009-scenery-vs-creature-art.md)).
 
 **Not built yet**
 - Goal-reachability search (the playtest bot runs right and jumps; it doesn't prove a goal is reachable).
