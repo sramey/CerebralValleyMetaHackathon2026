@@ -1112,7 +1112,14 @@ function syncInput(): void {
 // The drawer keeps its DOM across renders, so a knob can be dragged (bead r8n). A knob change
 // reloads the mod and the server echoes the tweak back, which renders the panel again: with the
 // old "empty the list, rebuild every card" render that replaced the slider mid-drag.
+/**
+ * Mods the server built in this session (they arrive as a `mod` message). Only those know their
+ * knobs on the server; a built-in mod's slider is the client's business, so sending it would get
+ * "Unknown mod or knob" back into the orb while someone drags (bead r8n).
+ */
+const remoteModIds = new Set<string>();
 function removeMod(mod: LoadedMod): void {
+  remoteModIds.delete(mod.id);
   loader.unload(mod.id);
   send({ kind: "undo", modId: mod.id });
   say(`${mod.title} removed.`, "done");
@@ -1122,7 +1129,7 @@ const modsPanel = createModsPanel<LoadedMod>(modsEl, {
   onUndo: removeMod,
   onKnob: (mod, knob, value) => {
     loader.setKnob(mod.id, knob, value);
-    send({ kind: "knob", modId: mod.id, knob, value });
+    if (remoteModIds.has(mod.id)) send({ kind: "knob", modId: mod.id, knob, value });
   },
   // "Rate it" buttons: built once, when the card is made. The card owns its Undo button.
   decorate: (mod, head) => head.append(feedback.createVoteActions(mod)),
@@ -1166,7 +1173,7 @@ function handleLocal(text: string): boolean {
     if (mood && t.includes("undo") && loader.list().length === moodModCount) { send({ kind: "undo", modId: "mood" }); revertMood(); say("Back to normal.", "done"); return true; }
     const mods = loader.list();
     const last = mods[mods.length - 1];
-    if (last) { loader.unload(last.id); say(`${last.title} removed.`, "done"); showToast(`${last.title} removed.`); renderMods(); }
+    if (last) { remoteModIds.delete(last.id); loader.unload(last.id); say(`${last.title} removed.`, "done"); showToast(`${last.title} removed.`); renderMods(); }
     else say("Nothing to undo.");
     return true;
   }
@@ -2157,7 +2164,7 @@ function connect(): void {
     else if (msg.kind === "timeline") timelineView.update(msg.steps, msg.current);
     else if (msg.kind === "explainResult") explain.onMsg(msg);
     else if (msg.kind === "receiptResult") receipt.onMsg(msg);
-    else if (msg.kind === "removed") { loader.unload(msg.modId); renderMods(); }
+    else if (msg.kind === "removed") { remoteModIds.delete(msg.modId); loader.unload(msg.modId); renderMods(); }
     else if (msg.kind === "mod") {
       try {
         await ghost.idle(); // let the playtest replay finish before the mod lands
@@ -2166,6 +2173,7 @@ function connect(): void {
         const loaded = (await import(/* @vite-ignore */ url)) as { default: ModDefinition };
         URL.revokeObjectURL(url);
         loader.load(loaded.default);
+        remoteModIds.add(msg.mod.id); // this one's knobs live on the server too (bead r8n)
         registerLook(msg.mod.look);
         if (!sayWhileBuilding()) say(`${msg.mod.title} verified and live.`, "done");
         renderMods();
