@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fallbackVisual, lookFor, parseShape, parseVisual } from "../server/visual";
-import { kindOf, registerLook, clearLooks } from "../src/client/shapes";
+import { ASTEROID_RE, TARGET_RE, kindOf, registerLook, clearLooks } from "../src/client/shapes";
 import { pickArtType } from "../server/art";
 
 describe("visual kind (ADR 0015)", () => {
@@ -26,6 +26,8 @@ describe("visual kind (ADR 0015)", () => {
     expect(lookFor("effect", undefined, ["fog"])).toEqual({ visual: "effect", types: ["fog"] });
     expect(lookFor("prop", undefined, ["chest"])).toBeUndefined();
     expect(lookFor("creature", undefined, ["dragon"])).toBeUndefined();
+    expect(lookFor("shape", "block", ["asteroid"])).toBeUndefined(); // ontological prop keeps art
+    expect(lookFor("shape", "circle", ["dragon"])).toBeUndefined(); // ontological creature keeps art
   });
 
   it("weather and effect types never ask for a sprite sheet", () => {
@@ -45,5 +47,14 @@ describe("visual kind (ADR 0015)", () => {
     registerLook({ visual: "shape", shape: "diamond", types: ["gem-thing"] });
     expect(kindOf("gem-thing")).toEqual({ kind: "shape", shape: "diamond" });
     clearLooks();
+  });
+
+  it("recognizes asteroids and shootable targets for procedural rendering", () => {
+    expect(ASTEROID_RE.test("asteroid")).toBe(true);
+    expect(ASTEROID_RE.test("meteor")).toBe(true);
+    expect(ASTEROID_RE.test("boulder")).toBe(true);
+    expect(TARGET_RE.test("target")).toBe(true);
+    expect(TARGET_RE.test("bullseye")).toBe(true);
+    expect(TARGET_RE.test("shooting-dummy")).toBe(true);
   });
 });

@@ -164,14 +164,14 @@ export function spritePrompt(cleanSubject: string, form: { held: boolean; scener
   }
   if (form.flying) {
     return `Pixel art game sprite sheet of ${cleanSubject} in flight for a 2D side-scrolling platformer, side view strictly facing right, AIRBORNE: ` +
-      `exactly 4 airborne flight action poses in 1 single horizontal row from left to right: hovering idle facing right, gliding forward facing right, flying forward facing right, diving facing right. ` +
+      `exactly 4 airborne flight action poses in 1 single horizontal row from left to right: hovering idle facing right, gliding forward with wings spread flat facing right, strong forward wing-flap stroke pushed down facing right, diving swooping down facing right. ` +
       `Orientation: all poses MUST face right in side profile — NEVER face backwards or away from the camera (no rear view), NEVER front-facing, no top-down angles, NEVER multiple rows or a 2D grid. ` +
       `The ${cleanSubject} is off the ground in every pose — ` +
       `feet and paws lifted, wings or arms spread, cape or tail streaming behind it, nothing underneath to stand on, no ground line, no shadow, no landscape, no sky. ` +
       `Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
   }
   return `Pixel art game sprite sheet of ${cleanSubject} for a 2D side-scrolling platformer, side view strictly facing right: ` +
-    `exactly 4 action poses in 1 single horizontal row from left to right: idle standing facing right, running forward stride with the FRONT leg stretched forward and the back leg trailing (contact pose), running forward stride with the legs crossing under the body and one foot lifted off the ground (passing pose) — the two stride poses MUST look clearly different from each other and from idle, jumping mid-air leap pose facing right. ` +
+    `exactly 4 action poses in 1 single horizontal row from left to right: idle standing facing right, running forward stride with LEFT leg reaching forward and right leg trailing (low contact step), running forward stride with RIGHT knee driving up high and left foot pushing off ground (lifted passing step) — the two stride poses MUST have opposite leading limbs and distinct silhouettes, jumping mid-air leap pose facing right. ` +
     `Orientation: every pose MUST face right in side profile — NEVER face backwards or away from the camera (no rear view, no back of character facing away), NEVER front-facing (no RPG turnaround), no top-down angles, NEVER multiple rows or a 2D grid. ` +
     `Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
 }

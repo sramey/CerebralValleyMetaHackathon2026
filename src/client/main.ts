@@ -11,7 +11,7 @@ import { startLateArt } from "./art-late";
 import chickenMod from "../mods/chicken";
 import { SIM } from "../contract";
 import { canUseSpriteSheet, entityKind } from "../ontology";
-import type { ClientMsg, Entity, KnobValue, ModDefinition, MoodSpec, ServerMsg } from "../contract";
+import type { ClientMsg, Entity, KnobValue, ModDefinition, MoodSpec, ServerMsg, ShapeName } from "../contract";
 import { initVoice } from "./voice";
 import { Fx } from "./fx";
 import { Feel } from "./feel";
@@ -22,7 +22,7 @@ import { createMoodCard } from "./mood-card";
 import { Portal } from "./portal";
 import { isMoodUndoAsk, localRelativeAsk } from "./local-asks";
 import { visualHeight } from "../sim/sockets";
-import { drawCliff, drawHoop, drawShape, drawTetherGear, isCliff, isTetherGear, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
+import { ASTEROID_RE, TARGET_RE, drawAsteroidRock, drawBullseyeTarget, drawCliff, drawHoop, drawShape, drawTetherGear, isCliff, isTetherGear, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
 import { celestialPos, computeDesiredCamY, depthFog, drawContactShadows, drawDistantMountains, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
 import { drawBackdrop, drawScenery, skylineAmplitude } from "./scenery";
 import { drawFluffyCloud, drawParallaxEntities, isCloudEntity, isParallaxOrSkyEntity, isSkyOrBackgroundEntity } from "./parallax";
@@ -452,6 +452,11 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   if (isHoop(e)) { drawHoop(gfx, e, x, y); return; } // a goal is a structure, never a floating ring (bead z1d)
   const look = kindOf(t); // code-drawn shapes and engine effects never use sprites or the outline (ADR 0015)
   if (look) { if (look.kind === "shape") drawShape(gfx, e, x, y, look.shape); return; }
+  if (e.data?.visual === "shape" && t !== "coin" && !isProjectileType(t)) {
+    const shape = typeof e.data.shape === "string" ? (e.data.shape as ShapeName) : "circle";
+    drawShape(gfx, e, x, y, shape);
+    return;
+  }
   if (getActivePrimaries().has(e.id)) return; // sprite pass below
   if (t !== "player" && canUseSpriteSheet(e)) {
     for (const k of pendingArt) {
@@ -476,7 +481,11 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   gfx.rect(x - 1.5, y - 1.5, e.w + 3, e.h + 3).fill(OUTLINE); // rectangular looks below: outline is the rectangle
   if (t.indexOf("stair") >= 0 || t.indexOf("step") >= 0 || t.indexOf("wall") >= 0 || t.indexOf("block") >= 0 || t.indexOf("brick") >= 0 || t.indexOf("pillar") >= 0 || t.indexOf("ledge") >= 0 || t.indexOf("ramp") >= 0 || entityKind(e) === "terrain") { drawStair(e, x, y); return; }
   if (isProjectileType(t) || entityKind(e) === "projectile" || t.indexOf("arrow") >= 0 || t.indexOf("fire") >= 0) { drawShot(e, x, y); return; }
+  if (ASTEROID_RE.test(t)) { drawAsteroidRock(gfx, e, x, y); return; }
+  if (TARGET_RE.test(t)) { drawBullseyeTarget(gfx, e, x, y); return; }
   gfx.rect(x, y, e.w, e.h).fill(e.color);
+  gfx.rect(x, y, e.w, Math.max(1.5, e.h * 0.12)).fill({ color: scale(e.color, 1.3), alpha: 0.6 });
+  gfx.rect(x, y + e.h - Math.max(1.5, e.h * 0.12), e.w, Math.max(1.5, e.h * 0.12)).fill({ color: scale(e.color, 0.6), alpha: 0.6 });
 }
 
 // --- mood: one sentence restyles the whole world (ADR 0017) ------------------

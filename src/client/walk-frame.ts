@@ -24,5 +24,6 @@ export function pickWalkFrame({ frameCount, tick, moving, onGround }: WalkInput)
   const phase = Math.floor(tick / WALK_PHASE_TICKS) % 4;
   const strides = Math.min(2, frameCount - 1);
   if (phase % 2 === 0) return { index: 0, bob: 0 };
-  return { index: 1 + (phase >> 1) % strides, bob: 2 };
+  // Differentiate step dynamics: contact stride bobs lower (1.5px), passing stride lifts higher (3px)
+  return { index: 1 + (phase >> 1) % strides, bob: phase === 1 ? 1.5 : 3 };
 }

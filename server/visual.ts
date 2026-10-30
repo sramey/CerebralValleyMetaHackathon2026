@@ -1,6 +1,7 @@
 // Visual kind of a thing the player asks for (ADR 0015). Spark decides it inside the router call it
 // already makes (zero extra latency); these word lists are only the safety net for a router miss.
 import type { Look, ShapeName } from "../src/contract";
+import { artPlanFor } from "../src/ontology";
 
 export type Visual = "shape" | "effect" | "prop" | "creature";
 
@@ -34,7 +35,10 @@ export function fallbackVisual(text: string): { visual: Visual; shape?: ShapeNam
 }
 
 export function lookFor(visual: Visual | undefined, shape: ShapeName | undefined, types: string[]): Look | undefined {
-  if (visual === "shape") return { visual, shape: shape ?? "circle", types };
+  if (visual === "shape") {
+    if (types.length > 0 && types.every((t) => artPlanFor(t) !== "none")) return undefined;
+    return { visual, shape: shape ?? "circle", types };
+  }
   if (visual === "effect") return { visual, types };
   return undefined;
 }
