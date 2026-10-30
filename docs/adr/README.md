@@ -83,3 +83,5 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0054](0054-bounded-sketch-build.md) | Bounded sketch build: compact JPEG, 15 s vision ceiling, instant stroke-box fallback | Draft |
 | [0052](0052-wave-spawner-and-swarm-archetype.md) | Wave spawner: multi-angle offscreen spawns, anti-clumping, kill-paced level-ups; built-in swarm mod | Draft |
 | [0055](0055-engine-owned-collectibles.md) | Engine-owned collectibles: data.collectible auto-collects into one shared score HUD | Draft |
+| [0056](0056-contain-crashing-and-looping-mods.md) | Contain crashing and looping mods: quarantine on throw, compile-time loop guards | Draft |
+| [0057](0057-engine-rules-gear-shots-ground-broad-phase.md) | Engine rules for gear, shots and the ground slab; a broad phase for collision | Draft |

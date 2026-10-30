@@ -45,6 +45,9 @@ export interface Entity {
    *  score HUD on player touch (ADR 0055), and `bounce` sets landing restitution
    *  (ADR 0053). */
   data: Record<string, number | string | boolean>;
+  /** Set by the engine when the entity is despawned or destroyed; a mod holding a stale reference can check it. */
+  dead?: boolean;
+  despawned?: boolean;
 }
 
 /** Procedural shapes the client draws in code, so primitives never go to Muse Image (ADR 0015). */

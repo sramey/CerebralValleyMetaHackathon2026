@@ -55,6 +55,14 @@ const BUILTINS: Record<string, ModDefinition> = {
 
 const world = new World(1337);
 const loader = new ModLoader(world);
+// A mod that crashes mid-game is taken out and the world keeps running (ADR 0056).
+loader.isolateFaults((mod, message) => {
+  console.warn(`mod ${mod.id} crashed and was unloaded:`, message);
+  say(`${mod.title} crashed, so I took it out. Everything else keeps running.`, "failed");
+  log(`unloaded ${mod.id}: it crashed (${message.slice(0, 80)})`);
+  renderMods();
+  sendWorldState();
+});
 const ghost = createGhost(document.getElementById("stage-wrap")!);
 const pipeline = createPipeline(document.getElementById("stage-wrap")!);
 const theater = createTheater(document.getElementById("stage-wrap")!, (v) => pipeline.setCode(v.lines, v.partial, v.active), (m) => { pipeline.onMsg(m); theater.onMsg(m); });
@@ -902,7 +910,17 @@ function render(): void {
 let last = performance.now();
 let acc = 0;
 let noPlayerTicks = 0;
+let frameFaultShown = false;
+/** One animation frame. Whatever throws inside it, the next frame is still scheduled, so the game never freezes. */
 function frame(now: number): void {
+  try {
+    stepAndRender(now);
+  } catch (err) {
+    if (!frameFaultShown) { frameFaultShown = true; console.error("frame failed:", err); log("a frame failed; the game keeps running"); }
+  }
+  requestAnimationFrame(frame);
+}
+function stepAndRender(now: number): void {
   // Sketch mode freezes the world (ADR 0028): you draw on a still frame, and the
   // accumulator is dropped so resuming does not fast-forward the sim.
   const sketching = sketch.active();
@@ -933,7 +951,6 @@ function frame(now: number): void {
     else if (++noPlayerTicks > 90) { noPlayerTicks = 0; loadLocal(playerMod); say("Knocked out — you're back in!", "done"); }
   }
   render();
-  requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
