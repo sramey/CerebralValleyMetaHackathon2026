@@ -1266,7 +1266,7 @@ const KNOWN_MOOD_WORDS: ReadonlySet<string> = new Set([
 ]);
 
 const BACKDROP_NOUN = "(?:background|backdrop|bg|scenery|landscape|setting|surroundings|parallax)";
-/** Places whose backdrop we have drawn (ADR 0074); a bare "make this look like <place>" is only taken for these. */
+/** Places whose backdrop we have drawn (ADR 0073); a bare "make this look like <place>" is only taken for these. */
 export const PLACE_WORDS = String.raw`england|english|britain|british|london|uk|india|indian|delhi|japan|japanese|tokyo|china|chinese|france|french|paris|italy|rome|egypt|egyptian|arctic|antarctica|tundra|alaska|iceland|beach|seaside|coast|the\s+coast|hawaii|tropical\s+island|wild\s+west|wildwest|the\s+wild\s+west|the\s+west|texas|arizona|mexico|mexican|the\s+desert|desert|medieval|farm|the\s+city|city|castle`;
 
 /** Filler that says "a background" without saying which one. */
@@ -1279,7 +1279,7 @@ const BACKDROP_FILLER = /\b(?:parallax|paralax|background|backdrop|bg|scenery|sc
  */
 export function detectBackdropCommand(command: string): string | null {
   const clean = command.trim().replace(/[.!?,;:]+$/, "").trim().replace(/\s+/g, " ");
-  // "make this look like England", "turn the level into Japan": a known place is a backdrop (ADR 0074).
+  // "make this look like England", "turn the level into Japan": a known place is a backdrop (ADR 0073).
   const place = new RegExp(String.raw`^(?:(?:please|can\s+you|could\s+you|let'?s)\s+)?(?:make|turn|set|change|give)\s+(?:me\s+)?(?:it|this|everything|the\s+(?:world|level|game|map|place|scene|stage|whole\s+thing)|this\s+(?:world|level|game|place|scene|stage))\s+(?:to\s+)?(?:look(?:s)?\s+(?:like\s+)?|feel\s+(?:like\s+)?|be\s+(?:in\s+)?|into\s+|in\s+|like\s+)?(?:a\s+|an\s+|the\s+|in\s+)?(${PLACE_WORDS})(?:\s+(?:style|theme|themed|setting|version))?$`, "i").exec(clean);
   if (place) return place[1].toLowerCase();
   if (!clean || new RegExp(`\\b(?:in|on|into|to)\\s+(?:the|my|our)\\s+${BACKDROP_NOUN}$`, "i").test(clean)) return null;
@@ -1397,7 +1397,7 @@ export function isPlayerAbilityCommand(command: string): boolean {
 }
 
 /**
- * What a level request asks for (ADR 0074). `fresh`: build a new layout (a new seed); `difficulty`/`length`:
+ * What a level request asks for (ADR 0073). `fresh`: build a new layout (a new seed); `difficulty`/`length`:
  * "up" and "down" step the current level, a number sets it. Nothing here needs a model.
  */
 export interface LevelIntent { fresh: boolean; difficulty?: "up" | "down" | number; length?: "up" | "down" }

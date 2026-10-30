@@ -655,7 +655,7 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
   // back at an earlier one is merged by a deterministic guard; the word splitter is the fallback.
   // The router starts beside the split (ADR 0058): a command that turns out to be one request
   // no longer waits for the split first.
-  // "Extend the level and add obstacles" is one level request, not two builds racing each other (ADR 0074).
+  // "Extend the level and add obstacles" is one level request, not two builds racing each other (ADR 0073).
   if (detectLevelCommand(text, sess(ws).manifest.has(LEVEL_MOD_ID))) {
     await handleSingle(ws, text);
     return;
@@ -774,7 +774,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     return;
   }
 
-  // "Make a harder level", "extend the level": the engine's level generator answers, no router and no model (ADR 0074).
+  // "Make a harder level", "extend the level": the engine's level generator answers, no router and no model (ADR 0073).
   const levelIntent = forceEditModId ? null : detectLevelCommand(command, manifest.has(LEVEL_MOD_ID));
   if (levelIntent) {
     routing?.catch(() => {});
@@ -1258,7 +1258,7 @@ const BUILTIN_IDS: ReadonlySet<string> = new Set(BUILTINS.map((b) => b.id));
  * "make it spooky": Spark routed here. Design the mood, tell the client to repaint, then it asks for the sprite edits (ADR 0017).
  * `background` ("change the background to medieval", ADR 0067) scopes it to the backdrop: no sprite edits.
  */
-/** A level request (ADR 0074): build the generated level, or step the one in the world by changing its knobs. Free: no model is called. */
+/** A level request (ADR 0073): build the generated level, or step the one in the world by changing its knobs. Free: no model is called. */
 async function handleLevel(ws: WebSocket, command: string, intent: import("../src/ontology").LevelIntent, t0: number): Promise<void> {
   const manifest = sess(ws).manifest;
   const rec = manifest.get(LEVEL_MOD_ID);

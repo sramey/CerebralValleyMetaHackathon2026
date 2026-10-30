@@ -1,4 +1,4 @@
-// Level requests without a model (ADR 0074): "make a harder level", "extend the level" turn into the engine's
+// Level requests without a model (ADR 0073): "make a harder level", "extend the level" turn into the engine's
 // api.buildLevel generator. The mod source is a tiny template; the knobs (difficulty, length, seed) are what the
 // player and the router tweak afterwards, so "make it harder" later is a knob change, not a rewrite.
 import type { KnobDefs, KnobValue } from "../src/contract";
@@ -47,7 +47,7 @@ export function levelSay(p: LevelParams, stats: { gaps: number; hazards: number;
 /** The mod. Plain source so it is saved, shared, exported and shown in the receipt like any other mod. */
 export function levelModSource(p: LevelParams): string {
   const L = LEVEL_LIMITS;
-  return `// A generated level (ADR 0074): the engine's level generator builds the layout from these three knobs.
+  return `// A generated level (ADR 0073): the engine's level generator builds the layout from these three knobs.
 let level: { dispose(): void } | undefined;
 export default {
   id: "${LEVEL_MOD_ID}",

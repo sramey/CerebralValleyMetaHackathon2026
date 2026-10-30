@@ -1,4 +1,4 @@
-# ADR 0074: Generated levels (`api.buildLevel`) and place themes
+# ADR 0073: Generated levels (`api.buildLevel`) and place themes
 
 - **Status:** Proposed
 - **Date:** 2026-10-30

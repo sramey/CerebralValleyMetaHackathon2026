@@ -1,4 +1,4 @@
-// api.buildLevel (ADR 0074): turns a generated level (levelgen.ts) into entities and the few rules it needs.
+// api.buildLevel (ADR 0073): turns a generated level (levelgen.ts) into entities and the few rules it needs.
 // The rules live here, in the engine, so every level plays the same and a Wonder-written mod only has to
 // call one function: pits send the player back to the last checkpoint, spikes and walkers hurt, a stomp
 // kills a walker, and touching the flag clears the level.

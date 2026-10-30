@@ -177,7 +177,7 @@ export interface SwarmSeparationOptions {
   strength?: number;
 }
 
-/** api.buildLevel input (ADR 0074). Same seed and numbers, same level. */
+/** api.buildLevel input (ADR 0073). Same seed and numbers, same level. */
 export interface LevelBuildOptions {
   seed?: number;
   /** 1 (gentle) to 5 (brutal). */
@@ -298,7 +298,7 @@ export interface ModApi {
    *  backdrop paints a code-drawn sky ("space"); playerSkin re-skins the player with generated art (e.g. "spaceship") and
    *  the player's gravity is put back on unload. Calling it again from the same mod adds to its claim. */
   setScene?: (options: SceneOptions) => void;
-  /** Build a whole playable level (ADR 0074): floor with pits, platform runs at several heights, spikes, walkers and fliers on their ledges, coins, checkpoints and a goal flag, from a seed and a difficulty. Deterministic; the starter terrain is put aside and returns on undo. */
+  /** Build a whole playable level (ADR 0073): floor with pits, platform runs at several heights, spikes, walkers and fliers on their ledges, coins, checkpoints and a goal flag, from a seed and a difficulty. Deterministic; the starter terrain is put aside and returns on undo. */
   buildLevel?: (options?: LevelBuildOptions) => LevelBuild;
   /** Tell every other mod something happened ("boss-down", "door-open"); they get a "signal" event next tick. */
   signal?: (name: string, value?: KnobValue) => void;

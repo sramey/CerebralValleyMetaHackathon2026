@@ -1,4 +1,4 @@
-// ADR 0074: the level generator and api.buildLevel. The generated level must be deterministic, structurally rich,
+// ADR 0073: the level generator and api.buildLevel. The generated level must be deterministic, structurally rich,
 // jumpable (every gap under the player's reach) and finishable by a simple bot.
 import { describe, expect, it } from "vitest";
 import type { ModDefinition } from "../src/contract";
@@ -14,7 +14,7 @@ const levelMod = (o: { seed: number; difficulty: number; length: number }): ModD
   return { id: "level", title: "Level", setup(api) { b = api.buildLevel!(o); }, dispose() { b?.dispose(); } };
 };
 
-describe("level generator (ADR 0074)", () => {
+describe("level generator (ADR 0073)", () => {
   it("is deterministic: same seed and numbers, same level; another seed differs", () => {
     const a = generateLevel({ seed: 7, difficulty: 3, length: 3600 });
     expect(generateLevel({ seed: 7, difficulty: 3, length: 3600 })).toEqual(a);
@@ -150,7 +150,7 @@ describe("level size", () => {
 
 import { detectLevelCommand } from "../src/ontology";
 
-describe("detectLevelCommand (ADR 0074)", () => {
+describe("detectLevelCommand (ADR 0073)", () => {
   it.each([
     ["make a harder level", { fresh: true, difficulty: "up" }],
     ["Make a harder level.", { fresh: true, difficulty: "up" }],

@@ -1,4 +1,4 @@
-// Deterministic platformer level generator (ADR 0074). Pure: a seed and a few numbers in, a list of
+// Deterministic platformer level generator (ADR 0073). Pure: a seed and a few numbers in, a list of
 // pieces out. No DOM, no clock, no Math.random. The sim turns the pieces into entities (level.ts).
 //
 // The player jumps about 170 px high and 250 px far on the flat (speed 260, jump 720, gravity 1500), so every

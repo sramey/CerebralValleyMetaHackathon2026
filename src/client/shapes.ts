@@ -113,7 +113,7 @@ export function drawShape(g: Graphics, e: Entity, x: number, y: number, shape: S
       return;
     }
     case "flag": {
-      // A goal flag (ADR 0074): a pole standing on the ground with a pennant that waves a little.
+      // A goal flag (ADR 0073): a pole standing on the ground with a pennant that waves a little.
       const px = x + w * 0.2, wave = Math.sin(performance.now() / 180) * 3;
       g.rect(px - 2.5, y - 1.5, 6, h + 1.5).fill(OUTLINE);
       g.rect(px - 1, y, 3, h).fill(0xe8e8ee);
