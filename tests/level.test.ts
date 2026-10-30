@@ -222,3 +222,29 @@ describe("level mod (server template)", () => {
     expect(text).toMatch(/4 pits/);
   });
 });
+
+import { BACKDROP_PRESETS, moodSpecFor } from "../server/mood";
+import { detectMoodCommand } from "../src/ontology";
+
+describe("place themes change scenery, not just colour", () => {
+  it.each([
+    ["make this look like England", "england", "clocktower"],
+    ["make this look like India", "india", "dome"],
+    ["change the background to Japan", "japan", "pagoda"],
+    ["make it look like Paris", "france", "eiffel"],
+    ["make this look like the arctic", "arctic", "igloo"],
+    ["make this look like the wild west", "wild west", "mesa"],
+  ])("%s -> %s with a %s landmark", async (cmd, name, landmark) => {
+    const words = detectMoodCommand(cmd);
+    expect(words, cmd).not.toBeNull();
+    const spec = await moodSpecFor(words!);
+    expect(spec.name).toBe(name);
+    expect(spec.backdrop?.landmark).toBe(landmark);
+    expect(spec.backdrop!.far.length + spec.backdrop!.mid.length).toBeGreaterThan(5);
+  });
+
+  it("every preset is its own look", () => {
+    const skies = new Set(Object.values(BACKDROP_PRESETS).map((p) => `${p.skyTop}/${p.skyBottom}`));
+    expect(skies.size).toBe(Object.keys(BACKDROP_PRESETS).length);
+  });
+});

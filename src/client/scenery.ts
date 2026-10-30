@@ -554,6 +554,106 @@ function cart(c: MCtx, x: number, by: number): void {
   g.poly([x - 28, by - 30, x + 26, by - 30, x + 18, by - 42, x - 20, by - 44]).fill(tint(c, STRAW, 0.8));
 }
 
+/** Big-Ben style clock tower: stone shaft, lit clock face, spired roof. */
+function clocktower(c: MCtx, x: number, by: number, s: number): void {
+  const { g } = c;
+  const tw = 30 * s, th = 150 * s, stone = tint(c, 0xc9b27a, 0.5);
+  strokeIf(c, g.rect(x - tw / 2, by - th, tw, th).fill(stone));
+  g.rect(x - tw / 2, by - th, tw * 0.22, th).fill({ color: c.wash, alpha: 0.22 });
+  strokeIf(c, g.rect(x - tw * 0.62, by - th - 38 * s, tw * 1.24, 40 * s).fill(stone));
+  g.circle(x, by - th - 18 * s, 13 * s).fill(c.lit ? c.lamp : 0xf3ecd2);
+  g.moveTo(x, by - th - 18 * s).lineTo(x, by - th - 27 * s).stroke({ width: 1.4, color: c.dark });
+  g.moveTo(x, by - th - 18 * s).lineTo(x + 7 * s, by - th - 15 * s).stroke({ width: 1.4, color: c.dark });
+  strokeIf(c, g.poly([x - tw * 0.7, by - th - 38 * s, x + tw * 0.7, by - th - 38 * s, x, by - th - 100 * s]).fill(tint(c, 0x4d6b5a, 0.8)));
+  g.rect(x - 0.75, by - th - 114 * s, 1.5, 14 * s).fill(c.dark);
+  for (let i = 0; i < 4; i++) windowAt(c, x - 3 * s, by - th * (0.2 + i * 0.2), 6 * s, 12 * s);
+}
+
+/** Onion-dome temple with four minarets (Taj-like). */
+function dome(c: MCtx, x: number, by: number, s: number): void {
+  const { g } = c;
+  const marble = tint(c, 0xf0e6d2, 0.4), w = 120 * s, h = 60 * s;
+  for (const dx of [-1, 1]) {
+    strokeIf(c, g.rect(x + dx * w * 0.62 - 5 * s, by - 100 * s, 10 * s, 100 * s).fill(marble));
+    strokeIf(c, g.poly([x + dx * w * 0.62 - 7 * s, by - 100 * s, x + dx * w * 0.62 + 7 * s, by - 100 * s, x + dx * w * 0.62, by - 118 * s]).fill(marble));
+  }
+  strokeIf(c, g.rect(x - w / 2, by - h, w, h).fill(marble));
+  g.rect(x - w / 2, by - h, w * 0.18, h).fill({ color: c.wash, alpha: 0.2 });
+  strokeIf(c, g.ellipse(x, by - h - 20 * s, 34 * s, 30 * s).fill(marble));
+  strokeIf(c, g.poly([x - 8 * s, by - h - 42 * s, x + 8 * s, by - h - 42 * s, x, by - h - 70 * s]).fill(marble));
+  g.rect(x - 0.75, by - h - 84 * s, 1.5, 14 * s).fill(c.dark);
+  g.poly([x - w * 0.1, by, x - w * 0.1, by - h * 0.55, x, by - h * 0.7, x + w * 0.1, by - h * 0.55, x + w * 0.1, by]).fill(c.dark);
+  for (const dx of [-0.32, 0.32]) windowAt(c, x + dx * w - 4 * s, by - h * 0.6, 8 * s, 16 * s);
+}
+
+/** Tiered pagoda with upturned red roofs. */
+function pagoda(c: MCtx, x: number, by: number, s: number): void {
+  const { g } = c;
+  const roof = tint(c, 0xb02e2a, 0.9), wall = tint(c, 0xe8dcc0, 0.4);
+  for (let i = 0; i < 4; i++) {
+    const w = (70 - i * 12) * s, y = by - i * 28 * s;
+    strokeIf(c, g.rect(x - w * 0.36, y - 22 * s, w * 0.72, 22 * s).fill(wall));
+    windowAt(c, x - 3 * s, y - 16 * s, 6 * s, 9 * s);
+    strokeIf(c, g.poly([x - w * 0.62, y - 20 * s, x + w * 0.62, y - 20 * s, x + w * 0.46, y - 32 * s, x - w * 0.46, y - 32 * s]).fill(roof));
+  }
+  g.rect(x - 0.75, by - 4 * 28 * s - 16 * s, 1.5, 16 * s).fill(c.dark);
+}
+
+/** Lattice iron tower (Eiffel-like). */
+function eiffel(c: MCtx, x: number, by: number, s: number): void {
+  const { g } = c;
+  const iron = tint(c, 0x5a5448, 0.5), h = 170 * s, w = 70 * s;
+  strokeIf(c, g.poly([x - w / 2, by, x - 6 * s, by - h * 0.55, x - 2 * s, by - h, x + 2 * s, by - h, x + 6 * s, by - h * 0.55, x + w / 2, by, x + w * 0.22, by, x, by - h * 0.32, x - w * 0.22, by]).fill(iron));
+  for (const f of [0.28, 0.55, 0.78]) {
+    const half = (w / 2) * (1 - f) + 2 * s, y = by - h * f;
+    g.rect(x - half, y - 2 * s, half * 2, 3 * s).fill(c.dark);
+  }
+  if (c.lit) g.circle(x, by - h - 4 * s, 4 * s).fill({ color: c.lamp, alpha: 0.9 });
+}
+
+/** Striped lighthouse on a rock with a lit lantern. */
+function lighthouse(c: MCtx, x: number, by: number, s: number): void {
+  const { g } = c;
+  const h = 110 * s, bw = 26 * s, tw = 16 * s;
+  strokeIf(c, g.ellipse(x, by, 30 * s, 8 * s).fill(tint(c, STONE, 0.4)));
+  for (let i = 0; i < 4; i++) {
+    const y0 = by - (h * i) / 4, y1 = by - (h * (i + 1)) / 4;
+    const wa = bw + (tw - bw) * (i / 4), wb = bw + (tw - bw) * ((i + 1) / 4);
+    g.poly([x - wa / 2, y0, x + wa / 2, y0, x + wb / 2, y1, x - wb / 2, y1]).fill(i % 2 === 0 ? tint(c, 0xd23b3b, 0.8) : tint(c, 0xf0e6cc, 0.5));
+  }
+  strokeIf(c, g.rect(x - tw * 0.4, by - h - 12 * s, tw * 0.8, 12 * s).fill(c.lit ? c.lamp : tint(c, 0xf3e08a, 0.5)));
+  strokeIf(c, g.poly([x - tw * 0.6, by - h - 12 * s, x + tw * 0.6, by - h - 12 * s, x, by - h - 26 * s]).fill(c.dark));
+  if (c.lit) g.circle(x, by - h - 6 * s, 26 * s).fill({ color: c.lamp, alpha: 0.1 });
+}
+
+/** Snow igloo. */
+function igloo(c: MCtx, x: number, by: number, s: number): void {
+  const { g } = c;
+  const snow = tint(c, 0xeef6ff, 0.3), r = 34 * s;
+  strokeIf(c, g.ellipse(x, by, r, r * 0.8).fill(snow));
+  g.rect(x - r, by, r * 2, 2).fill(snow);
+  for (const f of [0.35, 0.65]) g.moveTo(x - r * 0.95, by - r * 0.8 * f).lineTo(x + r * 0.95, by - r * 0.8 * f).stroke({ width: 1, color: c.dark, alpha: 0.25 });
+  g.poly([x - 9 * s, by, x - 9 * s, by - 10 * s, x, by - 15 * s, x + 9 * s, by - 10 * s, x + 9 * s, by]).fill(c.dark);
+}
+
+/** Red telephone box. */
+function phonebox(c: MCtx, x: number, by: number, s: number): void {
+  const { g } = c;
+  const red = tint(c, 0xc8281f, 1.1), w = 16 * s, h = 34 * s;
+  strokeIf(c, g.rect(x - w / 2, by - h, w, h).fill(red));
+  g.poly([x - w / 2, by - h, x, by - h - 5 * s, x + w / 2, by - h]).fill(red);
+  for (let i = 0; i < 3; i++) windowAt(c, x - w * 0.32, by - h + 4 * s + i * 9 * s, w * 0.64, 7 * s);
+}
+
+/** Flat-topped red rock mesa (desert west). */
+function mesa(c: MCtx, x: number, by: number, s: number): void {
+  const { g } = c;
+  const clay = tint(c, 0xb5603a, 0.8), w = 130 * s, h = 80 * s;
+  strokeIf(c, g.poly([x - w / 2, by, x - w * 0.38, by - h, x + w * 0.34, by - h, x + w / 2, by]).fill(clay));
+  g.poly([x - w / 2, by, x - w * 0.38, by - h, x - w * 0.2, by - h, x - w * 0.22, by]).fill({ color: c.wash, alpha: 0.18 });
+  for (const f of [0.35, 0.65]) g.moveTo(x - w * 0.46, by - h * f).lineTo(x + w * 0.46, by - h * f).stroke({ width: 1, color: c.dark, alpha: 0.25 });
+}
+
 /** Paint one motif. `s` is the band's scale; `seed` varies size and shape inside the motif. */
 function motif(c: MCtx, m: BackdropMotif, x: number, by: number, s: number, seed: number): void {
   const j = 0.85 + (seed % 30) / 100; // 0.85 .. 1.14
@@ -592,6 +692,14 @@ function motif(c: MCtx, m: BackdropMotif, x: number, by: number, s: number, seed
     case "banner": banner(c, x, by, seed); return;
     case "well": well(c, x, by); return;
     case "cart": cart(c, x, by); return;
+    case "clocktower": clocktower(c, x, by, s * j); return;
+    case "dome": dome(c, x, by, s * j); return;
+    case "pagoda": pagoda(c, x, by, s * j); return;
+    case "eiffel": eiffel(c, x, by, s * j); return;
+    case "lighthouse": lighthouse(c, x, by, s * j); return;
+    case "igloo": igloo(c, x, by, s * j); return;
+    case "phonebox": phonebox(c, x, by, s * j); return;
+    case "mesa": mesa(c, x, by, s * j); return;
   }
 }
 

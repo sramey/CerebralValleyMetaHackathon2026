@@ -72,6 +72,7 @@ export interface MoodSpec {
 export const BACKDROP_MOTIFS = [
   "castle", "tower", "village", "church", "windmill", "farmhouse", "barn", "silo", "watertower", "city", "pyramid", "tent",
   "pine", "oak", "deadtree", "palm", "cactus", "rock", "bush", "fence", "lamp", "torch", "haybale", "corn", "banner", "well", "cart",
+  "clocktower", "dome", "pagoda", "eiffel", "lighthouse", "igloo", "phonebox", "mesa",
 ] as const;
 export type BackdropMotif = (typeof BACKDROP_MOTIFS)[number];
 
