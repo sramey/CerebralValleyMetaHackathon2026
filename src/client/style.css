@@ -9,7 +9,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e13; col
    and it is centred on the pointer with a margin so the drawn ring sits on the aim point. */
 #crosshair { position: absolute; left: 0; top: 0; z-index: 27; pointer-events: none; margin: -13px 0 0 -13px; opacity: 1; transition: opacity .18s ease; will-change: transform; }
 #crosshair.off { opacity: 0; }
-#stage-wrap[data-crosshair="on"] #stage canvas { cursor: none; }
+/* !important because Pixi writes `cursor: inherit` into the canvas's inline style. */
+#stage-wrap[data-crosshair="on"] #stage canvas { cursor: none !important; }
 @media (prefers-reduced-motion: reduce) { #crosshair { transition: none; } }
 #orb-bar { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: min(520px, calc(100% - 120px)); min-width: 280px; z-index: 25; pointer-events: none; display: flex; align-items: center; gap: 10px; background: rgba(16,20,27,.82); border: 1px solid rgba(255,201,77,.55); border-radius: 999px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); padding: 8px 10px; box-shadow: 0 4px 18px rgba(0,0,0,.45); }
 #orb-bar > * { pointer-events: auto; }
