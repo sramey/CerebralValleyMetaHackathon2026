@@ -216,6 +216,21 @@ const RULES: [string, Rule][] = [
     const byPronoun = pronounAskMeansRecent(ctx.command, ask)
       && (!r.target || r.target === "player")
       && !!pronounId && ctx.mods.has(pronounId);
+    // A NAMED thing ("make the slimes faster") that matches a loaded mod outranks a router target of
+    // the player, the same way a pronoun does (bead 1e6). "me/my character" names no mod, so it stays.
+    const named = ask.noun && !byPronoun && (!r.target || r.target === "player") ? orderTarget(ask.noun, ctx.mods, ctx.recent) : null;
+    const nounId = named && named !== "*" && named !== "player" && ctx.mods.has(named) ? named : undefined;
+    if (nounId) {
+      const rec = ctx.mods.get(nounId)!;
+      const rel = relativeTweak(ctx.command, rec.knobs, `${rec.id} ${rec.title}`, true);
+      if (rel) {
+        note(`relative ${r.action} -> tweak ${nounId}.${rel.knob}=${rel.value} (named ${ask.noun}, not the router's player)`);
+        return { action: "tweak", target: nounId, knob: rel.knob, value: rel.value };
+      }
+      // No knob for the ask (or already at its limit): a rewrite of the NAMED mod, never of the player.
+      note(`named ${ask.noun} -> edit ${nounId}`);
+      return { action: "edit", target: nounId };
+    }
     const tid = (byPronoun ? pronounId : undefined)
       ?? (r.target && ctx.mods.has(r.target) ? r.target : undefined)
       ?? (isPlayerCommand(ctx.command) && ctx.mods.has("player") ? "player" : undefined)

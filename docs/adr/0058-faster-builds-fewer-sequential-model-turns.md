@@ -82,3 +82,9 @@ compound the early router call is one Spark call that goes unused.
 A pronoun ask ("make them faster") now resolves to the mod touched last even when the router
 aimed it at `player`; only "me/my/I" still means the player. The rule lives in
 `server/route-rules.ts` (ADR 0059), not in the relative-tweak block of `handleSingle`.
+
+## Note (10-30, bead 1e6)
+
+A NAMED noun ("make the slimes faster") that matches a loaded mod now outranks a router target of
+`player` too, in the same rule; "me/my character" still means the player. If that mod has no knob
+for the ask, the route becomes an edit of the named mod, never a tweak of the player.
