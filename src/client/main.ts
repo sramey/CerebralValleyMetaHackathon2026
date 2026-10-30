@@ -670,7 +670,8 @@ function entityAt(wx: number, wy: number): Entity | undefined {
 }
 let canvasDown: { x: number; y: number } | null = null;
 // Pointer aim (ADR 0050): screen position + camera = world position, read into InputState each frame.
-const pointer: { sx: number; sy: number; down: boolean; seen: boolean } = { sx: 0, sy: 0, down: false, seen: false };
+// clickAim: a click-fire is aimed (it may point behind the player) for its whole short B press.
+const pointer: { sx: number; sy: number; down: boolean; seen: boolean; clickAim: boolean } = { sx: 0, sy: 0, down: false, seen: false, clickAim: false };
 function trackPointer(ev: PointerEvent, down?: boolean): void {
   const rect = app.canvas.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return;
@@ -698,8 +699,8 @@ app.canvas.addEventListener("pointerup", (ev) => {
     closeRadialMenu();
     // A click on empty space (or terrain) fires a live grappling hook at the pointer (bead 40c, ADR 0050).
     if (ev.button === 0 && loader.list().some((m) => /grappl|hook|tether/i.test(m.id))) {
-      keys.add("KeyB"); syncInput();
-      setTimeout(() => { keys.delete("KeyB"); syncInput(); }, 90);
+      pointer.clickAim = true; keys.add("KeyB"); syncInput();
+      setTimeout(() => { pointer.clickAim = false; keys.delete("KeyB"); syncInput(); }, 90);
     }
   }
 });
@@ -935,7 +936,7 @@ function stepAndRender(now: number): void {
   if (pointer.seen) {
     world.input.pointerX = pointer.sx + (camXSmooth ?? world.camera.x);
     world.input.pointerY = pointer.sy + (camYSmooth ?? world.camera.y);
-    world.input.pointerDown = pointer.down;
+    world.input.pointerDown = pointer.down || pointer.clickAim;
   } else { delete world.input.pointerX; delete world.input.pointerY; delete world.input.pointerDown; }
   while (acc >= stepMs) {
     world.step(); acc -= stepMs;

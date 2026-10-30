@@ -72,6 +72,15 @@ describe("grappling hook (ADR 0050)", () => {
     expect(kb.y).toBeLessThan(0);
   });
 
+  it("a key press with the mouse parked behind the player still fires forward; a click aims behind", () => {
+    const { p } = world();
+    const behindX = p.x + p.w / 2 - 300 * p.facing;
+    const key = aimFrom(p, { ...emptyInput(), pointerX: behindX, pointerY: p.y });
+    expect(key.x * p.facing).toBeGreaterThan(0.5);
+    const click = aimFrom(p, { ...emptyInput(), pointerX: behindX, pointerY: p.y, pointerDown: true });
+    expect(click.x * p.facing).toBeLessThan(-0.5);
+  });
+
   it("winch eases toward the anchor without gravity drag", () => {
     const { p } = world();
     p.gravityScale = 1;
