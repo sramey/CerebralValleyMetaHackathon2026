@@ -37,8 +37,8 @@ const MAX_MOVERS = 8;
 const MAX_BOUNCERS = 8;
 
 /**
- * Hard ceiling on one multimodal Wonder call (bug q8x). Measured reads of a compact sketch take
- * 1–4 s; anything past this is a hung connection, and waiting longer only starves the
+ * Hard ceiling on one multimodal Wonder call (bug q8x). A compact sketch measured ~4 s end to
+ * end here; anything past this is a hung connection, and waiting longer only starves the
  * deterministic fallback that can build the level in milliseconds.
  */
 export const SKETCH_ASK_TIMEOUT_MS = 15_000;

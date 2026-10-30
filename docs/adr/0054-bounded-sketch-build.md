@@ -13,8 +13,8 @@ lost. In a live playtest it was lost. The overlay sat on "Reading your sketch...
 Three causes stacked up:
 
 1. **The wire payload was a screenshot.** The client sent
-   `canvas.toDataURL("image/png")` of the full sketch canvas — 1920x1080 and up, 2–3.5 MB
-   of base64. Upload and vision time both scale with that.
+   `canvas.toDataURL("image/png")` of the full sketch canvas — 1920x1080 and up, reported at
+   2–3.5 MB of base64 in the playtest. Upload and vision time both scale with that.
 2. **Nothing in the pipeline was bounded.** `runSketchBuild` asked Wonder up to twice with
    no timeout at all. One slow reply (35 s) plus a retry (35 s) is already past any client
    watchdog, and the second ask was unconditional — it could not help.
@@ -32,12 +32,15 @@ first-class outcome rather than a last resort.
 
 1. **The image that travels is compact.** `src/client/sketch-image.ts` redraws the sketch
    into an offscreen canvas at most `SKETCH_MAX_EDGE = 720` px on the long edge and encodes
-   `image/jpeg` at `0.75`. Both are exported constants. The stroke boxes and the world
-   `view` rect still travel unchanged and are still what the level is built from, so the
-   pixels never decide geometry — the image only answers "what does this mark mean". The
-   server's `sanitizeSketch` cap drops from 4M to `MAX_SKETCH_IMAGE_CHARS = 1.5M` base64
-   characters, which a compact sketch always fits and a raw screenshot never does. The wire
-   field stays `image: string` (a data URL), so the protocol is unchanged.
+   `image/jpeg` at `0.75`. Both are exported constants. Measured in a real browser with the
+   overlay's artwork (1920x1080, 40 strokes): the raw PNG was 306 KB and the compact image is
+   20 KB at 720x405, still legible enough for Wonder to return a usable level on the first
+   call. The stroke boxes and the world `view` rect still travel unchanged and are still what
+   the level is built from, so the pixels never decide geometry — the image only answers
+   "what does this mark mean". The server's `sanitizeSketch` cap drops from 4M to
+   `MAX_SKETCH_IMAGE_CHARS = 1.5M` base64 characters, which a compact sketch always fits and a
+   raw screenshot never does. The wire field stays `image: string` (a data URL), so the
+   protocol is unchanged.
 
 2. **Every model call has a hard ceiling.** `askWithin` in `server/sketch.ts` races the call
    against a timer and aborts it with an `AbortSignal`, so a dependency that ignores the
@@ -65,8 +68,9 @@ first-class outcome rather than a last resort.
 
 ## Consequences
 
-- **Normal path:** one vision call over ~30–60 KB instead of ~3 MB, one verify, hot-load.
-  The drawn level lands in a second or two, and the same drawing sent twice replaces itself
+- **Normal path:** one vision call over ~20 KB instead of the raw PNG, one verify, hot-load.
+  Measured here with the real server: 4.9 s from socket send to hot-loaded mod, where the
+  same drawing used to time out at 60 s. The same drawing sent twice replaces itself
   (ADR 0026 ids are geometry hashes).
 - **Degraded path:** a hung, erroring or over-budget vision call still builds the player's
   exact boxes, in milliseconds after at most 15 s, and says so ("built from your boxes
