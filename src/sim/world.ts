@@ -385,7 +385,8 @@ export class World {
       }
     }
 
-    if (player) {
+    // A player killed this step is already despawned (no x/y left): keep the last camera instead of NaN.
+    if (player && !(player as any).dead) {
       this.camera.x = player.x + player.w / 2 - 480;
       this.camera.y = Math.min(0, player.y + player.h / 2 - 270);
     }
