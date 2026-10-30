@@ -213,3 +213,19 @@ describe("wave spawner & swarm archetype (ADR 0052)", () => {
     expect(world.entities.filter((e) => e.owner === "swarm").length).toBe(0);
   });
 });
+
+describe("camera after the player is knocked out", () => {
+  it("stays finite when the player dies mid-step (no NaN black screen)", () => {
+    const world = new World(7);
+    const loader = new ModLoader(world);
+    loader.load({ id: "t", title: "T", setup(api: any) {
+      api.spawn({ type: "ground", x: -200, y: 400, w: 1400, h: 48, solid: true, gravityScale: 0 });
+      api.spawn({ type: "player", x: 400, y: 366, w: 26, h: 34, gravityScale: 1, health: 10 });
+      api.spawn({ type: "enemy", x: 400, y: 366, w: 26, h: 34, gravityScale: 0, data: { hostile: true, damage: 50 } });
+    }, dispose() {} } as any);
+    for (let i = 0; i < 10; i++) world.step();
+    expect(world.entities.some((e) => e.type === "player")).toBe(false);
+    expect(Number.isFinite(world.camera.x)).toBe(true);
+    expect(Number.isFinite(world.camera.y)).toBe(true);
+  });
+});
