@@ -23,3 +23,4 @@ This repo is public and judged. Never commit keys, tokens, `.env`, emails, perso
 - Never `git worktree remove` by hand: it deletes the worktree's gitignored `output/` (10-29 lost bottom's draft-take clips). Use `scripts/wt.sh done`, which copies `output/` to `output/wt/<task>/` first and unlinks the node_modules junction.
 - Cold-profile asset loads stall a first visit: race `img.decode()`/`load` with a timeout, and open the websocket before any asset await (`src/client/boot-gate.ts`). `npm run cold:check` proves the handshake with zero AI calls.
 - Paper photos arrive as JPEG, so read image size with `parseImageDimensions` (PNG or a JPEG SOF header), never a PNG-only reader: a missed header silently turns every sheet into a guessed 640x480 (8gk).
+- The browser rehearsal has its own path: a local client shortcut answers "faster" before the server sees it, so a route fix alone is invisible in the browser (bug cps). Check `handleLocal` in `src/client/main.ts` too.
