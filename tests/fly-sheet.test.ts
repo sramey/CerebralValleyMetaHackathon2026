@@ -22,3 +22,12 @@ describe("flying sprite sheets reach the entity", () => {
     expect(framesFor({ cat: walk }, "superhero-cat", false)).toBe(walk);
   });
 });
+
+describe("a floating place is not a flying subject", () => {
+  it("slime on a floating platform walks; a floating ghost flies", async () => {
+    const { isFlyingRequest } = await import("../server/art");
+    expect(isFlyingRequest("add a green slime on the floating platform", "slime")).toBe(false);
+    expect(isFlyingRequest("add a floating ghost", "ghost")).toBe(true);
+    expect(isFlyingRequest("add a superhero cat that flies around", "superhero-cat")).toBe(true);
+  });
+});

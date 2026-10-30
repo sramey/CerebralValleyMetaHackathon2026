@@ -27,20 +27,20 @@ describe("wave spawner & swarm archetype (ADR 0052)", () => {
     const cam = api.camera();
     const sw = 960;
 
-    // Left flank: camera.x - 60
+    // Left flank: camera.x - 260
     const leftSpawn = computeWaveSpawn(api, { side: "left", screenWidth: sw, groundY: 400, w: 24, h: 24, speed: 80 });
     expect(leftSpawn.side).toBe("left");
-    expect(leftSpawn.x).toBe(cam.x - 60);
+    expect(leftSpawn.x).toBe(cam.x - 260);
     expect(leftSpawn.y).toBe(400 - 24);
     expect(leftSpawn.vx).toBe(80);
     expect(leftSpawn.facing).toBe(1);
     expect(leftSpawn.gravityScale).toBe(1);
     expect(leftSpawn.isFlyer).toBe(false);
 
-    // Right flank: camera.x + screen.w + 60
+    // Right flank: camera.x + screen.w + 260
     const rightSpawn = computeWaveSpawn(api, { side: "right", screenWidth: sw, groundY: 400, w: 24, h: 24, speed: 80 });
     expect(rightSpawn.side).toBe("right");
-    expect(rightSpawn.x).toBe(cam.x + sw + 60);
+    expect(rightSpawn.x).toBe(cam.x + sw + 260);
     expect(rightSpawn.y).toBe(400 - 24);
     expect(rightSpawn.vx).toBe(-80);
     expect(rightSpawn.facing).toBe(-1);

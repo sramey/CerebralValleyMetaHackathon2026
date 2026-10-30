@@ -121,7 +121,9 @@ const FLYING_WORD = /\b(?:fly|flys|flies|flying|floats?|floating|hover(?:s|ed|in
 const FLYING_TYPE = /\b(?:bird|bat|dragon|fairy|angel|bee|butterfly|moth|drone|ufo|rocket|spaceship|space-ship|jet|plane|blimp|zeppelin|helicopter|hawk|eagle|owl|crow|raven|pigeon|phoenix|griffin|wyvern|wisp)\b/i;
 
 export function isFlyingRequest(text: string, type = ""): boolean {
-  if (FLYING_WORD.test(text)) return true;
+  // "a slime on the floating platform": a floating/flying PLACE says where it stands, not that it flies.
+  const own = text.replace(/\b(?:floating|flying|hovering|sky)\s+(?:platforms?|islands?|blocks?|ledges?|steps?|stairs?|bridges?|rocks?)\b/gi, " ");
+  if (FLYING_WORD.test(own)) return true;
   return FLYING_TYPE.test(type.replace(/[-_]+/g, " "));
 }
 

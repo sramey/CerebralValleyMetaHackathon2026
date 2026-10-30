@@ -61,8 +61,8 @@ export function computeWaveSpawn(
   }
 
   if (side === "left") {
-    // 40% from left (camera.x - 60)
-    const x = camX - 60;
+    // 40% from left (camera.x - 260: clears wide windows, the sim assumes a 960 px view)
+    const x = camX - 260;
     const y = groundY - h;
     return {
       x,
@@ -77,8 +77,8 @@ export function computeWaveSpawn(
   }
 
   if (side === "right") {
-    // 40% from right (camera.x + screen.w + 60)
-    const x = camX + sw + 60;
+    // 40% from right (camera.x + screen.w + 260)
+    const x = camX + sw + 260;
     const y = groundY - h;
     return {
       x,
