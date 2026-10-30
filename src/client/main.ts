@@ -21,8 +21,8 @@ import { localRelativeAsk } from "./local-asks";
 import { visualHeight } from "../sim/sockets";
 import { drawCliff, drawHoop, drawShape, drawTetherGear, isCliff, isTetherGear, kindOf, registerLook, scale, setGrade, setSnowy } from "./shapes";
 import { celestialPos, computeDesiredCamY, depthFog, drawContactShadows, drawDistantMountains, drawGround25D, drawHorizonMist, drawSkyAndCelestials, drawSunEntity, isDaytimeSky } from "./depth";
-import { drawScenery } from "./scenery";
-import { drawFluffyCloud, drawParallaxEntities, isParallaxOrSkyEntity, isSkyOrBackgroundEntity } from "./parallax";
+import { drawBackdrop, drawScenery, skylineAmplitude } from "./scenery";
+import { drawFluffyCloud, drawParallaxEntities, isCloudEntity, isParallaxOrSkyEntity, isSkyOrBackgroundEntity } from "./parallax";
 import { ModLoader } from "../sim/loader";
 import { isHoop } from "../sim/hoop";
 import { inputFromKeys, isGameKeyEvent, isTypingTarget } from "./keys";
@@ -288,13 +288,13 @@ function ridgeY(wx: number, seed: number): number {
     : Math.sin(wx * 0.011 + 4.0) * 20 + Math.sin(wx * 0.033) * 8;
 }
 
-function drawRidge(pts: number[], camX: number, par: number, baseY: number, seed: number, color: number): void {
+function drawRidge(pts: number[], camX: number, par: number, baseY: number, seed: number, color: number, amp = 1): void {
   const W = app.screen.width;
   const H = app.screen.height;
   pts.length = 0;
   const step = 32;
   for (let sx = -step; sx <= W + step; sx += step) {
-    pts.push(sx, baseY - ridgeY(sx + camX * par, seed));
+    pts.push(sx, baseY - ridgeY(sx + camX * par, seed) * amp);
   }
   const topCount = pts.length;
   pts.push(W + step, H, -step, H);
@@ -545,6 +545,8 @@ function onMood(m: MoodSpec | null): void {
     if (!mood || mood.name !== m.name) return; // superseded by a newer mood
     const used = new Set<string>();
     for (const e of world.entities) { const k = subjectKeyFor(e); if (k) used.add(k); }
+    // A new background alone (ADR 0066) leaves every sprite as it is: no sheet edits, no image spend.
+    if (m.scope === "background") { say(`New background: ${m.name.replace(/-/g, " ")}.`, "done"); return; }
     const keys = [...used].filter((k) => !k.startsWith("photo") && !origFrames.has(k) && (framesBySubject[k]?.length ?? 0) > 0);
     // The palette is already on screen, so the card says done now (bead inh). The sheet redraws
     // arrive later and show on their own (the digitize morph); a card line held open for them
@@ -829,15 +831,21 @@ function render(): void {
   }
   // far hill silhouettes + parallax layers + atmospheric horizon mist (bead 1z7 & rm1)
   const horizon = H * 0.62 - camYSmooth * 0.1;
-  drawDistantMountains(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
+  // A themed backdrop (ADR 0066) brings its own skyline: farmland is flat, a medieval valley keeps the mountains.
+  const backdrop = mood?.backdrop;
+  const amp = skylineAmplitude(backdrop);
+  if (!backdrop || backdrop.skyline === "mountains") drawDistantMountains(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
   const fog = depthFog(mood?.name);
-  drawRidge(ridgeFar, camX, 0.3, horizon, 0, mixC(pal.ridgeFar, SKY[SKY_BANDS - 1], fog.far));
-  drawRidge(ridgeNear, camX, 0.55, horizon + 34, 1, mixC(pal.ridgeNear, SKY[SKY_BANDS - 1], fog.near));
+  drawRidge(ridgeFar, camX, 0.3, horizon, 0, mixC(pal.ridgeFar, SKY[SKY_BANDS - 1], fog.far), amp);
+  drawRidge(ridgeNear, camX, 0.55, horizon + 34, 1, mixC(pal.ridgeNear, SKY[SKY_BANDS - 1], fog.near), amp);
   // Starter-world scenery, unless a mod brings its own parallax backdrop (bead 5fl)
-  if (world.entities.some((e) => e.type === "ground") && !world.entities.some(isParallaxOrSkyEntity)) {
+  if (backdrop && world.entities.some((e) => e.type === "ground")) {
+    drawBackdrop(gfx, camX, camYSmooth, W, pal, SKY[SKY_BANDS - 1], fog.far, isDaytime, backdrop, mood?.name);
+  } else if (world.entities.some((e) => e.type === "ground") && !world.entities.some(isParallaxOrSkyEntity)) {
     drawScenery(gfx, camX, camYSmooth, W, pal, SKY[SKY_BANDS - 1], fog.far, isDaytime, mood?.name);
   }
-  drawParallaxEntities(gfx, world.entities, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1], grade);
+  // The backdrop replaces a parallax mod's silhouettes; its clouds still drift.
+  drawParallaxEntities(gfx, backdrop ? world.entities.filter(isCloudEntity) : world.entities, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1], grade);
   drawHorizonMist(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
   // solids-first, then contact shadows on solid surfaces, then dynamic entities
   order.length = 0;

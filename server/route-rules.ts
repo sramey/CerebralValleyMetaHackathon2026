@@ -5,7 +5,7 @@
 // inlined in handleSingle between side effects, so their order could not be tested.
 import type { CreatureOrder, KnobDefs, KnobValue, ShapeName } from "../src/contract";
 import { CREATURE_ORDERS } from "../src/contract";
-import { detectMoodCommand, isPlayerAbilityCommand, isPlayerCommand } from "../src/ontology";
+import { detectBackdropCommand, detectMoodCommand, isPlayerAbilityCommand, isPlayerCommand } from "../src/ontology";
 import type { Recent } from "./context";
 import { resolvePronoun } from "./context";
 import { parseRelativeAsk, pronounAskMeansRecent, relativeTweak, stemOf } from "./relative-tweak";
@@ -158,6 +158,13 @@ const RULES: [string, Rule][] = [
     if (r || !BUILD_VERB.test(ctx.command.trim())) return r;
     note("fallback to new");
     return { action: "new" };
+  }],
+  // "Change the background to medieval" is a backdrop whatever Spark made of it (a tweak of the parallax mod, a build), unless it is an undo (ADR 0066).
+  ["backdrop", (r, ctx, note) => {
+    const words = detectBackdropCommand(ctx.command);
+    if (!words || r?.action === "undo" || (r?.action === "mood" && r.mood)) return r;
+    note(`backdrop ${words}`);
+    return { action: "mood", mood: words };
   }],
   // A whole-world mood phrase Spark routed as a build is still a mood (ADR 0017).
   ["mood", (r, ctx, note) => {

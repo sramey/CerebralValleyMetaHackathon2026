@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import type { DemoWorld, KnobDefs, Look, KnobValue, KnobValues, MoodSpec, WorldMod } from "../src/contract";
-import { moodKey, restyledUrl } from "./mood";
+import { moodKey, parseBackdrop, restyledUrl } from "./mood";
 
 export const MAX_WORLD_MODS = 40;
 export const MAX_WORLD_BYTES = 600_000;
@@ -63,6 +63,8 @@ export function sanitizeMood(raw: unknown): MoodSpec | undefined {
     skyTop: skyTop!, skyBottom: skyBottom!, ridgeFar: ridgeFar!, ridgeNear: ridgeNear!,
     moon: moon!, star: star!, grass: grass!, soil: soil!, tint: tint!,
     grade: grade!, dim: dim!, fog: fog!, vignette: vignette!, ambient,
+    ...(parseBackdrop(m.backdrop) ? { backdrop: parseBackdrop(m.backdrop) } : {}),
+    ...(m.scope === "background" ? { scope: "background" as const } : {}),
   };
 }
 

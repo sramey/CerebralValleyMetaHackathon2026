@@ -47,6 +47,11 @@ Entry for the Meta Global AI Developer Hackathon (solo, Indie track). **Deadline
 | ![Starter World (Night)](docs/img/starter-world-night.webp) | ![Christmas Mood](docs/img/christmas-mood.webp) |
 | *Talk to build: deterministic physics platformer with live mod knobs* | *Whole-world restyle: festive palette, falling snow, frosted surfaces* |
 
+| "Change the background to medieval" | "Change the background to be in an Indiana farm" |
+|:---:|:---:|
+| ![Medieval backdrop](docs/img/backdrop-medieval.webp) | ![Farm backdrop](docs/img/backdrop-farm.webp) |
+| *Castle, village, windmills, tents and torches across three parallax bands* | *Flat farmland: barns, silos, a water tower, corn rows and hay bales* |
+
 | Agentic Playtest Auto-Fix (Live) | Pipeline Architecture & Impact Metrics |
 |:---:|:---:|
 | ![Make Me Huge Rejected to Fixed](docs/img/make-me-huge-rejected-fixed.gif) | ![Pipeline and Impact Tiles](docs/img/pipeline-lanes-impact.webp) |
@@ -82,6 +87,7 @@ Open **http://127.0.0.1:8787/** (or your configured `PORT`) in Chrome, click the
 | Press **P** or click **PIPELINE** in the bottom-right | Live architecture pipeline view: see Spark, Wonder agent (with tools `inspect_world` / `run_playtest`), esbuild, the Verifier, and SAM 3.1 with real-time telemetry, plus live build numbers (landed %, first-try %, median time) |
 | `make it spooky` (or `neon`, `snowy`) | Spark art-directs a whole-world mood: the palette, fog and lighting change in ~3 s, then Muse Image redraws every AI sprite in the new style (~20–30 s). `undo` restores it |
 | `make this christmas themed` | Theme words restyle the world (no new code): snow-frosted surfaces, icy hills, falling snow |
+| `change the background to medieval` (or `…to be in an Indiana farm`, `desert`, `city`) | A new themed parallax backdrop in under a second, with no router call: a castle on the hill, village, church, windmills, tents and torches (or barns, silos, corn and hay bales on flat farmland). Sprites keep their look. Other places ("ancient Egypt", "a jungle") get palette and scenery from one Spark call. `spooky castle` puts the spooky palette on the medieval scenery. `undo` restores it ([ADR 0066](docs/adr/0066-themed-parallax-backdrops.md)) |
 | `add some stairs` | Wonder builds code-drawn stone steps; the player walks up them |
 | `give me a gun`, then press **F** | Equips a hand cannon; F (or X) fires shots that damage enemies |
 | **✏️ Draw a level** (or say "let me draw a level") | Sketch ledges, coins and enemies over the game; Wonder reads the drawing and builds it |

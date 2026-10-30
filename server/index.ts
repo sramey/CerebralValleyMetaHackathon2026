@@ -6,7 +6,7 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
 import { SIM } from "../src/contract";
-import { detectMoodCommand, entityKind, extractSpawnedEntities, isHeldItemType, isPlayerAbilityCommand, isPlayerCommand } from "../src/ontology";
+import { detectBackdropCommand, detectMoodCommand, entityKind, extractSpawnedEntities, isHeldItemType, isPlayerAbilityCommand, isPlayerCommand } from "../src/ontology";
 import { moodKey, moodSpecFor, pool, restyleSheet, sheetPath } from "./mood";
 import { fallbackVisual, lookFor, parseShape, parseVisual } from "./visual";
 import type { Visual } from "./visual";
@@ -740,6 +740,18 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     return;
   }
 
+  // "Change the background to medieval" is answered by the route rules alone (ADR 0066): no router call,
+  // so it is a second faster and still works when the router is down. Spark only designs an unknown theme.
+  const backdrop = forceEditModId ? null : detectBackdropCommand(command);
+  if (backdrop) {
+    routing?.catch(() => {});
+    console.log(`[route] backdrop ${backdrop} (no router call) for: ${command}`);
+    if (!spend(ws, "build")) return;
+    await handleMood(ws, backdrop, true);
+    send(ws, { kind: "timing", command, ms: { route: 0, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
+    return;
+  }
+
   stage(ws, { kind: "stage", stage: "routing", detail: "routing your command", command });
 
   // The player can stop this build while it runs (ADR 0060). Its command text keys the job -
@@ -795,7 +807,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     return;
   }
   if (route.action === "mood") {
-    await handleMood(ws, route.mood ?? detectMoodCommand(command) ?? command.replace(/^(make|turn|set|change)\s+(it|this|everything|the\s+\w+)\s+/i, ""));
+    await handleMood(ws, route.mood ?? detectMoodCommand(command) ?? command.replace(/^(make|turn|set|change)\s+(it|this|everything|the\s+\w+)\s+/i, ""), detectBackdropCommand(command) !== null);
     send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
     return;
   }
@@ -1188,12 +1200,15 @@ function spend(ws: WebSocket, kind: Kind): boolean {
 
 const BUILTIN_IDS: ReadonlySet<string> = new Set(BUILTINS.map((b) => b.id));
 
-/** "make it spooky": Spark routed here. Design the mood, tell the client to repaint, then it asks for the sprite edits (ADR 0017). */
-async function handleMood(ws: WebSocket, moodWords: string): Promise<void> {
+/**
+ * "make it spooky": Spark routed here. Design the mood, tell the client to repaint, then it asks for the sprite edits (ADR 0017).
+ * `background` ("change the background to medieval", ADR 0066) scopes it to the backdrop: no sprite edits.
+ */
+async function handleMood(ws: WebSocket, moodWords: string, background = false): Promise<void> {
   const t0 = performance.now();
   const words = moodWords.trim() || "spooky";
-  send(ws, { kind: "say", text: `Making it ${words}...` });
-  const spec = await moodSpecFor(words);
+  send(ws, { kind: "say", text: background ? `Painting a ${words} background...` : `Making it ${words}...` });
+  const spec = await moodSpecFor(words, { background });
   sess(ws).mood = spec;
   sess(ws).moodMods = new Set(sess(ws).manifest.keys()); // to tell whether the mood is still the latest change
   sess(ws).restyled = {};
@@ -1204,7 +1219,7 @@ async function handleMood(ws: WebSocket, moodWords: string): Promise<void> {
 /** Edit each sprite sheet the client lists toward the mood anchor, a few at a time; every image counts against the spend guard. */
 async function handleRestyle(ws: WebSocket, msg: Extract<ClientMsg, { kind: "restyle" }>): Promise<void> {
   const spec = sess(ws).mood;
-  if (!spec || spec.name !== moodKey(String(msg.mood))) return;
+  if (!spec || spec.name !== moodKey(String(msg.mood)) || spec.scope === "background") return;
   const keys = (Array.isArray(msg.keys) ? msg.keys : []).filter((k): k is string => typeof k === "string").slice(0, 12);
   await pool(keys, 4, async (key) => {
     if (sess(ws).mood !== spec) return;
