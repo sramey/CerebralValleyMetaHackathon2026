@@ -41,5 +41,9 @@ export function resolvePronoun(command: string, r: Recent): string | undefined {
   if (isPlayerCommand(command) || isPlayerAbilityCommand(command)) return undefined;
   let cleaned = command.replace(/\bmake\s+it\s+so(?:\s+that)?\b/gi, " ");
   cleaned = cleaned.replace(/\bmake\s+it\s+(?:rain|snow|hail|storm)\b/gi, " ");
+  // "add a cat THAT flies": a new subject's relative clause is not a reference to the last thing touched.
+  if (/^\s*(?:please\s+)?(?:add|create|spawn|build|make|put|place|give\s+me|summon|draw)\s+(?:a|an|some|another|more|one|two|three|four|five|\d+)\b/i.test(cleaned)) {
+    cleaned = cleaned.replace(/\b(?:that|which|who)\b/gi, " ");
+  }
   return PRONOUN.test(cleaned) ? r.touched[0] : undefined;
 }
