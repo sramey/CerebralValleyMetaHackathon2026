@@ -8,7 +8,7 @@ import { CREATURE_ORDERS } from "../src/contract";
 import { detectMoodCommand, isPlayerAbilityCommand, isPlayerCommand } from "../src/ontology";
 import type { Recent } from "./context";
 import { resolvePronoun } from "./context";
-import { parseRelativeAsk, relativeTweak, stemOf } from "./relative-tweak";
+import { parseRelativeAsk, pronounAskMeansRecent, relativeTweak, stemOf } from "./relative-tweak";
 import { parseShape, parseVisual } from "./visual";
 import type { Visual } from "./visual";
 
@@ -208,15 +208,23 @@ const RULES: [string, Rule][] = [
     if (!r || !["edit", "tweak", "new"].includes(r.action)) return r;
     const ask = parseRelativeAsk(ctx.command);
     if (!ask) return r;
-    const tid = (r.target && ctx.mods.has(r.target) ? r.target : undefined)
+    const pronounId = resolvePronoun(ctx.command, ctx.recent);
+    // A pronoun ask ("make them faster") is about the mod touched last, even when the router
+    // aimed it at the player: "them/they/those" never means the player (bug cps). "me/my/I" is
+    // not a pronoun ask, so it still lands on the player.
+    const byPronoun = pronounAskMeansRecent(ctx.command, ask)
+      && (!r.target || r.target === "player")
+      && !!pronounId && ctx.mods.has(pronounId);
+    const tid = (byPronoun ? pronounId : undefined)
+      ?? (r.target && ctx.mods.has(r.target) ? r.target : undefined)
       ?? (isPlayerCommand(ctx.command) && ctx.mods.has("player") ? "player" : undefined)
-      ?? resolvePronoun(ctx.command, ctx.recent);
+      ?? pronounId;
     const chosen = !!tid && ctx.mods.has(tid);
     const candidates = chosen ? [ctx.mods.get(tid!)!] : ask.noun ? [...ctx.mods.values()] : [];
     for (const rec of candidates) {
       const rel = relativeTweak(ctx.command, rec.knobs, `${rec.id} ${rec.title}`, chosen);
       if (!rel) continue;
-      note(`relative ${r.action} -> tweak ${rec.id}.${rel.knob}=${rel.value}`);
+      note(`relative ${r.action} -> tweak ${rec.id}.${rel.knob}=${rel.value}${byPronoun ? " (pronoun, not the router's player)" : ""}`);
       return { action: "tweak", target: rec.id, knob: rel.knob, value: rel.value };
     }
     return r;
