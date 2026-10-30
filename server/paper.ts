@@ -2,14 +2,17 @@
 //
 // Reuses the sketch compiler (server/sketch.ts) and photo capture (server/photo.ts).
 // 1. Detects paper sheet bounds in the photo (perspective-tolerant).
-// 2. Multimodal Wonder reads the photograph and returns the level-spec JSON.
+// 2. Multimodal Wonder reads the photograph and returns the level-spec JSON, with a hard time
+//    ceiling per call and for the whole reading phase (ADR 0054, same shape as the sketch build).
 // 3. Normalizes and maps paper coordinates to stage world space (ground line y = 400).
 // 4. Compiles, verifies, and hot-loads the mod, replacing the starter level.
-// 5. Fallback: if no drawing is spotted, asks the player to retake the photo.
+// 5. Fallback: no stroke boxes exist on this path (the payload is a photo), so an unreadable or
+//    over-budget drawing gets an immediate, explicit retake instead of a hang.
 import { inflateSync } from "node:zlib";
 import type { BuildStage } from "../src/contract";
 import type { ChatMessage } from "./meta";
 import {
+  askWithin,
   isEmptyLevel,
   levelToModSource,
   normalizeLevel,
@@ -63,6 +66,45 @@ Rules:
 - Coins ~25x25 units, enemies ~40x40 units, placed on or just above platforms.
 - If the photo is blank, blurry, has no recognizable hand-drawn level, or is an arbitrary object, return:
 {"name":"empty","platforms":[],"coins":[],"enemies":[]}`;
+
+/**
+ * Time ceilings for one paper build, the same shape as the sketch build (ADR 0054). A photo
+ * either reads or hands itself back; it never sits on "Reading your paper level drawing..."
+ * until some client timer gives up. Measured end to end, a compact photo reads in ~5 s.
+ */
+export const PAPER_ASK_TIMEOUT_MS = 15_000;
+/** Every reading try — both attempts — must finish inside this, so the retake reply is instant. */
+export const PAPER_READ_BUDGET_MS = 18_000;
+/** Less runway than this and a second vision try cannot finish: stop and ask for a retake. */
+export const PAPER_RETRY_MIN_MS = 4_000;
+/** Ceiling on the one auto-fix vision call after a failed verification. */
+export const PAPER_FIX_TIMEOUT_MS = 8_000;
+/** Ceiling on all model calls for one paper build, start to finish. */
+export const PAPER_TOTAL_BUDGET_MS = 25_000;
+/** What a child sees when the drawing could not be read in time (or at all). */
+export const PAPER_RETAKE = "I couldn't spot a clear level drawing on that paper. Draw with a darker pen or thicker lines, hold it steady, and try taking the photo again.";
+
+/** The time ceilings of one paper build. Defaults are the constants above; tests shrink them. */
+export interface PaperLimits {
+  /** Ceiling on a single vision call. */
+  askTimeoutMs: number;
+  /** Ceiling on the reading phase (every try). */
+  readBudgetMs: number;
+  /** Minimum runway for a second try to be worth starting. */
+  retryMinMs: number;
+  /** Ceiling on the one post-verification fix call. */
+  fixTimeoutMs: number;
+  /** Ceiling on all model calls for one paper build. */
+  totalBudgetMs: number;
+}
+
+export const PAPER_LIMITS: Readonly<PaperLimits> = {
+  askTimeoutMs: PAPER_ASK_TIMEOUT_MS,
+  readBudgetMs: PAPER_READ_BUDGET_MS,
+  retryMinMs: PAPER_RETRY_MIN_MS,
+  fixTimeoutMs: PAPER_FIX_TIMEOUT_MS,
+  totalBudgetMs: PAPER_TOTAL_BUDGET_MS,
+};
 
 const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
 const n2 = (v: number): number => Math.round(v * 100) / 100;
@@ -319,8 +361,12 @@ export function paperPrompt(hint = "", bounds?: PaperBounds): string {
 }
 
 export interface PaperDeps {
-  /** One multimodal Wonder call: sends the photographed drawing. */
-  ask: (messages: ChatMessage[]) => Promise<string>;
+  /**
+   * One multimodal Wonder call: sends the photographed drawing, plus an abort signal that
+   * fires when the call has used its time (ADR 0054). A dependency that ignores the signal
+   * is still bounded: the caller races it against the deadline.
+   */
+  ask: (messages: ChatMessage[], signal?: AbortSignal) => Promise<string>;
   /** Compile, verify and hot-load the generated mod source. */
   deliver: (source: string) => Promise<{ ok: boolean; errors: string[] }>;
   say: (text: string) => void;
@@ -332,17 +378,28 @@ export interface PaperDeps {
  * Run the complete paper-to-level pipeline:
  * 1. Validate image data URL.
  * 2. Detect paper bounds.
- * 3. Multimodal Wonder reads the photo.
+ * 3. Multimodal Wonder reads the photo (bounded, ADR 0054).
  * 4. Parse & map coordinates to the stage.
- * 5. Stroke-free fallback = ask the player to retake if unreadable.
+ * 5. Fallback: a retake request, sent immediately rather than after a watchdog.
  * 6. Compile & deliver verified mod.
+ *
+ * Unlike the sketch build there are no stroke boxes on the wire here — the payload is a photo,
+ * so no deterministic geometry exists to fall back to. The bounded outcome is therefore a
+ * fast, explicit retake (`stage: "failed"`) instead of a hang; see ADR 0054.
+ *
+ * `limits` overrides the time ceilings; production always uses `PAPER_LIMITS`.
  */
 export async function runPaperBuild(
   deps: PaperDeps,
   msg: { image?: unknown; prompt?: unknown },
+  limits: Partial<PaperLimits> = {},
 ): Promise<SketchResult> {
+  const L: PaperLimits = { ...PAPER_LIMITS, ...limits };
   const failed = (why: string): SketchResult => {
     deps.say(why);
+    // Always end the client's "Reading your paper level drawing..." state: without this the
+    // orb waits for a stage that never comes (bug q8x, ADR 0054).
+    deps.stage("failed", why);
     return { ok: false, title: "", source: "", usedFallback: false };
   };
 
@@ -373,19 +430,27 @@ export async function runPaperBuild(
     },
   ];
 
+  const started = Date.now();
+  const readUntil = started + L.readBudgetMs;
   let level: SketchLevel | undefined;
   let error = "";
 
   for (let attempt = 0; attempt < 2 && !level; attempt++) {
-    try {
-      const text = await deps.ask(body);
-      const parsed = parsePaperLevelReply(text, bounds, dims ?? undefined);
+    const left = readUntil - Date.now();
+    // A try that cannot finish inside the budget is a try that keeps the player waiting.
+    if (left < (attempt === 0 ? Math.min(1_000, L.readBudgetMs / 4) : L.retryMinMs)) {
+      error = error || "the model was too slow to answer";
+      break;
+    }
+    const outcome = await askWithin(deps, body, Math.min(L.askTimeoutMs, left));
+    if (typeof outcome.text === "string") {
+      const parsed = parsePaperLevelReply(outcome.text, bounds, dims ?? undefined);
       if (parsed.level) level = parsed.level;
       else error = parsed.error ?? "could not read level";
-    } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+    } else {
+      error = outcome.error ?? "the model did not answer";
     }
-    if (!level && attempt === 0) {
+    if (!level && attempt === 0 && readUntil - Date.now() >= L.retryMinMs) {
       deps.note?.(`first paper reply unusable (${error}), asking once more`);
       body.push({ role: "assistant", content: "(my last reply was not usable)" });
       body.push({
@@ -395,11 +460,10 @@ export async function runPaperBuild(
     }
   }
 
-  // Stroke-free fallback: ask to retake
+  // No stroke boxes to fall back on: the honest, instant outcome is a retake.
   if (!level || isEmptyLevel(level)) {
-    return failed(
-      "I couldn't spot a clear level drawing on that paper. Draw with a darker pen or thicker lines, hold it steady, and try taking the photo again.",
-    );
+    if (error) deps.note?.(`no usable paper level (${error})`);
+    return failed(PAPER_RETAKE);
   }
 
   deps.stage("compiling", "building your paper level");
@@ -407,8 +471,11 @@ export async function runPaperBuild(
   let built = await deps.deliver(source);
 
   if (!built.ok) {
-    deps.stage("fixing", "fixing the paper level");
-    try {
+    const fixLeft = L.totalBudgetMs - (Date.now() - started);
+    if (fixLeft < 2_000) {
+      deps.note?.("skipping the paper fix round: no time left in the build budget");
+    } else {
+      deps.stage("fixing", "fixing the paper level");
       const fixBody: ChatMessage[] = [
         { role: "system", content: PAPER_SYSTEM },
         {
@@ -416,16 +483,20 @@ export async function runPaperBuild(
           content: `This level spec failed verification:\n${JSON.stringify(level)}\nfailures:\n- ${built.errors.slice(0, 300).join("\n- ")}\nReply with a corrected JSON level object only.`,
         },
       ];
-      const text = await deps.ask(fixBody);
-      const parsed = parsePaperLevelReply(text, bounds, dims ?? undefined);
-      if (parsed.level) {
-        level = parsed.level;
-        source = levelToModSource(level);
-        deps.stage("compiling", "recompiling the fixed paper level");
-        built = await deps.deliver(source);
+      const outcome = await askWithin(deps, fixBody, Math.min(L.fixTimeoutMs, fixLeft));
+      if (typeof outcome.text === "string") {
+        const parsed = parsePaperLevelReply(outcome.text, bounds, dims ?? undefined);
+        if (parsed.level) {
+          level = parsed.level;
+          source = levelToModSource(level);
+          deps.stage("compiling", "recompiling the fixed paper level");
+          built = await deps.deliver(source);
+        } else {
+          deps.note?.(`paper fix round failed: ${parsed.error ?? "unusable reply"}`);
+        }
+      } else {
+        deps.note?.(`paper fix round failed: ${outcome.error ?? "no answer"}`);
       }
-    } catch (err) {
-      deps.note?.(`paper fix round failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
