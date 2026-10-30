@@ -3,6 +3,7 @@ import { entityKind } from "../ontology";
 import { isDamageableTarget } from "./combat";
 import type { Entity, HudDef, HudWidget, InputState, Particle, SpawnDef } from "../contract";
 import { createRng } from "./rng";
+import { landingVelocity } from "./bounce";
 
 type TickHandler = (dt: number) => void;
 
@@ -237,6 +238,7 @@ export class World {
       // Y axis. One-way platforms only catch a falling entity that was above them.
       const prevBottom = e.y + e.h;
       e.y += e.vy * dt;
+      const fallSpeed = e.vy;
       e.onGround = false;
       for (const s of solids) if (s !== e && overlap(e, s)) {
         if (s.data.oneWay && !(e.vy > 0 && prevBottom <= s.y + 0.5)) continue;
@@ -244,7 +246,9 @@ export class World {
         else if (e.vy < 0) e.y = s.y + s.h;
         else if (e.y + e.h / 2 < s.y + s.h / 2) { e.y = s.y - e.h; e.onGround = true; }
         else e.y = s.y + s.h;
-        e.vy = 0;
+        // A landing can be elastic (data.bounce, ADR 0053): a dropped coin settles instead
+        // of freezing. With no data.bounce this is exactly the old stop (0).
+        e.vy = fallSpeed > 0 ? landingVelocity(e, fallSpeed) : 0;
       }
     }
     for (const p of this.particles) {
