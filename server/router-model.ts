@@ -3,7 +3,7 @@
 // (unset, slow, erroring, or an empty reply) runs on hosted Muse Spark exactly as before.
 import { chat, loadEnv, SPARK, type ChatMessage } from "./meta";
 
-export const OPEN_MODEL_DEFAULT = "meta-models/muse-spark-open-1026";
+export const OPEN_MODEL_DEFAULT = "meta-models/muse-spark-open";
 export const BASETEN_URL_DEFAULT = "https://inference.baseten.co/v1";
 export const TIMEOUT_MS_DEFAULT = 4000;
 
