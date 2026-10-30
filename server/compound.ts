@@ -22,8 +22,12 @@ const PRONOUN_SUBJECT =
   /^(?:it|its|it's|they|them|their|he|him|his|she|her|this|that|those|these)\b/i;
 /** A personal pronoun anywhere in a later clause points back at what the earlier part built. */
 const PERSONAL_PRONOUN = /\b(?:it|its|it's|they|them|their|he|him|his|she|her)\b/i;
+/** "make it rain / snow / night / spooky": a weather or mood idiom whose "it" is the world, not an earlier subject. */
+const DUMMY_IT = /\b(?:make|turn|let)\s+it\s+(?:rain|snow|storm|thunder|hail|pour|drizzle|night|day|dark|darker|bright|brighter|foggy|misty|windy|sunny|cloudy|stormy|spooky|cozy|cold|hot|winter|summer|autumn|fall|spring)\b/gi;
+const withoutDummyIt = (seg: string): string => seg.replace(DUMMY_IT, "");
+
 /** Clause separators: a comma, a semicolon, or a joining word with spaces around it. */
-const SEPARATOR = /(?:\s*,\s*|\s*;\s*|\s+and\s+|\s+plus\s+|\s+then\s+|\s+also\s+)/i;
+const SEPARATOR = /(?:\s*,\s*(?:and|plus|then|also)\s+|\s*,\s*|\s*;\s*|\s+and\s+|\s+plus\s+|\s+then\s+|\s+also\s+)/i;
 /** Words too common to identify "the thing the earlier part was about". */
 const STOP_WORDS = new Set([
   "a", "an", "the", "and", "or", "of", "with", "to", "that", "this", "these", "those",
@@ -60,8 +64,9 @@ function isStandalone(part: string): boolean {
  * ("make it fly"), or an attribute after a "with ..." list ("wearing a cape and a mask").
  */
 function continuesPrevious(seg: string, prev: string): boolean {
-  if (PRONOUN_SUBJECT.test(seg)) return true;
-  if (PERSONAL_PRONOUN.test(seg)) return true;
+  const own = withoutDummyIt(seg);
+  if (PRONOUN_SUBJECT.test(own)) return true;
+  if (PERSONAL_PRONOUN.test(own)) return true;
   if (BUILD_VERB.test(seg)) return false;
   if (detectMoodCommand(seg) !== null) return false;
   if (RELATIVE.test(seg)) return true;
@@ -117,4 +122,35 @@ export function splitCompound(text: string): string[] | null {
   if (unique.length < 2) return null;
   if (unique.length <= MAX_PARTS) return unique;
   return [...unique.slice(0, MAX_PARTS - 1), unique.slice(MAX_PARTS - 1).join(", ")];
+}
+
+/** True when the command could hold more than one request (worth asking Spark to split). */
+export function mightBeCompound(text: string): boolean {
+  return SEPARATOR.test(text.trim());
+}
+
+/**
+ * Guard on a model's split (ADR 0053): a part that points back at an earlier part ("make it
+ * fly", "add flying patrol for the superhero cat") is a behavior of that subject, so it joins
+ * the part before it. Returns the parts that are genuinely independent (may be one).
+ */
+export function mergeDependentParts(parts: string[]): string[] {
+  const out: string[] = [];
+  const earlier = new Set<string>();
+  for (const raw of parts) {
+    const part = raw.trim();
+    if (!part) continue;
+    const own = withoutDummyIt(part);
+    const dependent = out.length > 0 && (PRONOUN_SUBJECT.test(own) || PERSONAL_PRONOUN.test(own) || refersBack(own, earlier) || sharesSubject(own, earlier));
+    if (dependent) out[out.length - 1] = `${out[out.length - 1]}, ${part}`;
+    else out.push(part);
+    for (const w of nounsOf(part)) earlier.add(w);
+  }
+  return out.slice(0, MAX_PARTS);
+}
+
+/** "add coin dropping ability to the superhero cat": a later part naming an earlier part's subject noun after for/to/of/on. */
+function sharesSubject(part: string, earlier: Set<string>): boolean {
+  const m = /\b(?:for|to|of|on|by)\s+(?:the|a|an|my|its|their)?\s*(?:[a-z0-9-]+\s+){0,2}?([a-z0-9-]+)\s*$/i.exec(part.replace(/[.!?]+$/, ""));
+  return m !== null && earlier.has(m[1].toLowerCase());
 }

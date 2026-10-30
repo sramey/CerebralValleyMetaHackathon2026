@@ -12,7 +12,7 @@ import { fallbackVisual, lookFor, parseShape, parseVisual } from "./visual";
 import type { Visual } from "./visual";
 import type { ClientMsg, KnobDefs, Look, MoodSpec, ShapeName, KnobValue, ServerMsg, TimelineStep, WorldMod } from "../src/contract";
 import { routerChat } from "./router-model";
-import { chat, hasApiKey, loadEnv, WONDER } from "./meta";
+import { chat, hasApiKey, loadEnv, SPARK, WONDER } from "./meta";
 import { compileMod } from "./compile";
 import { importMod, verifyMod } from "./verify";
 import { inspectWorld, playtestMod } from "./playtest";
@@ -21,7 +21,7 @@ import { inspectTool, playtestTool, runAgent } from "./agent";
 import type { AgentStep, AgentTrace } from "./agent";
 import { forceModId, modIdOf } from "./modid";
 import { runPool } from "./pool";
-import { splitCompound } from "./compound";
+import { mergeDependentParts, mightBeCompound, splitCompound } from "./compound";
 import { forget, newRecent, noteCommand, noteTouched, recentText, resolvePronoun } from "./context";
 import type { Recent } from "./context";
 import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, formatManifest, ROUTER_SYSTEM, WONDER_SYSTEM } from "./prompt";
@@ -602,10 +602,11 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
   }
   // A verdict that missed the deadline is read before the build writes anything (step 3 below).
   sess(ws).pendingSafety = safety.pending ? { command: text.slice(0, 400), verdict: safety.pending } : undefined;
-  // Compound requests (ADR 0053): split ONLY when the command names genuinely independent
-  // things. One subject with several traits or behaviors stays ONE build, so parallel
-  // builds never race over the same mod id in front of the player. Deterministic: no model call.
-  const parts = splitCompound(text);
+  // Compound requests (ADR 0053): Muse Spark splits, and only genuinely independent things
+  // become separate builds. One subject with several traits or behaviors stays ONE build, so
+  // parallel builds never race over the same mod id in front of the player. A part that points
+  // back at an earlier one is merged by a deterministic guard; the word splitter is the fallback.
+  const parts = await splitWithSpark(text);
   if (parts) {
     // A mood part restyles the whole world, so a mood + build pair runs in order, not in parallel.
     const sequential = parts.some((p) => detectMoodCommand(p) !== null);
@@ -620,6 +621,31 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
     return;
   }
   await handleSingle(ws, text);
+}
+
+/** Spark splits a compound command (ADR 0053); null = one build. Falls back to the word splitter if Spark fails. */
+async function splitWithSpark(command: string): Promise<string[] | null> {
+  if (!mightBeCompound(command)) return null;
+  try {
+    const res = await chat(SPARK, [
+      {
+        role: "system",
+        content: "Reply with ONLY a JSON array of strings. Split the player's request into standalone build commands, one per genuinely separate thing (at most 4). " +
+          "ONE subject with its traits and behaviors stays ONE command: \"add a superhero cat that flies around dropping coins\" -> [\"add a superhero cat that flies around dropping coins\"]. " +
+          "Separate things split: \"add a dragon, some coins, and make it rain\" -> [\"add a dragon\", \"add some coins\", \"make it rain\"]. No markdown, no prose.",
+      },
+      { role: "user", content: command },
+    ], 512);
+    const start = res.text.indexOf("[");
+    const end = res.text.lastIndexOf("]");
+    if (start < 0 || end <= start) return splitCompound(command);
+    const arr: unknown = JSON.parse(res.text.slice(start, end + 1));
+    if (!Array.isArray(arr)) return splitCompound(command);
+    const items = mergeDependentParts(arr.filter((x): x is string => typeof x === "string"));
+    return items.length >= 2 ? items : null;
+  } catch {
+    return splitCompound(command);
+  }
 }
 
 async function handleSingle(ws: WebSocket, text: string, batch?: { size: number; parallel: number }, forceEditModId?: string): Promise<void> {

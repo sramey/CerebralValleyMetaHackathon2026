@@ -46,3 +46,6 @@
   (breaks "a cat with a cape and a mask"). Giving each part a different mod id so the
   overwrites stop (still four builds for one creature, still four visual phases, and the
   parts would no longer share state).
+
+## Amendment at merge (orchestrator, 10-29)
+The branch replaced the Muse Spark split with the word splitter only. That dropped a real Meta job and split the demo's beat 3 ("add a dragon, some coins, and make it rain") two ways instead of three. Main now asks **Spark** to split (its prompt carries the one-subject rule and both examples), then runs `mergeDependentParts` as a deterministic guard: a part with a pronoun or a back-reference to an earlier subject joins the part before it ("make it rain/snow/spooky" are world idioms, not references). The word splitter runs only when Spark fails. Spark is asked only when the command has a separator.
