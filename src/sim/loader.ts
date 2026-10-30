@@ -3,6 +3,7 @@ import { emptyInput } from "../contract";
 import { checkProjectileHitAndDamage } from "./combat";
 import { touches } from "./reach";
 import { aimFrom, raycastSolid, winchToward } from "./tether";
+import { applySwarmSeparation, createWaveController, spawnWaveUnit } from "./waves";
 import { World } from "./world";
 
 export interface LoadedMod { id: string; title: string; knobDefs: KnobDefs; values: KnobValues; def: ModDefinition }
@@ -37,6 +38,19 @@ export class ModLoader {
       raycast: (x, y, dx, dy, max, ignore) => raycastSolid(w.entities, x, y, dx, dy, max, ignore),
       winch: (e, ax, ay, speed) => winchToward(e, ax, ay, speed),
       aim: (from) => aimFrom(from, w.input),
+      camera: () => {
+        const p = w.entities.find((e) => e.type === "player");
+        if (p) {
+          return {
+            x: p.x + p.w / 2 - 480,
+            y: Math.min(0, p.y + p.h / 2 - 270),
+          };
+        }
+        return { x: w.camera.x, y: w.camera.y };
+      },
+      spawnWaveUnit: (opts) => spawnWaveUnit(this.apiFor(owner), opts),
+      applySeparation: (entities, opts) => applySwarmSeparation(entities, opts),
+      createWaveController: (opts) => createWaveController(this.apiFor(owner), opts),
     };
   }
 
@@ -105,6 +119,19 @@ export function runModTest(def: ModDefinition): { ok: boolean; errors: string[] 
           raycast: (x, y, dx, dy, max, ignore) => raycastSolid(world.entities, x, y, dx, dy, max, ignore),
           winch: (e, ax, ay, speed) => winchToward(e, ax, ay, speed),
           aim: (from) => aimFrom(from, world.input),
+          camera: () => {
+            const p = world.entities.find((e) => e.type === "player");
+            if (p) {
+              return {
+                x: p.x + p.w / 2 - 480,
+                y: Math.min(0, p.y + p.h / 2 - 270),
+              };
+            }
+            return { x: world.camera.x, y: world.camera.y };
+          },
+          spawnWaveUnit: (opts) => spawnWaveUnit(t.api, opts),
+          applySeparation: (entities, opts) => applySwarmSeparation(entities, opts),
+          createWaveController: (opts) => createWaveController(t.api, opts),
         },
         step: (n, input) => {
           const prev = world.input;
