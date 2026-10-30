@@ -39,6 +39,12 @@ ModApi (everything a mod may call — nothing else exists):
   spawnWaveUnit(opts?): Entity — spawn offscreen swarm unit (40% left, 40% right, 20% airborne top)
   applySeparation(entities?, opts?): void — apply mild anti-clumping boid separation so enemies do not stack
   createWaveController(opts?): WaveController — automated wave controller with paced level-ups and HUD banners
+  on(event, fn): void — react to what happens to YOUR entities; fn gets one object ev, delivered at the start of the next tick:
+    "touch" (ev.entity was just touched by ev.other = the player, once per contact), "hit" (ev.entity took ev.amount damage, ev.by = attacker mod id),
+    "death" (ev.entity was destroyed; it is a copy, so ev.entity.x/y still say where it fell), "interact" (the player pressed the action key next to ev.entity, which has data.interact),
+    "order" (the player told ev.entity ev.order: "follow" | "come" | "stay" | "flee" | "free"), "signal" (another mod called api.signal: ev.name, ev.value, ev.from)
+  say(entity, text, seconds?): void — speech bubble over an entity (default 3 s, max 60 chars). Creatures talk to the player with this, never with a HUD banner.
+  signal(name, value?): void — tell every other mod something happened ("boss-down", "door-open"); they get a "signal" event
 
 Entity: { id, type, x, y, w, h, vx, vy, color, solid, gravityScale (0=no gravity,1=full), facing (1|-1), onGround, owner, data }
 InputState: { left, right, jump, shoot, use, pointerX?, pointerY?, pointerDown? } — pointerX/pointerY are the mouse in WORLD coordinates and are ABSENT for keyboard-only players
@@ -56,6 +62,12 @@ HUD widgets (the ONLY way to show the player numbers/text — health bars, score
   - HUD-only mods (speedometer, timer, counter, "show my health as hearts") spawn NO entities: no api.spawn at all.
   - Test HUD mods through t.api.hud, e.g.:
       test(t) { t.step(60); const w = t.api.hud("time"); t.expect(!!w && (w.value ?? 0) >= 1, "timer advances"); }
+
+INTERACTION (ADR 0059) — things the player builds should answer the player and the world, not just tick:
+- Prefer events over polling: drop loot in api.on("death", ev => ...) at ev.entity.x/y, react to a stomp or a hit in "hit", greet the player in "touch". Never compare health every tick to detect a death.
+- Talking characters (shopkeeper, wizard, villager, sign, chest, door, pet): spawn them with data: { interact: "Talk" } (or "Open", "Pet", "Read", a short verb) and answer in api.on("interact", ev => api.say(ev.entity, "...")). The engine shows the "B: Talk" prompt when the player is near. Cycle lines with a counter for a conversation.
+- Orders: the engine already makes ANY creature follow, come, stay, flee or go free when the player says so ("chickens, follow me"). Do not hand-code that. To react in character, listen for "order" and api.say a reply, or set data.orders = false on things that must never obey (a boss).
+- Cross-mod: when the request links two things ("open the door when the boss dies", "the dragon drops coins when the knight hits it"), the mod that reacts listens for api.on("signal") or "hit"/"death"; the mod that causes it calls api.signal("boss-down"). Check inspect_world for what is loaded and reuse its entity types.
 
 Rules:
 - Everything the mod creates is owned by it and removed on dispose(). Keep references to spawned entities or find them via byType() in dispose() and despawn them. Remove nothing you did not create.
@@ -152,7 +164,7 @@ export function buildFixPrompt(command: string, source: string, errors: string[]
 
 export const ROUTER_SYSTEM = `You route a player's text command for a 2D platformer game to exactly one action.
 Reply with ONLY a single JSON object, no markdown, no prose. Schema:
-{"action":"new"|"tweak"|"edit"|"undo"|"mood"|"question","target?":string,"knob?":string,"value?":number|string|boolean,"answer?":string,"mood?":string,"visual?":"shape"|"effect"|"prop"|"creature","shape?":"circle"|"ring"|"triangle"|"spikes"|"pill"|"diamond"|"star"|"block"}
+{"action":"new"|"tweak"|"edit"|"undo"|"mood"|"question"|"order","target?":string,"order?":"follow"|"come"|"stay"|"flee"|"free","knob?":string,"value?":number|string|boolean,"answer?":string,"mood?":string,"visual?":"shape"|"effect"|"prop"|"creature","shape?":"circle"|"ring"|"triangle"|"spikes"|"pill"|"diamond"|"star"|"block"}
 - "new": the request adds new behavior, a new entity, or a PLAYER ABILITY/POWER (double jump, extra jump, wall stick/climb/jump, dash, glide, ground pound) that hooks api.player(). Player abilities are ALWAYS action "new" (standalone ability mods acting on api.player()), NEVER an edit on an NPC or another creature.
 - "tweak": the request ONLY adjusts a knob value of an already-loaded mod (set target=mod id, knob, value). Use ONLY when the target mod and knob both exist in the loaded-mods list.
 - "edit": the request changes the BEHAVIOR of an already-loaded mod beyond a knob value (new mechanics, new entities it should own, rule changes — e.g. "make enemies die when I stomp them" for a loaded enemies mod). Set target=mod id. Prefer "edit" over "tweak" when the request adds or changes behavior rather than tuning a number.
@@ -164,6 +176,7 @@ Reply with ONLY a single JSON object, no markdown, no prose. Schema:
   - "creature": a living or moving character with limbs: ninja, dragon, turtle, zombie, bird, robot.
   "A bouncing ball" is a shape, never a creature. Omit "visual" for pure rule changes and HUD/UI-only requests (counter, timer, meter, speedometer, banner) — those never need sprites.
 - "mood": the request restyles the WHOLE world's look and atmosphere with a theme, holiday, time-of-day, or mood ("Make this Christmas themed", "make it christmas themed", "christmas theme", "make it spooky", "make it snowy", "make it daytime", "neon", "make everything look like a desert at sunset"). Set mood=the short mood words (e.g. "christmas", "spooky", "snowy", "daytime", "neon"). One weather effect alone ("make it rain", "add fog") is NOT a mood, and neither is a change to one object: those are "new".
+- "order": the player tells creatures that are ALREADY loaded to do something right now, with no new behaviour to build: follow me, come here, stay/sit/wait, go away/scatter, carry on/as you were. Set target=mod id ("*" for everyone) and order. "Make a dog that follows me" or "make the dog always follow me" is a build ("new"/"edit"), not an order.
 - "question": anything else — greeting, help, unanswerable (set answer=text to say to the player).`;
 
 /** Prompt for Spark to route a command against the loaded-mod manifest. */

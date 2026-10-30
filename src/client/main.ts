@@ -28,6 +28,7 @@ import { mountTimeline } from "./timeline";
 import { createPipeline } from "./pipeline";
 import { createTheater } from "./build-theater";
 import { createHud } from "./hud";
+import { createSpeech } from "./speech";
 import { createSketch } from "./sketch";
 import { CAMERA_LABEL, CAPTURE_LABEL, UPLOAD_LABEL, defaultAction, dialogCssVars, dialogLayout, fitInside, photoFindMessage, photoWorkSize, stageHint, wantsCameraStream } from "./camera-dialog";
 import type { DialogPhase } from "./camera-dialog";
@@ -69,6 +70,8 @@ const pipeline = createPipeline(document.getElementById("stage-wrap")!);
 const theater = createTheater(document.getElementById("stage-wrap")!, (v) => pipeline.setCode(v.lines, v.partial, v.active), (m) => { pipeline.onMsg(m); theater.onMsg(m); });
 // Declarative mod HUD overlay (ADR 0019): renders world.hud each frame.
 const hud = createHud(document.getElementById("stage-wrap")!);
+// Speech bubbles and the "B: Talk" prompt over entities (ADR 0059).
+const speech = createSpeech(document.getElementById("stage-wrap")!);
 let rejectedAt = 0;
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
 
@@ -905,6 +908,7 @@ function render(): void {
     drawHealthBar(e, x, y);
   }
   hud.render(world);
+  speech.render(world, camX, camYSmooth, visualHeightOf);
 }
 
 // fixed-step loop: sim never reads wall-clock, accumulator only paces steps
@@ -2025,6 +2029,11 @@ function connect(): void {
     else if (msg.kind === "routed") { routedBy(msg); }
     else if (msg.kind === "timing") { builds.finish(msg.command); log(`timing route ${msg.ms.route}ms write ${msg.ms.write}ms compile ${msg.ms.compile}ms verify ${msg.ms.verify}ms total ${msg.ms.total}ms`); }
     else if (msg.kind === "tweak") tweak(msg.modId, msg.knob, msg.value, "Tweaked.");
+    else if (msg.kind === "order") {
+      // A standing order for creatures already in the world (ADR 0059): the engine steers them, no build.
+      const n = loader.order(msg.modId, msg.order);
+      say(n > 0 ? `${n === 1 ? "It" : `${n} of them`} heard you: ${msg.order}.` : "Nothing here can take orders yet. Add a creature first!", n > 0 ? "done" : undefined);
+    }
     else if (msg.kind === "timeline") timelineView.update(msg.steps, msg.current);
     else if (msg.kind === "explainResult") explain.onMsg(msg);
     else if (msg.kind === "removed") { loader.unload(msg.modId); renderMods(); }

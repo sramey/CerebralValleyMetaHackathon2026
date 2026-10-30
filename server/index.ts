@@ -24,7 +24,8 @@ import type { AgentStep, AgentTrace } from "./agent";
 import { forceModId, modIdOf } from "./modid";
 import { runPool } from "./pool";
 import { mergeDependentParts, mightBeCompound, splitCompound } from "./compound";
-import { parseRelativeAsk, relativeTweak } from "./relative-tweak";
+import { orderRoute, parseRoute, resolveRoute } from "./route-rules";
+import type { Route, RouteCtx, RouteMod } from "./route-rules";
 import { forget, newRecent, noteCommand, noteTouched, recentText, resolvePronoun } from "./context";
 import type { Recent } from "./context";
 import { buildEditPrompt, buildFixPrompt, buildRouterPrompt, buildWonderPrompt, formatManifest, ROUTER_SYSTEM, WONDER_SYSTEM } from "./prompt";
@@ -182,17 +183,6 @@ async function deliverMod(ws: WebSocket, command: string, source: string, routeL
   }
 }
 
-type RouteAction = "new" | "tweak" | "edit" | "undo" | "mood" | "question";
-interface Route {
-  action: RouteAction;
-  target?: string;
-  knob?: string;
-  value?: KnobValue;
-  answer?: string;
-  mood?: string;
-  visual?: Visual;
-  shape?: ShapeName;
-}
 
 function send(ws: WebSocket, msg: ServerMsg): void {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
@@ -575,32 +565,6 @@ async function handlePaperLevelMessage(ws: WebSocket, msg: Extract<ClientMsg, { 
   send(ws, { kind: "timing", command, ms: { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) } });
 }
 
-function parseRoute(text: string): Route | null {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
-  try {
-    const obj = JSON.parse(text.slice(start, end + 1)) as Record<string, unknown>;
-    const action = obj.action as RouteAction;
-    if (!["new", "tweak", "edit", "undo", "mood", "question"].includes(action)) return null;
-    const r: Route = { action };
-    if (typeof obj.target === "string") r.target = obj.target;
-    if (typeof obj.knob === "string") r.knob = obj.knob;
-    if (typeof obj.value === "number" || typeof obj.value === "string" || typeof obj.value === "boolean") {
-      r.value = obj.value as KnobValue;
-    }
-    if (typeof obj.answer === "string") r.answer = obj.answer;
-    if (typeof obj.mood === "string") r.mood = obj.mood.slice(0, 60);
-    const visual = parseVisual(obj.visual);
-    if (visual) r.visual = visual;
-    const shape = parseShape(obj.shape);
-    if (shape) r.shape = shape;
-    return r;
-  } catch {
-    return null;
-  }
-}
-
 function stripFences(src: string): string {
   let s = src.trim();
   const m = s.match(/^```(?:ts|typescript|javascript|js)?\s*\n([\s\S]*?)\n```\s*$/);
@@ -686,6 +650,31 @@ function routerMessages(ws: WebSocket, command: string): ChatMessage[] {
   ];
 }
 
+/** What the route rules may know (ADR 0059): `mods` are the server's verified mods, `world` adds the client's own built-ins for orders. */
+function routeCtx(ws: WebSocket, command: string, forceEditModId?: string): RouteCtx {
+  const mods = new Map<string, RouteMod>();
+  for (const m of sess(ws).manifest.values()) {
+    mods.set(m.id, { id: m.id, title: m.title, knobs: m.knobs, types: extractSpawnedEntities(m.source).map((e) => e.type) });
+  }
+  const world = new Map<string, RouteMod>();
+  for (const m of worldOf.get(ws) ?? []) world.set(m.id, { id: m.id, title: m.id, knobs: {} });
+  for (const [id, m] of mods) world.set(id, m);
+  return { command, mods, world, recent: sess(ws).recent, forceEditModId };
+}
+
+/** Carry out an order route: the client steers the creatures, the thing ordered becomes "it" (ADR 0059). */
+function sendOrder(ws: WebSocket, command: string, route: Route, routeMs: number, t0: number): void {
+  const modId = route.target ?? "*";
+  const order = route.order ?? "follow";
+  if (modId !== "*") noteTouched(sess(ws).recent, modId);
+  // A router-read order already opened a build card: close it before the client says who heard.
+  if (routeMs > 0) stage(ws, { kind: "stage", stage: "done", detail: `order: ${order}`, command });
+  send(ws, { kind: "order", modId, order });
+  const ms = { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) };
+  send(ws, { kind: "timing", command, ms });
+  logBuild({ command, route: "order", outcome: "tweak", modId, value: order, timings: ms, fixAttempted: false });
+}
+
 /** `routing`: a router call the caller already started for this command (and already noted in memory). */
 async function handleSingle(ws: WebSocket, text: string, batch?: { size: number; parallel: number }, forceEditModId?: string, routing?: Promise<Routed>): Promise<void> {
   await adoptingOf.get(ws);
@@ -697,6 +686,14 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
   let verifyMs = 0;
   const command = text.slice(0, 400);
   const manifest = sess(ws).manifest;
+
+  // Orders to creatures that already exist ("chickens, follow me") need no model call and open no build card (ADR 0059).
+  const order = forceEditModId ? null : orderRoute(routeCtx(ws, command));
+  if (order) {
+    console.log(`[route] order ${order.order} -> ${order.target} (no router call) for: ${command}`);
+    sendOrder(ws, command, order, 0, t0);
+    return;
+  }
 
   stage(ws, { kind: "stage", stage: "routing", detail: "routing your command", command });
 
@@ -713,34 +710,9 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     const res = await (routing ?? routerChat(routerMessages(ws, command), 1024));
     routeMs = Math.round(performance.now() - r0);
     send(ws, { kind: "routed", command, model: res.model, open: res.open, ms: res.ms, fellBack: res.fellBack });
-    route = parseRoute(res.text);
-    if (forceEditModId && manifest.has(forceEditModId)) {
-      route = { ...(route ?? { action: "edit" }), action: "edit", target: forceEditModId };
-    }
-    // Fallback: a build-shaped command never dead-ends on a router miss.
-    if (!route && /^(add|make|create|spawn|give|put|build)\b/i.test(command.trim())) {
-      console.log(`[route] fallback to new for: ${command}`);
-      route = { action: "new" };
-    }
-    // Safety net: a whole-world mood phrase Spark routed as a build is still a mood (ADR 0017).
-    const moodWord = detectMoodCommand(command);
-    if (moodWord && (!route || route.action === "new" || route.action === "edit" || route.action === "question")) route = { action: "mood", mood: moodWord };
-    // Player abilities (double jump, wall stick/climb, dash) are ALWAYS new standalone ability mods hooking api.player(), never edit on an NPC.
-    if (isPlayerAbilityCommand(command) && (!route || route.action === "edit" || route.action === "tweak")) {
-      console.log(`[route] player ability -> new for: ${command}`);
-      route = { action: "new" };
-    }
-    // Pronoun commands ("make it bigger") act on the mod touched last, not on a fresh build.
-    const pronounTarget = resolvePronoun(command, sess(ws).recent);
-    if (route && pronounTarget && manifest.has(pronounTarget) && route.action === "new") {
-      console.log(`[route] pronoun -> edit ${pronounTarget} for: ${command}`);
-      route = { action: "edit", target: pronounTarget };
-    }
-    // Guard: "add/make/create ..." is always a build, never a tweak/question.
-    if (route && !(pronounTarget && route.action === "tweak") && /^(add|make|create|spawn|build)\b/i.test(command.trim()) && route.action !== "new" && route.action !== "edit" && route.action !== "undo" && route.action !== "mood") {
-      console.log(`[route] coerced ${route.action} -> new for: ${command}`);
-      route = { action: "new" };
-    }
+    const resolved = resolveRoute(parseRoute(res.text), routeCtx(ws, command, forceEditModId));
+    route = resolved.route;
+    if (resolved.rules.length > 0) console.log(`[route] ${resolved.rules.join("; ")} for: ${command}`);
   } catch (err) {
     send(ws, { kind: "say", text: `Router hiccup: ${err instanceof Error ? err.message : String(err)}. Try again?` });
     send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
@@ -754,34 +726,11 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     return;
   }
 
-  // Pronoun memory (ADR 0016): "it"/"them" with no target means the mod touched last.
-  if (route && (route.action === "tweak" || route.action === "edit" || route.action === "undo") && (!route.target || !manifest.has(route.target))) {
-    const pid = resolvePronoun(command, sess(ws).recent);
-    if (pid && (manifest.has(pid) || route.action === "tweak")) route.target = pid;
-  }
-
-  // Relative knob asks ("make them faster", "jump higher", "more chickens") are instant knob
-  // tweaks, whatever the router said: a rewrite costs a whole Wonder build (ADR 0058).
-  if (route.action === "edit" || route.action === "tweak" || route.action === "new") {
-    const ask = parseRelativeAsk(command);
-    if (ask) {
-      const tid = (route.target && manifest.has(route.target) ? route.target : undefined)
-        ?? (isPlayerCommand(command) && manifest.has("player") ? "player" : undefined)
-        ?? resolvePronoun(command, sess(ws).recent);
-      // An ask that names its thing ("more chickens", "make the slimes faster") may look through the whole world.
-      const chosen = !!tid && manifest.has(tid);
-      const candidates = chosen ? [manifest.get(tid)!] : ask.noun ? [...manifest.values()] : [];
-      for (const rec of candidates) {
-        const rel = relativeTweak(command, rec.knobs, `${rec.id} ${rec.title}`, chosen);
-        if (!rel) continue;
-        console.log(`[route] relative ${route.action} -> tweak ${rec.id}.${rel.knob}=${rel.value} for: ${command}`);
-        route = { action: "tweak", target: rec.id, knob: rel.knob, value: rel.value };
-        break;
-      }
-    }
-  }
-
   // 2. Non-generation routes.
+  if (route.action === "order") {
+    sendOrder(ws, command, route, routeMs, t0);
+    return;
+  }
   if (route.action === "question") {
     send(ws, { kind: "say", text: route.answer ?? "Hello! Tell me what to build — e.g. 'add a player', 'make it rain'." });
     send(ws, { kind: "timing", command, ms: { route: routeMs, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });

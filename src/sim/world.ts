@@ -1,13 +1,16 @@
 import { SIM, emptyInput } from "../contract";
 import { entityKind } from "../ontology";
 import { DEFAULT_PROJECTILE_DAMAGE, isDamageableTarget } from "./combat";
-import type { Entity, HudDef, HudWidget, InputState, Particle, SpawnDef } from "../contract";
+import type { CreatureOrder, Entity, HudDef, HudWidget, InputState, KnobValue, ModEvent, ModEventName, Particle, SpawnDef, Speech } from "../contract";
 import { SolidGrid } from "./grid";
 import { createRng } from "./rng";
 import { landingVelocity } from "./bounce";
 import { collectPickups } from "./collect";
+import { canInteract, interactLabel, isOrderable, orderAck, ORDER_TICKS, steerByOrder } from "./interact";
+import { touches } from "./reach";
 
 type TickHandler = (dt: number) => void;
+type EventListener = (ev: ModEvent) => void;
 
 /** HUD widget kinds the sim stores; anything else falls back to "stat". */
 const HUD_KINDS = new Set(["bar", "hearts", "stat", "banner"]);
@@ -27,8 +30,21 @@ export class World {
   hud = new Map<string, HudWidget>();
   /** Banked engine-owned pickup totals per HUD id (ADR 0055), e.g. the shared "score". */
   readonly collected = new Map<string, number>();
+  /** Speech bubbles by entity id (ADR 0059). Pure data: the client draws them over the entity. */
+  speech = new Map<number, Speech>();
+  /** What the action key would interact with right now (ADR 0059), for the client's "B: Talk" prompt. */
+  interactable?: { id: number; label: string };
   private nextId = 1;
   private handlers = new Map<string, TickHandler[]>();
+  /** api.on listeners per owner and event (ADR 0059). */
+  private listeners = new Map<string, Map<ModEventName, EventListener[]>>();
+  /** Events raised this tick, delivered at the start of the next one. Owner "*" broadcasts to every mod but the sender. */
+  private pending: { owner: string; ev: ModEvent }[] = [];
+  /** Entities the player is touching, so "touch" fires once per contact, not every frame. */
+  private touching = new Set<number>();
+  /** Standing orders by entity id and the tick each one lapses. */
+  private orders = new Map<number, { order: CreatureOrder; until: number }>();
+  private prevAction = false;
   private rng: () => number;
   private grid = new SolidGrid();
 
@@ -85,6 +101,123 @@ export class World {
     return this.rng();
   }
 
+  /** Listen for an event on `owner`'s entities (ADR 0059). */
+  on(owner: string, type: ModEventName, fn: EventListener): void {
+    let byType = this.listeners.get(owner);
+    if (!byType) this.listeners.set(owner, (byType = new Map()));
+    const list = byType.get(type) ?? [];
+    list.push(fn);
+    byType.set(type, list);
+  }
+
+  private listens(owner: string, type: ModEventName): boolean {
+    return (this.listeners.get(owner)?.get(type)?.length ?? 0) > 0;
+  }
+
+  /** Raise an event for `owner`; it is delivered at the start of the next tick, so listeners never run inside another mod's code. */
+  private raise(owner: string, ev: ModEvent): void {
+    if (owner === "*" || this.listens(owner, ev.type)) this.pending.push({ owner, ev });
+  }
+
+  /** Put a speech bubble over an entity for `seconds` of sim time. */
+  say(owner: string, entityId: number, text: unknown, seconds = 3): void {
+    if (!this.entities.some((e) => e.id === entityId)) return;
+    const t = String(text ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
+    if (!t) { this.speech.delete(entityId); return; }
+    const secs = typeof seconds === "number" && Number.isFinite(seconds) ? Math.min(10, Math.max(0.5, seconds)) : 3;
+    this.speech.set(entityId, { entityId, owner, text: t, remaining: secs });
+  }
+
+  /** Tell every other mod something happened. */
+  signal(from: string, name: unknown, value?: KnobValue): void {
+    const n = String(name ?? "").slice(0, 40);
+    if (n) this.raise("*", { type: "signal", name: n, value, from });
+  }
+
+  /**
+   * Give `modId`'s creatures (every mod's, for "*") a standing order (ADR 0059). The engine steers them after
+   * their own tick code, so it works on any creature without a rebuild. Returns how many took the order.
+   */
+  giveOrder(modId: string, order: CreatureOrder): number {
+    let n = 0;
+    for (const e of this.entities) {
+      if ((modId !== "*" && e.owner !== modId) || !isOrderable(e)) continue;
+      if (order === "free") this.orders.delete(e.id);
+      else this.orders.set(e.id, { order, until: this.tickCount + ORDER_TICKS[order] });
+      if (n === 0) this.say("engine", e.id, orderAck(order), 1.6);
+      this.raise(e.owner, { type: "order", entity: e, order });
+      n++;
+    }
+    return n;
+  }
+
+  /** The order an entity is under, if any. */
+  orderOf(id: number): CreatureOrder | undefined {
+    return this.orders.get(id)?.order;
+  }
+
+  /** Deliver last tick's events, with the same fault containment as tick handlers. */
+  private deliverEvents(): void {
+    if (this.pending.length === 0) return;
+    const batch = this.pending;
+    this.pending = [];
+    for (const { owner, ev } of batch) {
+      const owners = owner === "*" ? [...this.listeners.keys()].filter((o) => o !== ev.from) : [owner];
+      for (const o of owners) {
+        const list = this.listeners.get(o)?.get(ev.type);
+        if (!list) continue;
+        for (const fn of [...list]) {
+          if (!this.onFault) { fn(ev); continue; }
+          try {
+            fn(ev);
+          } catch (err) {
+            this.handlers.delete(o);
+            this.listeners.delete(o);
+            this.onFault(o, err);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  private ageSpeech(dt: number): void {
+    for (const [id, b] of this.speech) {
+      b.remaining -= dt;
+      if (b.remaining <= 0) this.speech.delete(id);
+    }
+  }
+
+  /** "touch" fires when the player starts touching an entity whose mod listens for it. */
+  private touchPass(player: Entity | undefined): void {
+    if (!player || player.dead) { this.touching.clear(); return; }
+    for (const e of this.entities) {
+      if (e === player || e.dead || !this.listens(e.owner, "touch")) continue;
+      if (touches(player, e)) {
+        if (!this.touching.has(e.id)) { this.touching.add(e.id); this.raise(e.owner, { type: "touch", entity: e, other: player }); }
+      } else this.touching.delete(e.id);
+    }
+  }
+
+  /** The nearest entity with data.interact becomes the prompt; pressing the action key raises "interact" on it. */
+  private interactPass(player: Entity | undefined): void {
+    const action = this.input.use === true;
+    const pressed = action && !this.prevAction;
+    this.prevAction = action;
+    this.interactable = undefined;
+    if (!player || player.dead) return;
+    let best: Entity | undefined;
+    let bestD = Infinity;
+    for (const e of this.entities) {
+      if (e === player || e.dead || !canInteract(player, e)) continue;
+      const d = Math.abs((e.x + e.w / 2) - (player.x + player.w / 2));
+      if (d < bestD) { best = e; bestD = d; }
+    }
+    if (!best) return;
+    this.interactable = { id: best.id, label: interactLabel(best) };
+    if (pressed) this.raise(best.owner, { type: "interact", entity: best, other: player });
+  }
+
   addHandler(owner: string, fn: TickHandler): void {
     const list = this.handlers.get(owner) ?? [];
     list.push(fn);
@@ -127,6 +260,10 @@ export class World {
     }
     this.entities = this.entities.filter((e) => e.owner !== owner);
     for (const [id, w] of this.hud) if (w.owner === owner) this.hud.delete(id);
+    // A reload runs setup again, which registers its listeners again.
+    this.listeners.delete(owner);
+    this.pending = this.pending.filter((p) => p.owner !== owner);
+    for (const [id, b] of this.speech) if (b.owner === owner) this.speech.delete(id);
   }
 
   spawn(def: SpawnDef, owner: string): Entity {
@@ -170,12 +307,16 @@ export class World {
     this.entities = this.entities.filter((en) => en.id !== id);
   }
 
-  damage(id: number, amount: number): void {
+  /** `by`: the mod id that dealt the damage, or "engine" (ADR 0059: it rides on the hit and death events). */
+  damage(id: number, amount: number, by = "engine"): void {
     if (!Number.isFinite(amount) || amount <= 0) return;
     const e = this.entities.find((en) => en.id === id);
     if (!e) return;
     e.health -= amount;
+    this.raise(e.owner, { type: "hit", entity: e, amount, by });
     if (e.health <= 0) {
+      // A copy taken before the despawn clears x/y, so a death listener can drop loot where it fell.
+      if (this.listens(e.owner, "death")) this.raise(e.owner, { type: "death", entity: { ...e, data: { ...e.data } }, amount, by });
       this.burst(e.x + e.w / 2, e.y + e.h / 2, e.color, 10);
       this.despawn(e.id);
     }
@@ -199,6 +340,9 @@ export class World {
     this.hopCooldown.delete(id);
     this.turning.delete(id);
     this.clearOfPlayer.delete(id);
+    this.speech.delete(id);
+    this.touching.delete(id);
+    this.orders.delete(id);
   }
 
   /** Ticks each mover has pushed into a wall, for stuck recovery (engine-side, so every creature gets it). */
@@ -266,6 +410,8 @@ export class World {
     const dt = SIM.dt;
     this.tickCount++;
     this.ageHud(dt);
+    this.ageSpeech(dt);
+    this.deliverEvents();
     this.runHandlers(dt);
 
     const solids = this.entities.filter((e) => e.solid);
@@ -298,6 +444,12 @@ export class World {
         if (order) {
           if (this.tickCount >= order.until) this.turning.delete(e.id);
           else if (e.vx !== 0) e.vx = Math.abs(e.vx) * order.dir;
+        }
+        // The player's standing order (ADR 0059) wins over the mod's own steering for this tick.
+        const told = this.orders.get(e.id);
+        if (told) {
+          if (this.tickCount >= told.until) this.orders.delete(e.id);
+          else if (player && steerByOrder(e, told.order, player)) this.orders.delete(e.id);
         }
         // Walkers stop at a ledge: patrollers turn back, hostiles hold the edge facing the player.
         if (e.gravityScale > 0 && e.onGround && e.vx !== 0 && e.data.ledge !== false) {
@@ -456,6 +608,10 @@ export class World {
     // Post-step 4: engine-owned pickups (ADR 0055): tag an entity data.collectible and
     // the engine collects it into one shared HUD. Everything else lives in collect.ts.
     collectPickups(this, player);
+
+    // Post-step 5: touch and interact events (ADR 0059).
+    this.touchPass(player);
+    this.interactPass(player);
 
     // A player killed this step is already despawned (no x/y left): keep the last camera instead of NaN.
     if (player && !(player as any).dead) {
