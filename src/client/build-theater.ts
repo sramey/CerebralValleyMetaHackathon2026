@@ -136,6 +136,9 @@ export function createTheater(host: HTMLElement, sink: (v: TheaterView) => void,
   let hideTimer = 0;
   let flushing = false;
 
+  /** The card shows one lane at a time, so say which sub-build it is streaming. */
+  const setFocusLabel = (command: string): void => { label.textContent = `code · ${command}`; };
+
   function show(active: boolean): void {
     stream.classList.toggle("on", active);
     stepper.classList.toggle("on", active);
@@ -268,7 +271,7 @@ export function createTheater(host: HTMLElement, sink: (v: TheaterView) => void,
       partial = "";
       buffer = "";
       focus = command;
-      label.textContent = command;
+      setFocusLabel(command);
       steps = [];
       currentDetail = "routing your command";
       paintLines();
@@ -284,7 +287,7 @@ export function createTheater(host: HTMLElement, sink: (v: TheaterView) => void,
       if (!running.has(msg.command)) begin(msg.command);
       if (msg.command !== focus) {
         focus = msg.command;
-        label.textContent = msg.command;
+        setFocusLabel(msg.command);
       }
       currentDetail = msg.detail || msg.stage;
       paintSteps();
@@ -295,7 +298,7 @@ export function createTheater(host: HTMLElement, sink: (v: TheaterView) => void,
       if (!running.has(msg.command)) begin(msg.command);
       if (msg.command !== focus) {
         focus = msg.command;
-        label.textContent = msg.command;
+        setFocusLabel(msg.command);
       }
       steps.push(msg);
       currentDetail = msg.tool === "inspect_world" ? "looking at world" : msg.tool === "run_playtest" ? (msg.ok ? "playtest passed" : "playtest rejected") : `${msg.tool} done`;
@@ -305,7 +308,7 @@ export function createTheater(host: HTMLElement, sink: (v: TheaterView) => void,
       if (msg.command !== focus) {
         if (focus) buffer += `\n// ${msg.command}\n`;
         focus = msg.command;
-        label.textContent = msg.command;
+        setFocusLabel(msg.command);
       }
       buffer += msg.text;
       kick();
