@@ -96,8 +96,8 @@ export function isDamageableTarget(
   const isPlayerProj = projectile.data.fromPlayer === true || projectile.type.includes("player");
 
   if (isPlayerProj) {
-    // Player projectile cannot harm player or friendlies - ONLY enemies!
-    if (isFriendly(target)) return false;
+    // Player projectile cannot harm player, friendlies or the player's own companions - ONLY enemies!
+    if (isFriendly(target) || isPet(target)) return false;
     if (isHostileEnemy(target)) return true;
   } else if (isEnemyFire(projectile)) {
     // Projectile from enemy: can hit player or friendlies/heroes, never other hostiles

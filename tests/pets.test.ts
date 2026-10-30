@@ -88,8 +88,7 @@ describe("pets never hurt the player or allies", () => {
     expect(w.entities.some((e) => e.id === shot.id)).toBe(false);
   });
 
-  it("a pet is not a valid target for an ally's own shot either", () => {
-    const bolt: Entity = {
+  it("a pet is not a valid target for an ally's own shot either", () => {    const bolt: Entity = {
       id: 1, type: "bolt", x: 0, y: 0, w: 8, h: 6, vx: 0, vy: 0, color: 0,
       solid: false, gravityScale: 0, facing: 1, onGround: false, health: 1, owner: "turret", data: {},
     };
@@ -98,6 +97,23 @@ describe("pets never hurt the player or allies", () => {
       solid: false, gravityScale: 1, facing: 1, onGround: true, health: 100, owner: "pet-mod", data: { pet: true },
     };
     expect(isDamageableTarget(pet, bolt)).toBe(false);
+  });
+
+  it("the player cannot shoot their own companion, even a pet a mod also flagged hostile", () => {
+    const bullet: Entity = {
+      id: 1, type: "player-bullet", x: 0, y: 0, w: 8, h: 4, vx: 600, vy: 0, color: 0,
+      solid: false, gravityScale: 0, facing: 1, onGround: false, health: 1, owner: "gun", data: { fromPlayer: true },
+    };
+    const pet: Entity = {
+      id: 2, type: "trex", x: 0, y: 0, w: 60, h: 60, vx: 0, vy: 0, color: 0,
+      solid: false, gravityScale: 1, facing: 1, onGround: true, health: 100, owner: "pet-mod", data: { pet: true, hostile: true },
+    };
+    const enemy: Entity = {
+      id: 3, type: "goblin", x: 0, y: 0, w: 30, h: 30, vx: 0, vy: 0, color: 0,
+      solid: false, gravityScale: 1, facing: 1, onGround: true, health: 100, owner: "m", data: { hostile: true },
+    };
+    expect(isDamageableTarget(pet, bullet)).toBe(false);
+    expect(isDamageableTarget(enemy, bullet)).toBe(true);
   });
 });
 
