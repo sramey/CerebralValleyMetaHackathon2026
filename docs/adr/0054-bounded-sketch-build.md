@@ -85,6 +85,43 @@ first-class outcome rather than a last resort.
 - **Owed:** an index row in `docs/adr/README.md` (owned outside this change). The README's
   describe-the-feature line for draw-to-build does not need to change.
 
+## Amendment (2026-10-30): the paper path gets the same bound
+
+Photo-to-level (ADR 0040, `server/paper.ts`) replaces the whole level from a photographed
+drawing, and it had every one of the four defects above minus the payload size: unbounded
+`deps.ask` calls (two reading tries plus a fix round, none with a ceiling), an unconditional
+second try, and `failed()` that only said text — no `stage: "failed"` — so the orb could sit on
+"Reading your paper level drawing..." with nothing left to arrive. `handlePaperLevelMessage`
+also returned silently on a budget denial.
+
+The paper build now shares this ADR's shape:
+
+1. **Same ceilings.** `PAPER_LIMITS`: **15 s per vision call, 18 s for the reading phase, 8 s
+   for the fix call, 25 s total**; a second try starts only with `retryMinMs` (4 s) of the
+   reading phase left. The bounds are exported as `PaperLimits` and injected the same way, so the
+   tests shrink them instead of waiting out real seconds.
+2. **One implementation.** `askWithin` moved out of the sketch module's private scope
+   (`server/sketch.ts` exports it with an `AskDeps` type), so both pipelines race their model
+   calls against a deadline with the same code; `PaperDeps.ask` gained the optional
+   `AbortSignal`, exactly as `SketchDeps.ask` did — existing stubs stay valid.
+3. **Terminal message on every give-up.** `runPaperBuild` emits `stage: "failed"` for a bad
+   payload, an unreadable drawing, an over-budget read, and a verification failure;
+   `handlePaperLevelMessage` emits it on budget denial and on a thrown build, and the socket
+   dispatch adds the same stage as a safety net for failures outside the build (the kid-safe
+   screen, level adopt).
+4. **No stroke fallback, and it is said out loud.** The paper payload is a photo: there are no
+   stroke boxes to compile, so unlike the sketch path there is no deterministic level to build
+   without the model. The bounded outcome is therefore an **immediate retake** (`PAPER_RETAKE`)
+   the moment the ceiling trips, instead of a hang. The retake keeps the child in control: the
+   photo is still in the camera modal and pressing Confirm again is one tap.
+
+Consequences: worst case for one paper build is ~25 s of model time, then an explicit retake.
+Losses: a photo that genuinely needs more than 15 s gets a retake ask rather than a slow success —
+deliberate, because the alternative is an unbounded wait with no feedback. Still owed: photos
+travel at up to 4 MB of base64, unlike the compact sketch JPEG (`src/client/sketch-image.ts`);
+reusing that encoder on the paper path is the obvious next step and would cut both upload and
+vision time.
+
 ## Alternatives considered
 
 - **`AbortSignal.timeout(15_000)` alone, passed to `fetch`.** The smaller change, but it only
