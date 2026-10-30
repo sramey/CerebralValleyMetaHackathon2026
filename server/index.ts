@@ -61,7 +61,7 @@ interface ManifestRec {
   knobs: KnobDefs;
   art?: { key: string; url: string; scenery?: boolean };
   look?: Look;
-  /** How this mod was made (ADR 0060), when it was built in this session. */
+  /** How this mod was made (ADR 0065), when it was built in this session. */
   receipt?: BuildReceipt;
 }
 
@@ -1045,7 +1045,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
       }
     }
     const rec: ManifestRec = { id: def.id, title: def.title, source, compiled: first.js, knobs: def.knobs ?? {}, ...(art ? { art } : {}), ...(look ? { look } : {}) };
-    // The receipt (ADR 0060): the whole chain behind this mod, kept with it for "How was this made?".
+    // The receipt (ADR 0065): the whole chain behind this mod, kept with it for "How was this made?".
     const receiptArt: ReceiptArt | undefined = look
       ? { model: "code", subject: artType ?? def.title, state: "code-drawn" }
       : pendingArt
@@ -1206,7 +1206,7 @@ async function handleExplain(ws: WebSocket, msg: Extract<ClientMsg, { kind: "exp
   send(ws, { kind: "explainResult", modId: rec.id, title: rec.title, text: e.text, lines: e.lines, cached: e.cached, ms: e.ms });
 }
 
-/** "How was this made?" (ADR 0060): the receipt this session kept for a mod. No model call, no spend. */
+/** "How was this made?" (ADR 0065): the receipt this session kept for a mod. No model call, no spend. */
 async function handleReceipt(ws: WebSocket, msg: Extract<ClientMsg, { kind: "receipt" }>): Promise<void> {
   await adoptingOf.get(ws);
   const manifest = sess(ws).manifest;

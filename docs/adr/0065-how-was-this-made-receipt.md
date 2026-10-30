@@ -1,4 +1,4 @@
-# ADR 0060: "How was this made?": a receipt for every creation
+# ADR 0065: "How was this made?": a receipt for every creation
 
 - **Status:** Draft
 - **Date:** 2026-10-30

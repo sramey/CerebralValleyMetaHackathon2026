@@ -149,7 +149,7 @@ export function spritePrompt(cleanSubject: string, form: { held: boolean; scener
     `chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
 }
 
-/** The sheet prompt generateSubjectArt sends for this subject; the receipt (ADR 0060) shows the same string. */
+/** The sheet prompt generateSubjectArt sends for this subject; the receipt (ADR 0065) shows the same string. */
 export function subjectArtPrompt(cleanSubject: string, key: string, scenery = false, flying = false): string {
   // The ontology names the art form (ADR 0031); the router's `scenery` hint still wins.
   const plan = artPlanFor(key);

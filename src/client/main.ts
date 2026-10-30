@@ -132,7 +132,7 @@ const explain = initExplain({
   connected: () => ws?.readyState === WebSocket.OPEN,
   log,
 });
-/** "How was this made?" (ADR 0060): the chain from words to a verified, playable mod. */
+/** "How was this made?" (ADR 0065): the chain from words to a verified, playable mod. */
 const receipt = initReceipt({
   host: stageWrapEl,
   send: (msg) => send(msg),

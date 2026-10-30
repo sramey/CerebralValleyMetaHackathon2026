@@ -331,7 +331,7 @@ export type ClientMsg =
   /** "How does this work?" (ADR 0043): explain one loaded mod's source in plain words. The
    *  server answers from its own copy of the source, so no code travels on this message. */
   | { kind: "explain"; modId: string }
-  /** "How was this made?" (ADR 0060): the receipt for one loaded mod. Only the id travels. */
+  /** "How was this made?" (ADR 0065): the receipt for one loaded mod. Only the id travels. */
   | { kind: "receipt"; modId: string }
   // Voice (ADR 0012). Mic audio itself travels as binary frames: PCM16 mono 16 kHz.
   | { kind: "voiceWarm" }
@@ -453,7 +453,7 @@ export type ServerMsg =
   /** A plain-words explanation of one mod (ADR 0043): `text` is three short sentences and
    *  `lines` are the key lines of its source, already resolved from the source itself. */
   | { kind: "explainResult"; modId: string; title: string; text: string; lines: { n: number; code: string }[]; cached: boolean; ms: number }
-  /** The whole chain behind one creation (ADR 0060), from the server's own records. No model call. */
+  /** The whole chain behind one creation (ADR 0065), from the server's own records. No model call. */
   | { kind: "receiptResult"; receipt: BuildReceipt }
   // Visitor mode (no key, kill-switch, or budget spent): the game still plays; offer these instead.
   | { kind: "visitor"; reason: "nokey" | "killswitch" | "budget"; demos: DemoWorld[] };
@@ -467,7 +467,7 @@ export interface VerifyResult {
   entities: number;
 }
 
-/** How Spark routed a build (ADR 0060). `model` is what actually answered (hosted or open weights). */
+/** How Spark routed a build (ADR 0065). `model` is what actually answered (hosted or open weights). */
 export interface ReceiptRoute { action: string; model: string; open: boolean; fellBack: boolean; ms: number; visual?: string; rules: string[] }
 /** One tool call in Wonder's loop. */
 export interface ReceiptTool { name: string; ms: number; ok?: boolean }
@@ -481,7 +481,7 @@ export interface ReceiptArt {
   state: "drawing" | "drawn" | "cached" | "code-drawn" | "none";
   ms?: number;
 }
-/** "How was this made?" (ADR 0060): the chain from words to a verified, playable mod. */
+/** "How was this made?" (ADR 0065): the chain from words to a verified, playable mod. */
 export interface BuildReceipt {
   modId: string;
   title: string;

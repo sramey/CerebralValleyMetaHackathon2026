@@ -1,4 +1,4 @@
-// "How was this made?" (ADR 0060): the receipt for one creation. Every AI build already
+// "How was this made?" (ADR 0065): the receipt for one creation. Every AI build already
 // passes through the whole chain — your words, Spark's route, Wonder's code and its own
 // test(), the verifier and the playtest bot, Muse Image's prompt and sheet — but only the
 // build log kept it, and only as numbers. A receipt keeps that chain per mod, in this

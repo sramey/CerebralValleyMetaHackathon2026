@@ -1,4 +1,4 @@
-// "How was this made?" (ADR 0060): the receipt is built from records the server already has,
+// "How was this made?" (ADR 0065): the receipt is built from records the server already has,
 // so these tests pin the parts that read code (the test extractor) and the wording of the chain.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

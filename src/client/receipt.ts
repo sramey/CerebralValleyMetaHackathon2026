@@ -1,4 +1,4 @@
-// "How was this made?" panel (ADR 0060). The radial menu offers it on any object: the server
+// "How was this made?" panel (ADR 0065). The radial menu offers it on any object: the server
 // sends the receipt it kept when the mod was built (your words, Spark's route, Wonder's code
 // and its own test, the verifier's proof, Muse Image's prompt and sheet, the timings) and this
 // file draws it as one vertical chain. The proof rows tick green one by one, so "verified"

@@ -1,4 +1,4 @@
-// "How was this made?" (ADR 0060): the receipt as a list of steps, one per link in the chain
+// "How was this made?" (ADR 0065): the receipt as a list of steps, one per link in the chain
 // from your words to a playable mod. Pure (no DOM), so the wording is pinned by tests and the
 // panel in receipt.ts only draws it.
 import type { BuildReceipt } from "../contract";
