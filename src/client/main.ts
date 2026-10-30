@@ -53,7 +53,7 @@ const BUILTINS: Record<string, ModDefinition> = {
 
 const world = new World(1337);
 const loader = new ModLoader(world);
-// A mod that crashes mid-game is taken out and the world keeps running (ADR 0052).
+// A mod that crashes mid-game is taken out and the world keeps running (ADR 0056).
 loader.isolateFaults((mod, message) => {
   console.warn(`mod ${mod.id} crashed and was unloaded:`, message);
   say(`${mod.title} crashed, so I took it out. Everything else keeps running.`, "failed");

@@ -1,4 +1,4 @@
-# 0052 — Contain crashing and looping mods: quarantine on throw, compile-time loop guards
+# 0056 — Contain crashing and looping mods: quarantine on throw, compile-time loop guards
 
 - **Status:** Draft
 - **Date:** 2026-10-30

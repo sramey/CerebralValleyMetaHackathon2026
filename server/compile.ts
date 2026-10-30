@@ -1,4 +1,4 @@
-// Forbidden-token check + esbuild TS->ESM transform for Wonder-written mods, then loop guards (ADR 0052).
+// Forbidden-token check + esbuild TS->ESM transform for Wonder-written mods, then loop guards (ADR 0056).
 import { transformSync } from "esbuild";
 import ts from "typescript";
 import { FORBIDDEN_MOD_TOKENS } from "../src/contract";
@@ -43,7 +43,7 @@ export function compileMod(source: string): CompileResult {
 export const LOOP_LIMIT = 100_000;
 
 /**
- * Give every loop in compiled mod JS an iteration guard (ADR 0052): a counter that throws once a
+ * Give every loop in compiled mod JS an iteration guard (ADR 0056): a counter that throws once a
  * single run of the loop passes LOOP_LIMIT. A `while (true)` Wonder wrote then fails the
  * verifier (or is quarantined live) instead of hanging the server and the browser tab. Uses the
  * TypeScript compiler's AST, so strings, regexes and comments are never mistaken for loops.

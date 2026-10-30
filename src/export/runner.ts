@@ -71,7 +71,7 @@ async function boot(): Promise<void> {
 
   const world = new World(1337);
   const loader = new ModLoader(world);
-  // A mod that crashes mid-game is taken out and the rest keeps running (ADR 0052).
+  // A mod that crashes mid-game is taken out and the rest keeps running (ADR 0056).
   loader.isolateFaults((mod, message) => console.warn(`mod ${mod.id} crashed and was unloaded:`, message));
 
   const app = new Application();

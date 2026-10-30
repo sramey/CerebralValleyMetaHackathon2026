@@ -83,7 +83,7 @@ export function checkProjectileHitAndDamage(
   projectile: Entity,
   options: ProjectileDamageOptions = {},
 ): Entity | undefined {
-  // The mod resolves this projectile itself, so the engine's universal pass leaves it alone (ADR 0053).
+  // The mod resolves this projectile itself, so the engine's universal pass leaves it alone (ADR 0057).
   projectile.data.modCombat = true;
   const damage = options.damage ?? (typeof projectile.data.damage === "number" ? projectile.data.damage : DEFAULT_PROJECTILE_DAMAGE);
   const despawnOnHit = options.despawnOnHit !== false;

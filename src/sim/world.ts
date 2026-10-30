@@ -88,7 +88,7 @@ export class World {
   }
 
   /**
-   * When set, a tick handler that throws is contained (ADR 0052): its owner's handlers stop and
+   * When set, a tick handler that throws is contained (ADR 0056): its owner's handlers stop and
    * this is called, and the rest of the world keeps stepping. Unset (verifier, playtest, tests),
    * the error propagates so a bad mod fails loudly.
    */
@@ -367,7 +367,7 @@ export class World {
     this.particles = this.particles.filter((p) => p.life < p.maxLife);
     // Post-step 1: Rigid player equipment / weapon mounting (bead qwc). An item flagged held
     // always mounts; one that is merely named like gear mounts unless it says it is not the
-    // player's (a pickup still lying in the level, another creature's weapon) (ADR 0053).
+    // player's (a pickup still lying in the level, another creature's weapon) (ADR 0057).
     if (player) {
       for (const e of this.entities) {
         if (e === player) continue;
@@ -399,7 +399,7 @@ export class World {
 
     // Post-step 2: Universal projectile collision & enemy combat (bead 578). A projectile a mod
     // already resolves through api.damageHit is the mod's: the engine leaves it alone, so the
-    // mod's damage, filter and piercing hold (ADR 0053).
+    // mod's damage, filter and piercing hold (ADR 0057).
     const projectiles = this.entities.filter((e) => e.data.tetherTo === undefined && e.data.modCombat !== true && !traitsOf(e.type).tether && (e.data.visual === "projectile" || entityKind(e) === "projectile" || traitsOf(e.type).projectile)); // grappling gear latches instead (ADR 0050)
     for (const proj of projectiles) {
       if (proj.dead) continue;

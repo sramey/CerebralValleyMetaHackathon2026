@@ -1,4 +1,4 @@
-// Broad phase for World.step (engine review, ADR 0053): a uniform grid over the solids
+// Broad phase for World.step (engine review, ADR 0057): a uniform grid over the solids
 // that cannot move during the physics pass, so a mover only tests the solids near it.
 // Pure and deterministic: queries return solid indices in ascending order, so collision
 // resolves against the same solids in the same order as a full scan would.

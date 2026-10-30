@@ -16,7 +16,7 @@ export class ModLoader {
   }
 
   /**
-   * Contain crashing mods (ADR 0052): a tick handler that throws unloads its mod and reports it,
+   * Contain crashing mods (ADR 0056): a tick handler that throws unloads its mod and reports it,
    * instead of stopping the whole world. The live client and the exported game turn this on.
    */
   isolateFaults(onQuarantine: (mod: LoadedMod, message: string) => void): void {

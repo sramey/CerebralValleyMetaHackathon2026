@@ -1,4 +1,4 @@
-// Engine review fixes (ADR 0052, 0053): crash containment, loop guards, stable tick order,
+// Engine review fixes (ADR 0056, 0057): crash containment, loop guards, stable tick order,
 // equipment and projectile rules, the ground slab, bookkeeping cleanup and the broad phase.
 import { describe, expect, it } from "vitest";
 import { World } from "../src/sim/world";
@@ -14,7 +14,7 @@ import type { ModDefinition } from "../src/contract";
 const mod = (id: string, setup: ModDefinition["setup"], extra: Partial<ModDefinition> = {}): ModDefinition =>
   ({ id, title: id, setup, dispose: () => {}, ...extra });
 
-describe("crash containment (ADR 0052)", () => {
+describe("crash containment (ADR 0056)", () => {
   it("unloads a mod whose tick handler throws and keeps the world stepping", () => {
     const world = new World(1);
     const loader = new ModLoader(world);
@@ -68,7 +68,7 @@ describe("crash containment (ADR 0052)", () => {
   });
 });
 
-describe("loop guards (ADR 0052)", () => {
+describe("loop guards (ADR 0056)", () => {
   it("an infinite loop fails verification fast instead of hanging", async () => {
     const src = `export default { id: "spin", title: "Spin",
       setup(api) { api.onTick(() => { let y = 0; while (y >= 0) { y++; } }); },
@@ -95,7 +95,7 @@ describe("loop guards (ADR 0052)", () => {
   });
 });
 
-describe("gameplay rules (ADR 0053)", () => {
+describe("gameplay rules (ADR 0057)", () => {
   const player = (world: World) => {
     const p = world.spawn({ type: "player", x: 100, y: 300, w: 26, h: 34, gravityScale: 0 }, "player");
     p.facing = 1;
@@ -158,7 +158,7 @@ describe("gameplay rules (ADR 0053)", () => {
   });
 });
 
-describe("broad phase (ADR 0053)", () => {
+describe("broad phase (ADR 0057)", () => {
   it("a grid query always includes every solid that overlaps the box", () => {
     const rng = createRng(7);
     const solids = Array.from({ length: 300 }, () => ({

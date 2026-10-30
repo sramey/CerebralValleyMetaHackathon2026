@@ -79,5 +79,5 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0049](0049-game-weapons-are-safe.md) | Game weapons and fighting are explicitly allowed by the kid-safe screen | Draft |
 | [0051](0051-creature-steering.md) | Creatures steer: fliers turn at walls, walkers stop at ledges, hostiles get engine AI states | Draft |
 | [0050](0050-grappling-hook-and-pointer-aim.md) | Grappling hook: pointer aim in InputState, engine rope/raycast/winch helpers | Draft |
-| [0052](0052-contain-crashing-and-looping-mods.md) | Contain crashing and looping mods: quarantine on throw, compile-time loop guards | Draft |
-| [0053](0053-engine-rules-gear-shots-ground-broad-phase.md) | Engine rules for gear, shots and the ground slab; a broad phase for collision | Draft |
+| [0056](0056-contain-crashing-and-looping-mods.md) | Contain crashing and looping mods: quarantine on throw, compile-time loop guards | Draft |
+| [0057](0057-engine-rules-gear-shots-ground-broad-phase.md) | Engine rules for gear, shots and the ground slab; a broad phase for collision | Draft |
