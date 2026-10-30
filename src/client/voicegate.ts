@@ -22,3 +22,11 @@ export function voiceTextOk(text: string): boolean {
 export function shiftStillHeld(e: { shiftKey: boolean }): boolean {
   return e.shiftKey;
 }
+
+/**
+ * Whether a rejected transcript was a real utterance attempt (as opposed to silence / empty transcript).
+ * A transcript with no words (empty or punctuation-only) must never reprompt "Didn't catch that".
+ */
+export function voiceShouldReprompt(text: string): boolean {
+  return wordsOf(text).length > 0 && !voiceTextOk(text);
+}
