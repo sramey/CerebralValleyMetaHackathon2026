@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { artPlanFor, canUseSpriteSheet, isHeldItemType } from "../src/ontology";
 import { isFlyingRequest, isScenerySubject } from "./art";
 import { chat, loadEnv, SPARK } from "./meta";
-import { BACKDROP_MOTIFS, type Backdrop, type BackdropMotif, type MoodSpec } from "../src/contract";
+import { BACKDROP_MOTIFS, type ThemedBackdrop, type BackdropMotif, type MoodSpec } from "../src/contract";
 
 const IMAGE_EDIT_URL = "https://api.meta.ai/v1/images/edits";
 const IMAGE_MODEL = "muse-image-1.0";
@@ -63,7 +63,7 @@ const ALIASES: Record<string, string> = {
 };
 
 /**
- * Themed backdrops we expect on stage (ADR 0066): a palette plus what stands in the parallax bands.
+ * Themed backdrops we expect on stage (ADR 0067): a palette plus what stands in the parallax bands.
  * Anything else gets its backdrop from the same Spark call that designs the palette.
  */
 export const BACKDROP_PRESETS: Record<string, MoodSpec> = {
@@ -110,7 +110,7 @@ const motifList = (v: unknown): BackdropMotif[] =>
   Array.isArray(v) ? v.map((m) => String(m).toLowerCase().trim()).filter((m): m is BackdropMotif => MOTIFS.has(m)).slice(0, 8) : [];
 
 /** Validate a backdrop (Spark-written or stored): only known motifs survive; nothing to draw means no backdrop. */
-export function parseBackdrop(raw: unknown): Backdrop | undefined {
+export function parseBackdrop(raw: unknown): ThemedBackdrop | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const o = raw as Record<string, unknown>;
   const skyline = o.skyline === "flat" || o.skyline === "hills" ? o.skyline : "mountains";
@@ -171,7 +171,7 @@ using ONLY these motifs: ${BACKDROP_MOTIFS.join(", ")}. far = distant buildings 
 /**
  * The look for a mood word: a hand-tuned preset when we have one, otherwise Spark designs it (preset spooky as a safety net).
  * A backdrop preset word ("medieval", "indiana farm") brings its scenery; with a mood word too ("spooky castle")
- * the mood's palette wears the backdrop's scenery. `background` scopes it to the backdrop (ADR 0066): sprites keep
+ * the mood's palette wears the backdrop's scenery. `background` scopes it to the backdrop (ADR 0067): sprites keep
  * their look, so the colour wash stays light.
  */
 export async function moodSpecFor(mood: string, opts: { background?: boolean } = {}): Promise<MoodSpec> {

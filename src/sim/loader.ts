@@ -109,6 +109,7 @@ export function modApiFor(w: World, owner: string): ModApi {
     on: (event, fn) => w.on(owner, event, fn),
     say: (e, text, seconds) => w.say(owner, e?.id, text, seconds),
     signal: (name, value) => w.signal(owner, name, value),
+    setScene: (o) => w.setScene(owner, o),
   };
   return api;
 }

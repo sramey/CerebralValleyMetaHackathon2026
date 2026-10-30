@@ -159,7 +159,7 @@ const RULES: [string, Rule][] = [
     note("fallback to new");
     return { action: "new" };
   }],
-  // "Change the background to medieval" is a backdrop whatever Spark made of it (a tweak of the parallax mod, a build), unless it is an undo (ADR 0066).
+  // "Change the background to medieval" is a backdrop whatever Spark made of it (a tweak of the parallax mod, a build), unless it is an undo (ADR 0067).
   ["backdrop", (r, ctx, note) => {
     const words = detectBackdropCommand(ctx.command);
     if (!words || r?.action === "undo" || (r?.action === "mood" && r.mood)) return r;

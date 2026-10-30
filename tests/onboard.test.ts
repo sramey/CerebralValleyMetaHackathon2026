@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { Container } from "pixi.js";
-import { FIRST_IDEA, IDEAS, coachNext, ideaPlaceholder, plainBuildMessage } from "../src/client/onboard";
+import { FIRST_IDEA, IDEAS, STEP_TEXT, coachNext, ideaPlaceholder, plainBuildMessage } from "../src/client/onboard";
 import type { CoachStep } from "../src/client/onboard";
+import { CANCEL_GLYPH } from "../src/client/builds";
+import { ACTION_KEYS, JUMP_KEYS, LEFT_KEYS, RIGHT_KEYS } from "../src/client/keys";
 import { Feel } from "../src/client/feel";
 import type { FeelEvent } from "../src/client/feel";
 import { sfxFor } from "../src/client/sound";
@@ -32,6 +34,39 @@ describe("coach steps", () => {
     expect(walk(["move", "move"])).toBe(1);
     expect(walk(["skip"])).toBe(4);
     expect(walk(["submit", "skip", "built"])).toBe(4);
+  });
+});
+
+describe("coach copy names the real control (bead q4u)", () => {
+  /** `KeyA` -> `A`; codes with no letter (Space, ArrowLeft) are checked by hand below. */
+  const letters = (codes: readonly string[]): string[] =>
+    codes.map((c) => c.replace(/^Key/, "")).filter((c) => c.length === 1);
+
+  it("step 1 says how to talk: hold Shift, the real hold-to-talk key (voice.ts)", () => {
+    expect(STEP_TEXT[1].body).toContain("Shift");
+  });
+
+  it("step 2 gives the wait a button: the × that stops a running build (builds.ts)", () => {
+    expect(STEP_TEXT[2].body).toContain("20 seconds");
+    expect(STEP_TEXT[2].body).toContain(CANCEL_GLYPH);
+    expect(STEP_TEXT[2].body).toMatch(/stop/i);
+  });
+
+  it("step 3 names the keys the game actually listens to (keys.ts)", () => {
+    const play = STEP_TEXT[3].body;
+    for (const key of [...letters(LEFT_KEYS), ...letters(RIGHT_KEYS), ...letters(JUMP_KEYS)]) {
+      expect(play, `missing ${key}`).toContain(key);
+    }
+    expect(play).toContain("Space");
+    // Shooting is named by its two primary keys; both have to be real action keys.
+    for (const key of ["X", "B"]) {
+      expect(play).toContain(key);
+      expect(letters(ACTION_KEYS)).toContain(key);
+    }
+  });
+
+  it("keeps every card short enough to read on the coach's 340 px width", () => {
+    for (const step of [1, 2, 3] as const) expect(STEP_TEXT[step].body.length).toBeLessThan(200);
   });
 });
 

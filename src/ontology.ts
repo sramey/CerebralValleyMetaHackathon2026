@@ -1266,7 +1266,7 @@ const BACKDROP_FILLER = /\b(?:parallax|paralax|background|backdrop|bg|scenery|sc
 
 /**
  * "Change the background to medieval", "change the background to be in an Indiana farm",
- * "medieval parallax background" (ADR 0066). Returns the theme words, or null when the command
+ * "medieval parallax background" (ADR 0067). Returns the theme words, or null when the command
  * is not about the backdrop. "Add a castle in the background" is a build, not a backdrop.
  */
 export function detectBackdropCommand(command: string): string | null {
@@ -1276,7 +1276,8 @@ export function detectBackdropCommand(command: string): string | null {
   const change = new RegExp(`${lead}(?:change|set|switch|make|turn|swap|replace|redo|update)\\s+(?:the\\s+|my\\s+|our\\s+|this\\s+)?${BACKDROP_NOUN}(?:\\s+(?:background|backdrop|scenery))?\\s+(?:(?:to|into|with|for|so\\s+it(?:'s|\\s+is)?|so\\s+we(?:'re|\\s+are)?)\\s+)?(.+)$`, "i").exec(clean);
   const named = change ? null : new RegExp(`${lead}(?:(?:give\\s+(?:me|us)|i\\s+want|use|add|make|show(?:\\s+me)?|put\\s+(?:up|in)|switch\\s+to|go\\s+to)\\s+)?(?:a\\s+|an\\s+|the\\s+|some\\s+)?(.+?)\\s+(?:parallax\\s+|paralax\\s+)?(?:background|backdrop|scenery|landscape)$`, "i").exec(clean);
   const raw = (change ?? named)?.[1];
-  if (!raw) return null;
+  // "…to medieval and add a dragon" is a compound: the splitter gives each part its own route.
+  if (!raw || /(?:,|;|\b(?:and|then|also|plus)\s+(?:add|make|create|spawn|build|give|put|turn|change|remove|let)\b)/i.test(raw)) return null;
   const phrase = raw
     .replace(BACKDROP_FILLER, " ")
     .replace(/^\s*(?:be|look|looks|feel)\s+(?:like\s+)?/i, " ")
@@ -1300,7 +1301,7 @@ export function detectBackdropCommand(command: string): string | null {
 export function detectMoodCommand(command: string): string | null {
   const clean = command.trim().replace(/[.!?,;:]+$/, "").trim();
   if (!clean) return null;
-  // A new backdrop is a mood scoped to the background (ADR 0066).
+  // A new backdrop is a mood scoped to the background (ADR 0067).
   const backdrop = detectBackdropCommand(clean);
   if (backdrop) return backdrop;
 

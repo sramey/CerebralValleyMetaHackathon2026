@@ -147,7 +147,15 @@ export function isFlyingRequest(text: string, type = ""): boolean {
  * The sprite-sheet prompt for one subject, exactly as Muse Image receives it (the kid-safe screen
  * reads this string too, so it can be screened without spending an image call — bead 82z).
  */
-export function spritePrompt(cleanSubject: string, form: { held: boolean; scenery: boolean; flying?: boolean }): string {
+export function spritePrompt(cleanSubject: string, form: { held: boolean; scenery: boolean; flying?: boolean; skin?: boolean }): string {
+  if (form.skin) {
+    // A player skin (ADR 0066): the player's own character redrawn as this subject, for a game where it flies.
+    return `Pixel art game sprite sheet of ${cleanSubject}, the player's own character, for a 2D side-scrolling flight game, side view strictly facing right: ` +
+      `exactly 4 poses of the SAME ${cleanSubject} in 1 single horizontal row from left to right: idle hovering level, flying forward with thrust, banking upward, diving downward. ` +
+      `Orientation: every pose MUST face right in side profile — NEVER face backwards or away from the camera, NEVER front-facing, no top-down angles, NEVER multiple rows or a 2D grid. ` +
+      `Same design, colors and size in every pose; nothing underneath it, no ground line, no shadow, no landscape, no sky, no other objects. ` +
+      `Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
+  }
   if (form.held) {
     return `Pixel art game held item icon sheet containing ONLY the isolated object ${cleanSubject} by itself (side view, pointing right): exactly 4 variants of that single item in one row, nothing else in the image, no landscape, no ground, no sky. ONLY the standalone weapon or item itself — NO character, NO person, NO warrior, NO ninja, NO hands holding it, NO body, NO head, NO face, NO eyes, NO arms, NO legs, NO animation poses. Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, variants far apart with wide empty magenta gaps between them, variants must NOT touch or overlap each other`;
   }
@@ -163,13 +171,14 @@ export function spritePrompt(cleanSubject: string, form: { held: boolean; scener
       `Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
   }
   return `Pixel art game sprite sheet of ${cleanSubject} for a 2D side-scrolling platformer, side view strictly facing right: ` +
-    `exactly 4 action poses in 1 single horizontal row from left to right: idle standing facing right, running forward stride facing right, running forward stride facing right, jumping mid-air leap pose facing right. ` +
+    `exactly 4 action poses in 1 single horizontal row from left to right: idle standing facing right, running forward stride with the FRONT leg stretched forward and the back leg trailing (contact pose), running forward stride with the legs crossing under the body and one foot lifted off the ground (passing pose) — the two stride poses MUST look clearly different from each other and from idle, jumping mid-air leap pose facing right. ` +
     `Orientation: every pose MUST face right in side profile — NEVER face backwards or away from the camera (no rear view, no back of character facing away), NEVER front-facing (no RPG turnaround), no top-down angles, NEVER multiple rows or a 2D grid. ` +
     `Flat solid magenta background (#FF00FF), chunky pixels, dark outline, 16-bit platformer style, no text, poses far apart with wide empty magenta gaps between them, poses must NOT touch or overlap each other`;
 }
 
 /** The sheet prompt generateSubjectArt sends for this subject; the receipt (ADR 0065) shows the same string. */
-export function subjectArtPrompt(cleanSubject: string, key: string, scenery = false, flying = false): string {
+export function subjectArtPrompt(cleanSubject: string, key: string, scenery = false, flying = false, skin = false): string {
+  if (skin) return spritePrompt(cleanSubject, { held: false, scenery: false, skin: true });
   // The ontology names the art form (ADR 0031); the router's `scenery` hint still wins.
   const plan = artPlanFor(key);
   const heldItem = isHeldItemType(cleanSubject) || plan === "held-item";
@@ -181,11 +190,11 @@ export function subjectArtPrompt(cleanSubject: string, key: string, scenery = fa
  * Generate sprite-sheet art for a subject, or reuse the cached file.
  * Returns the public URL, or null on any failure. Never throws.
  */
-export async function generateSubjectArt(subject: string, keyRaw: string, scenery = false, flying = false): Promise<string | null> {
+export async function generateSubjectArt(subject: string, keyRaw: string, scenery = false, flying = false, skin = false): Promise<string | null> {
   try {
     // A flying subject gets its own sheet ("cat-fly"), so a cached walking cat can never
     // stand in for a flying one (ADR 0053).
-    const key = artKeyForType(keyRaw, flying && !scenery ? "fly" : undefined);
+    const key = artKeyForType(keyRaw, skin ? "skin" : flying && !scenery ? "fly" : undefined);
     if (!key) {
       clearCachedArt(keyRaw);
       return null;
@@ -202,7 +211,7 @@ export async function generateSubjectArt(subject: string, keyRaw: string, scener
     const apiKey = loadEnv();
     if (!apiKey) return null;
     const cleanSubject = subject.trim() || key;
-    const prompt = subjectArtPrompt(cleanSubject, key, scenery, flying);
+    const prompt = subjectArtPrompt(cleanSubject, key, scenery, flying, skin);
     const t0 = performance.now();
     // Image prompts take the same kid-safe screen (ADR 0044): a declined subject simply gets
     // no AI art, and the mod still loads with its code-drawn shape.
@@ -248,6 +257,16 @@ export function pickArtType(source: string): string | null {
     return s.type;
   }
   return null;
+}
+
+/** Most generated sprite sheets one build may order: the player's skin plus one creature (ADR 0066). The owner sets this number. */
+export const MAX_ART_PER_BUILD = 2;
+
+/** The skin a mod asks for with api.setScene({ playerSkin: "spaceship" }), or null. */
+export function pickSkin(source: string): string | null {
+  const m = /playerSkin\s*:\s*["']([^"']{1,40})["']/.exec(source);
+  const skin = m ? sanitizeArtKey(m[1]) : "";
+  return skin && artKeyForType(skin, "skin") ? skin : null;
 }
 
 const QUANTIFIER_OR_ARTICLE_RE =

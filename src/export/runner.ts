@@ -477,7 +477,7 @@ async function boot(): Promise<void> {
     }
 
     const horizon = H * 0.62 - camYSmooth * 0.1;
-    // A themed backdrop (ADR 0066) brings its own skyline: farmland is flat, a medieval valley keeps the mountains.
+    // A themed backdrop (ADR 0067) brings its own skyline: farmland is flat, a medieval valley keeps the mountains.
     const backdrop = mood?.backdrop;
     const amp = skylineAmplitude(backdrop);
     if (!backdrop || backdrop.skyline === "mountains") drawDistantMountains(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);

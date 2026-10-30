@@ -27,6 +27,8 @@ const STALE_MS = 120_000; // a build whose server never reports back is dropped,
 const LINGER_MS = 2500; // how long a settled chip stays visible
 const CANCEL_GRACE_MS = 8000; // a clicked x settles the chip by itself if no stage ever comes back
 const CANCEL_LABEL = "cancelled";
+/** The x on a running chip. Exported so the coach copy can be held to the real label (bead q4u). */
+export const CANCEL_GLYPH = "×";
 
 const STAGE_LABEL: Record<string, string> = {
   routing: "routing",
@@ -101,7 +103,7 @@ export function createBuilds(host: HTMLElement, onChange: () => void, onCancel?:
     const x = document.createElement("button");
     x.type = "button";
     x.className = "builds-cancel";
-    x.textContent = "×";
+    x.textContent = CANCEL_GLYPH;
     x.title = `Cancel "${b.command}"`;
     x.setAttribute("aria-label", `Cancel ${b.command}`);
     x.disabled = b.cancelling;

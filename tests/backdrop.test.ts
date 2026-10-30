@@ -15,7 +15,7 @@ function counter(): { gfx: Graphics; calls: () => number } {
 }
 const pal = { grass: 0x45d66b, ridgeNear: 0x0d1b20, moon: 0xf2ead0 };
 
-describe("themed backdrops (ADR 0066)", () => {
+describe("themed backdrops (ADR 0067)", () => {
   it.each([
     ["Change the background to medevil paralax background", "medevil"],
     ["Change the background to medieval parallax background", "medieval"],
@@ -30,7 +30,7 @@ describe("themed backdrops (ADR 0066)", () => {
     expect(detectMoodCommand(cmd)).toBe(words);
   });
 
-  it.each(["add a castle in the background", "add a parallax background", "parallax background", "change the background", "make the background darker", "add a tree", "make it spooky"])(
+  it.each(["add a castle in the background", "change the background to medieval and add a dragon", "add a parallax background", "parallax background", "change the background", "make the background darker", "add a tree", "make it spooky"])(
     "%s is not a backdrop",
     (cmd) => expect(detectBackdropCommand(cmd)).toBeNull(),
   );

@@ -1,7 +1,7 @@
 // Code-drawn mid-ground scenery in three fogged depth bands (beads 5fl, tq8). Pure function of the camera:
 // no sim entities, no per-load cost, nothing the verifier or the playtest can see.
 import type { Graphics } from "pixi.js";
-import type { Backdrop, BackdropMotif } from "../contract";
+import type { ThemedBackdrop, BackdropMotif } from "../contract";
 import { mixColor } from "./depth";
 
 export interface SceneryPalette {
@@ -21,7 +21,7 @@ export interface SceneryStyle {
 }
 
 export function sceneryStyle(moodName: string | undefined): SceneryStyle {
-  // A mood worn by a backdrop is named "<mood>-<backdrop>" ("spooky-medieval", ADR 0066).
+  // A mood worn by a backdrop is named "<mood>-<backdrop>" ("spooky-medieval", ADR 0067).
   moodName = moodName?.split("-")[0];
   return {
     snow: moodName === "christmas" || moodName === "snowy",
@@ -277,7 +277,7 @@ export function drawScenery(
   }
 }
 
-// --- Themed backdrops (ADR 0066) -------------------------------------------------------------
+// --- Themed backdrops (ADR 0067) -------------------------------------------------------------
 // "Change the background to medieval": the same three bands, but what stands in them comes from the
 // mood's `backdrop` (a skyline plus motif lists). Every motif is a code-drawn silhouette in the band's
 // fogged colour with a little accent (roofs, barn red, flames), so it sits in the same art style as the
@@ -596,7 +596,7 @@ function motif(c: MCtx, m: BackdropMotif, x: number, by: number, s: number, seed
 }
 
 /** Ridge amplitude for a skyline: flat farmland barely rolls, mountains keep the full ridges. */
-export function skylineAmplitude(bd: Backdrop | undefined): number {
+export function skylineAmplitude(bd: ThemedBackdrop | undefined): number {
   return !bd ? 1 : bd.skyline === "flat" ? 0.22 : bd.skyline === "hills" ? 0.7 : 1;
 }
 
@@ -614,7 +614,7 @@ export function drawBackdrop(
   skyBottom: number,
   fog: number,
   daytime: boolean,
-  bd: Backdrop,
+  bd: ThemedBackdrop,
   moodName?: string,
 ): void {
   const groundY = 400 - camY;

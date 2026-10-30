@@ -4,6 +4,7 @@ import { initFeedback } from "./feedback";
 import { initExplain } from "./explain";
 import { initReceipt } from "./receipt";
 import { Application, Graphics, Sprite, Texture } from "pixi.js";
+import { pickWalkFrame } from "./walk-frame";
 import { computePrimaries, framesFor, isProjectileType, loadSpriteSheet, loadSubjects } from "./sprites";
 import { startLateArt } from "./art-late";
 import chickenMod from "../mods/chicken";
@@ -35,6 +36,8 @@ import { createSpeech } from "./speech";
 import { createSketch } from "./sketch";
 import { CAMERA_LABEL, CAPTURE_LABEL, UPLOAD_LABEL, defaultAction, dialogCssVars, dialogLayout, fitInside, photoFindMessage, photoWorkSize, stageHint, wantsCameraStream } from "./camera-dialog";
 import type { DialogPhase } from "./camera-dialog";
+import { FINDER_IDLE, finderLine, finderNext } from "./camera-finder";
+import type { FinderEvent, FinderState } from "./camera-finder";
 import { compactPaperImage, paperImageSize, paperLevelMessage } from "./paper-image";
 import { matchPaperIntent, matchSketchIntent } from "./phrases";
 import { World } from "../sim/world";
@@ -231,7 +234,7 @@ $("#sketch-btn").addEventListener("click", () => sketch.open());
 };
 const layerOverride = new Map<number, number>();
 function subjectKeyFor(e: Entity): string | undefined {
-  const frames = framesFor(framesBySubject, e.type, e.type === "player");
+  const frames = framesFor(framesBySubject, e.type, e.type === "player", world.scene.playerSkin);
   if (frames.length < 1) return undefined;
   return Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0];
 }
@@ -428,7 +431,7 @@ let cachedPrimaries = new Set<number>();
 function getActivePrimaries(): Set<number> {
   if (lastPrimariesTick !== world.tickCount) {
     lastPrimariesTick = world.tickCount;
-    cachedPrimaries = computePrimaries(world.entities, framesBySubject, (type) => !!kindOf(type));
+    cachedPrimaries = computePrimaries(world.entities, framesBySubject, (type) => !!kindOf(type), world.scene.playerSkin);
   }
   return cachedPrimaries;
 }
@@ -523,6 +526,22 @@ function applyMood(m: MoodSpec | null): void {
   portal.setMood(m);
   sound.setMood(m);
 }
+// --- scene backdrop: a genre change paints its own sky (ADR 0066), under any mood ---------------
+const SPACE_BACKDROP = { skyTop: 0x01020a, skyBottom: 0x0a1030, moon: 0x7f9ad0, star: 0xdfe8ff };
+let paintedBackdropKey = "";
+/** Repaint the code-drawn sky when the scene's backdrop (or the mood on top of it) changes; a mood always wins. */
+function syncBackdrop(): void {
+  const key = mood ? `mood:${mood.name}` : world.scene.backdrop ?? "";
+  if (key === paintedBackdropKey) return;
+  paintedBackdropKey = key;
+  if (mood) return; // applyMood painted it
+  if (world.scene.backdrop === "space") {
+    pal.moon = SPACE_BACKDROP.moon; pal.star = SPACE_BACKDROP.star;
+    setSky(SPACE_BACKDROP.skyTop, SPACE_BACKDROP.skyBottom);
+  } else {
+    applyMood(null); // back to the starter sky
+  }
+}
 function revertMood(): void {
   restoreSheets();
   applyMood(null);
@@ -545,7 +564,7 @@ function onMood(m: MoodSpec | null): void {
     if (!mood || mood.name !== m.name) return; // superseded by a newer mood
     const used = new Set<string>();
     for (const e of world.entities) { const k = subjectKeyFor(e); if (k) used.add(k); }
-    // A new background alone (ADR 0066) leaves every sprite as it is: no sheet edits, no image spend.
+    // A new background alone (ADR 0067) leaves every sprite as it is: no sheet edits, no image spend.
     if (m.scope === "background") { say(`New background: ${m.name.replace(/-/g, " ")}.`, "done"); return; }
     const keys = [...used].filter((k) => !k.startsWith("photo") && !origFrames.has(k) && (framesBySubject[k]?.length ?? 0) > 0);
     // The palette is already on screen, so the card says done now (bead inh). The sheet redraws
@@ -622,7 +641,7 @@ function formatRadialLabel(type: string): string {
 const scaleOverride = new Map<number, number>();
 
 function hasDrawnArt(e: Entity): boolean {
-  return framesFor(framesBySubject, e.type, e.type === "player").length >= 1 && !kindOf(e.type);
+  return framesFor(framesBySubject, e.type, e.type === "player", world.scene.playerSkin).length >= 1 && !kindOf(e.type);
 }
 world.hasArt = hasDrawnArt; // gear sockets measure the body the eye sees (ADR 0061)
 
@@ -799,6 +818,8 @@ function render(): void {
     if (!target) closeRadialMenu();
     else positionRadialMenu(target, camX, camYSmooth);
   }
+  syncBackdrop();
+  const inSpace = world.scene.backdrop === "space";
   const isDaytime = isDaytimeSky(mood, world.entities, SKY[0]);
   const sunEntity = world.entities.find((e) => {
     const t = e.type.toLowerCase();
@@ -831,22 +852,25 @@ function render(): void {
   }
   // far hill silhouettes + parallax layers + atmospheric horizon mist (bead 1z7 & rm1)
   const horizon = H * 0.62 - camYSmooth * 0.1;
-  // A themed backdrop (ADR 0066) brings its own skyline: farmland is flat, a medieval valley keeps the mountains.
-  const backdrop = mood?.backdrop;
+  // A themed backdrop (ADR 0067) brings its own skyline: farmland is flat, a medieval valley keeps the mountains.
+  // A genre scene in space (ADR 0066) hides the terrain and scenery, backdrop included.
+  const backdrop = inSpace ? undefined : mood?.backdrop;
   const amp = skylineAmplitude(backdrop);
-  if (!backdrop || backdrop.skyline === "mountains") drawDistantMountains(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
   const fog = depthFog(mood?.name);
-  drawRidge(ridgeFar, camX, 0.3, horizon, 0, mixC(pal.ridgeFar, SKY[SKY_BANDS - 1], fog.far), amp);
-  drawRidge(ridgeNear, camX, 0.55, horizon + 34, 1, mixC(pal.ridgeNear, SKY[SKY_BANDS - 1], fog.near), amp);
+  if (!inSpace) {
+    if (!backdrop || backdrop.skyline === "mountains") drawDistantMountains(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
+    drawRidge(ridgeFar, camX, 0.3, horizon, 0, mixC(pal.ridgeFar, SKY[SKY_BANDS - 1], fog.far), amp);
+    drawRidge(ridgeNear, camX, 0.55, horizon + 34, 1, mixC(pal.ridgeNear, SKY[SKY_BANDS - 1], fog.near), amp);
+  }
   // Starter-world scenery, unless a mod brings its own parallax backdrop (bead 5fl)
   if (backdrop && world.entities.some((e) => e.type === "ground")) {
     drawBackdrop(gfx, camX, camYSmooth, W, pal, SKY[SKY_BANDS - 1], fog.far, isDaytime, backdrop, mood?.name);
-  } else if (world.entities.some((e) => e.type === "ground") && !world.entities.some(isParallaxOrSkyEntity)) {
+  } else if (!inSpace && world.entities.some((e) => e.type === "ground") && !world.entities.some(isParallaxOrSkyEntity)) {
     drawScenery(gfx, camX, camYSmooth, W, pal, SKY[SKY_BANDS - 1], fog.far, isDaytime, mood?.name);
   }
   // The backdrop replaces a parallax mod's silhouettes; its clouds still drift.
   drawParallaxEntities(gfx, backdrop ? world.entities.filter(isCloudEntity) : world.entities, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1], grade);
-  drawHorizonMist(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
+  if (!inSpace) drawHorizonMist(gfx, camX, camYSmooth, W, H, pal, SKY[SKY_BANDS - 1]);
   // solids-first, then contact shadows on solid surfaces, then dynamic entities
   order.length = 0;
   for (let i = 0; i < world.entities.length; i++) order.push(world.entities[i]);
@@ -871,7 +895,7 @@ function render(): void {
     const groups = new Map<string, { maxArea: number; items: { id: number; area: number }[] }>();
     for (const e of world.entities) {
       if (isParallaxOrSkyEntity(e)) continue;
-      const frames = framesFor(framesBySubject, e.type, e.type === "player");
+      const frames = framesFor(framesBySubject, e.type, e.type === "player", world.scene.playerSkin);
       if (frames.length < 1 || kindOf(e.type) || isTetherGear(e)) continue;
       const subject = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0] ?? e.type;
       const gk = `${e.owner}|${subject}`;
@@ -887,24 +911,24 @@ function render(): void {
       }
     }
   }
-  const spriteDraw: { e: Entity; frame: Texture; subjectKey: string | undefined }[] = [];
+  const spriteDraw: { e: Entity; frame: Texture; subjectKey: string | undefined; bob: number }[] = [];
   for (const e of world.entities) {
     if (isParallaxOrSkyEntity(e)) continue;
-    const frames = framesFor(framesBySubject, e.type, e.type === "player");
+    const frames = framesFor(framesBySubject, e.type, e.type === "player", world.scene.playerSkin);
     if (frames.length < 1 || !primaries.has(e.id) || kindOf(e.type) || (morph.size > 0 && isMorphing(e))) continue;
     seen.add(e.id);
     const moving = Math.abs(e.vx) > 5;
     const subjectKey = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0];
+    const pick = pickWalkFrame({ frameCount: frames.length, tick: world.tickCount, moving, onGround: e.onGround });
+    const bobbing = e.onGround && entityKind(e) !== "prop" && !(subjectKey !== undefined && scenerySubjects.has(subjectKey));
     const frame = frames.length === 1 ? frames[0]
       : (subjectKey !== undefined && scenerySubjects.has(subjectKey)) || entityKind(e) === "prop" ? frames[e.id % frames.length]
       : !e.solid && !e.onGround && e.gravityScale === 0 && frames.length >= 2 ? frames[Math.floor(world.tickCount / 5) % frames.length]
-      : frames.length >= 4 && !e.onGround ? frames[3]
-      : moving ? frames[1 + Math.floor(world.tickCount / 8) % Math.min(2, frames.length - 1)]
-      : frames[0];
-    spriteDraw.push({ e, frame, subjectKey });
+      : frames[pick.index];
+    spriteDraw.push({ e, frame, subjectKey, bob: bobbing ? pick.bob : 0 });
   }
   spriteDraw.sort((a, b) => layerOf(a.e, a.subjectKey) - layerOf(b.e, b.subjectKey));
-  for (const { e, frame, subjectKey } of spriteDraw) {
+  for (const { e, frame, subjectKey, bob } of spriteDraw) {
     const s = spriteFor(e.id);
     const targetH = visualHeightOf(e);
     const scale = targetH / frame.height;
@@ -912,7 +936,7 @@ function render(): void {
     const sq = feel.scaleOf(e.id);
     s.scale.set(scale * e.facing * sq.sx, scale * sq.sy);
     s.tint = feel.tintOf(e.id);
-    s.position.set(e.x - camX + e.w / 2, e.y - camYSmooth + e.h + 2);
+    s.position.set(e.x - camX + e.w / 2, e.y - camYSmooth + e.h + 2 - bob);
     s.zIndex = layerOf(e, subjectKey);
     s.visible = true;
   }
@@ -1258,6 +1282,19 @@ function setCameraPhase(phase: DialogPhase, note?: string): void {
 function setCameraStatus(text: string): void {
   cameraStatus.textContent = text;
 }
+// The find-the-object line is the one the panel got wrong (bead q4u): "Couldn't find it" outlived
+// the photo that produced it and survived a close. ./camera-finder owns which line is true now;
+// these two functions are the only way the finder writes to the strip.
+let finder: FinderState = FINDER_IDLE;
+function cameraFinder(ev: FinderEvent): void {
+  finder = finderNext(finder, ev);
+  const line = finderLine(finder);
+  if (line !== null) setCameraStatus(line);
+}
+/** True when there is no builder to ask, so the panel has to say the AI is offline. */
+function builderOffline(): boolean {
+  return ws?.readyState !== WebSocket.OPEN;
+}
 function updateCameraConfirm(): void {
   if (cameraPaper?.checked) {
     cameraConfirm.textContent = "Build this level";
@@ -1378,6 +1415,8 @@ function computeDiff(): void {
   }
   updateCameraConfirm();
   if (diffComponents.length > 0) {
+    // The person already has a cut to click: that line outranks anything the finder waits for.
+    cameraFinder({ kind: "covered" });
     setCameraStatus(`Found ${diffComponents.length} new thing(s). Click yours if I picked wrong, then Bring it in.`);
   }
 }
@@ -1441,6 +1480,8 @@ function computeWand(fx: number, fy: number): void {
   if (count < 300) {
     setCameraStatus("That highlighted almost nothing — try the background method: capture the empty scene first." + tip);
   } else {
+    // A usable highlight of their own: keep its line even if a late SAM answer arrives.
+    cameraFinder({ kind: "covered" });
     setCameraStatus("Highlighted your object — Bring it in, or click again to retry." + tip);
   }
   updateCameraConfirm();
@@ -1491,6 +1532,8 @@ function closeCameraModal(clearBg = true): void {
   stopCamera();
   cameraModal.hidden = true;
   if (clearBg) bgCanvas = null;
+  // The line goes with the panel: reopening starts blank instead of showing the last photo's answer.
+  cameraFinder({ kind: "close" });
 }
 function pixelateCut(cut: HTMLCanvasElement): { canvas: HTMLCanvasElement; pixelInfo: string } {
   const pixelOn = (cameraPixel?.checked ?? (document.querySelector("#camera-pixel") as HTMLInputElement | null)?.checked) !== false;
@@ -1568,7 +1611,7 @@ async function openCameraModal(paperMode = false): Promise<void> {
   currentKey = null;
   bgCanvas = null;
   clearDetection();
-  setCameraStatus("");
+  cameraFinder({ kind: "open" });
   cameraLabel.value = "";
   cameraPreview.width = 1; cameraPreview.height = 1;
   cameraPreview.getContext("2d")?.clearRect(0, 0, 1, 1);
@@ -1623,12 +1666,9 @@ function setPendingCapture(source: CanvasImageSource, sw: number, sh: number): v
     setCameraStatus("Drawing photo ready! Click 'Build this level' to make it playable.");
     return;
   }
+  // A fresh look starts here, so any earlier "Couldn't find it" goes with the old photo.
+  cameraFinder({ kind: "attempt", offline: builderOffline() });
   if (bgCanvas) computeDiff();
-  if (diffComponents.length === 0) {
-    // With no builder connected the SAM box never arrives: say so and point at the cut that works offline.
-    const offline = ws?.readyState !== WebSocket.OPEN;
-    setCameraStatus(offline ? "The AI is offline — click your object in the photo to cut it out yourself." : "Looking for it...");
-  }
   send(photoFindMessage(currentKey, dataUrl, currentPrompt()));
 }
 function cutoutTexture(key: string, src: HTMLCanvasElement, box: SegmentBox): HTMLCanvasElement | null {
@@ -1709,7 +1749,7 @@ function handleSegment(key: string, rawBox: unknown): void {
   if (box === null) {
     foundBox = null;
     cameraBoxEl.hidden = true;
-    if (diffComponents.length === 0 && !wandMask) setCameraStatus("Couldn't find it. Get closer, use a plain background, or click the object in the photo.");
+    cameraFinder({ kind: "missed" });
     updateCameraConfirm();
     return;
   }
@@ -1719,12 +1759,14 @@ function handleSegment(key: string, rawBox: unknown): void {
   cameraBoxEl.style.width = `${box.w / 16}%`;
   cameraBoxEl.style.height = `${box.h / 16}%`;
   cameraBoxEl.hidden = false;
-  if (diffComponents.length === 0 && !wandMask) setCameraStatus("Found it — the green box is what enters the game.");
+  cameraFinder({ kind: "found" });
   updateCameraConfirm();
 }
 cameraPaper?.addEventListener("change", () => {
   if (cameraPaper.checked) {
     cameraLabel.placeholder = "Level name (optional, e.g. Sky Castle)";
+    // A drawing is read whole (ADR 0040): there is no finder answer to wait for on this photo.
+    cameraFinder({ kind: "covered" });
     if (pendingCapture) { cameraConfirm.disabled = false; setCameraStatus("Drawing photo ready! Click 'Build this level' to make it playable."); }
     else setCameraStatus("Level drawing mode: upload or capture your paper drawing.");
   } else {
@@ -1761,7 +1803,7 @@ cameraUpload.addEventListener("change", () => {
 });
 cameraFind.addEventListener("click", () => {
   if (!currentKey || !pendingCapture) return;
-  setCameraStatus("Looking for it...");
+  cameraFinder({ kind: "attempt", offline: builderOffline() });
   sendPhotoFind();
 });
 cameraBg.addEventListener("click", () => {
@@ -1774,6 +1816,8 @@ cameraBg.addEventListener("click", () => {
   foundBox = null; clickPoint = null; cameraBoxEl.hidden = true; cameraDot.hidden = true;
   redrawPreview();
   updateCameraConfirm();
+  // Clear the masks and let this hint own the strip; a late answer about the old photo stays out.
+  cameraFinder({ kind: "covered" });
   setCameraStatus(cameraStream ? "Background remembered. Hold the object up and press Capture again." : "Background remembered — pick the photo with the object in it.");
 });
 wandSensEl?.addEventListener("input", () => {
@@ -1908,6 +1952,7 @@ async function applyWorld(msg: Extract<ServerMsg, { kind: "world" }>): Promise<v
         registerLook(m.look);
         loader.load(await importMod(m.compiled), m.values);
         if (m.art) { pendingArt.add(m.art.key); loadArtWithRetry(m.art.key, m.art.url, m.art.scenery === true); }
+        if (m.skinArt) { pendingArt.add(m.skinArt.key); loadArtWithRetry(m.skinArt.key, m.skinArt.url, false); }
       }
       loaded++;
     } catch { /* one bad mod must not stop the rest of the world loading */ }
@@ -2088,6 +2133,10 @@ function connect(): void {
           pendingArt.add(art.key);
           loadArtWithRetry(art.key, art.url, (art as { scenery?: boolean }).scenery === true);
         }
+        const skinArt = (msg.mod as { skinArt?: { key: string; url: string } }).skinArt;
+        if (skinArt) { pendingArt.add(skinArt.key); loadArtWithRetry(skinArt.key, skinArt.url, false); }
+        const skinPending = (msg.mod as { skinPending?: string }).skinPending;
+        if (skinPending) pendingArt.add(skinPending);
       } catch (err) {
         say(`That build failed to load here: ${err instanceof Error ? err.message : String(err)}`, "failed");
       }
