@@ -1,4 +1,4 @@
-// Pets and companions (bead 49d / ADR 0070). Playtest 2026-10-30: a tester asked for "a T-Rex
+// Pets and companions (bead 49d / ADR 0071). Playtest 2026-10-30: a tester asked for "a T-Rex
 // pet that stomps zombies"; it sank into the ground, spun left-right while standing on a ledge
 // and hurt its owner. Three rules are the engine's now, not the mod's or the prompt's:
 //   - a companion never damages the player or an ally (friendly-fire guard),

@@ -33,7 +33,7 @@ const HOSTILE_NAME_RE = /^(enemy|walker|turtle|boss|monster|zombie|goblin|creatu
 const PET_NAME_RE = /^(pet|pets|companion|ally|friend|friendly|buddy|pal|puppy|kitten|dog|cat|chicken|mount|steed|npc)\b/i;
 
 /**
- * A companion / pet / hero the player brought to life (ADR 0070). Pets are identified even when
+ * A companion / pet / hero the player brought to life (ADR 0071). Pets are identified even when
  * the mod also marked them hostile (a T-Rex pet that stomps zombies), because a companion that
  * hurts its owner is never what anyone asked for.
  */
@@ -107,7 +107,7 @@ export function isDamageableTarget(
     return isFriendly(target) || isPet(target);
   } else {
     // Any other shot — a pet's, an ally's, a turret the player built, or a hazard that forgot
-    // its flag — is on the player's side (ADR 0070): it may finish hostiles, never the player
+    // its flag — is on the player's side (ADR 0071): it may finish hostiles, never the player
     // or an ally. Friendly fire from a companion is not a thing a request can produce.
     if (target.type === "player") return false;
     if (isFriendly(target) || isPet(target)) return false;

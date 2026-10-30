@@ -1,4 +1,4 @@
-// Stomp: landing on a hostile's head finishes it and bounces the player (ADR 0070).
+// Stomp: landing on a hostile's head finishes it and bounces the player (ADR 0071).
 // Before this the rule lived inside the wave mod, so only its own swarm answered to a jump:
 // a hand-drawn or Wonder-built walker hurt you from below and could not be jumped on at all.
 // The engine owns it now, so every hostile — drawn on the sketch pad, spawned by a wave, or

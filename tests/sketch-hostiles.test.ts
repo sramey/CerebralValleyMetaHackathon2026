@@ -1,4 +1,4 @@
-// Drawn enemies are real hostiles (bead 49d / ADR 0070). A hand-drawn level used to spawn its
+// Drawn enemies are real hostiles (bead 49d / ADR 0071). A hand-drawn level used to spawn its
 // enemies as "casual" scenery: they walked through you, bullets passed through them and a jump
 // never landed. Playtest 2026-10-30: a tester drew a level with five enemies and none of them
 // could be fought. The fix is in the level compiler (server/sketch.ts), so every future sketch

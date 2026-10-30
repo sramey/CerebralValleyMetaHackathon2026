@@ -411,9 +411,9 @@ export class World {
   private hopCooldown = new Map<number, number>();
   /** Non-player projectiles that have been clear of the player at least once (they may hit the player from then on). */
   private clearOfPlayer = new Set<number>();
-  /** Hostiles the player landed on this tick: their body cannot also hurt the player (ADR 0070). */
+  /** Hostiles the player landed on this tick: their body cannot also hurt the player (ADR 0071). */
   private stomped = new Set<number>();
-  /** When each creature last flipped its sprite, so facing never flips every frame (ADR 0070). */
+  /** When each creature last flipped its sprite, so facing never flips every frame (ADR 0071). */
   private facingClock: FacingClock = new Map();
 
   /** Creatures told to walk the other way: direction and the tick the order lapses (ADR 0051). */
@@ -546,7 +546,7 @@ export class World {
           if (this.ledgeAhead(e, solids, dir)) {
             e.vx = 0;
             // A narrow perch has a drop on BOTH sides. Turning round every tick made a big pet
-            // spin left-right in place and never move (ADR 0070): stand still and keep facing.
+            // spin left-right in place and never move (ADR 0071): stand still and keep facing.
             const trapped = this.ledgeAhead(e, solids, -dir);
             if (!trapped) {
               if (e.data.hostile !== true) this.turnAway(e, -dir, 40);
@@ -606,7 +606,7 @@ export class World {
           else if (e.vy < 0) {
             // Rising into a ceiling pushes a body DOWN. But a body that was already inside the
             // solid (a pet that hopped or was placed into it) used to be shoved out of its
-            // underside, straight through the floor (ADR 0070). When the head is above the
+            // underside, straight through the floor (ADR 0071). When the head is above the
             // solid's top it is a body standing on it, not a head bump: put it back on top.
             const ceiling = s.y + s.h;
             const cameFromBelow = prevBottom - e.h >= ceiling - 0.5;
@@ -677,7 +677,7 @@ export class World {
     }
 
     // Post-step 3: Enemy contact damage to player with brief invulnerability timer.
-    // Post-step 3a first: stomping (ADR 0070). A falling player who lands on a hostile's head
+    // Post-step 3a first: stomping (ADR 0071). A falling player who lands on a hostile's head
     // finishes it and bounces, for every hostile — drawn, spawned by a wave, or built by a mod.
     this.stomped.clear();
     if (player && !player.dead) {
@@ -763,7 +763,7 @@ function notPlayersGear(e: Entity): boolean {
 /** Contact damage: flagged hostiles, or enemy-named types that did not opt out (friendly, casual or hero). */
 function hurtsOnContact(e: Entity): boolean {
   // A companion, an ally or a bystander never hurts the player, whatever else its mod set
-  // (ADR 0070): a "hostile" pet that chews on its owner is not a thing a request can produce.
+  // (ADR 0071): a "hostile" pet that chews on its owner is not a thing a request can produce.
   if (isPet(e) || isFriendly(e)) return false;
   if (e.data.hostile === true || e.data.enemy === true) return true;
   if (e.data.hostile === false || e.data.casual === true || e.data.hero === true) return false;

@@ -289,7 +289,7 @@ export function levelToModSource(level: SketchLevel): string {
   lines.push(`      api.spawn({ type: "sketch-coin", x: c[0], y: c[1], w: c[2], h: c[3], color: ${COLOR.coin}, gravityScale: 0, data: { baseY: c[1] } });`);
   lines.push(`    }`);
   lines.push(`    for (const e of ENEMIES) {`);
-  // ADR 0070: a drawn enemy is a real hostile, not scenery. hostile/enemy make it damageable
+  // ADR 0071: a drawn enemy is a real hostile, not scenery. hostile/enemy make it damageable
   // (bullets) and dangerous (contact) and stompable (the engine's landing rule); \`casual\`
   // would mark it friendly and put it out of reach of every one of those.
   lines.push(`      api.spawn({ type: "sketch-walker", x: e[0], y: e[1], w: e[2], h: e[3], vx: 42, color: ${COLOR.enemy}, gravityScale: 1, data: { baseX: e[0], baseY: e[1], hostile: true, enemy: true, creature: true, damage: 8 } });`);
@@ -307,7 +307,7 @@ export function levelToModSource(level: SketchLevel): string {
   lines.push(`      }`);
   lines.push(`      const player = api.player();`);
   lines.push(`      for (const e of api.byType("sketch-walker")) {`);
-  lines.push(`        // Drawn enemies are hostiles (ADR 0070): they chase the player once they notice one and`);
+  lines.push(`        // Drawn enemies are hostiles (ADR 0071): they chase the player once they notice one and`);
   lines.push(`        // patrol around the drawn spot otherwise; the engine turns them at walls and ledges.`);
   lines.push(`        const home = Number(e.data.baseX);`);
   lines.push(`        const dx = player ? (player.x + player.w / 2) - (e.x + e.w / 2) : 0;`);

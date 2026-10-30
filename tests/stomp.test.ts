@@ -1,4 +1,4 @@
-// Stomping (bead 49d / ADR 0070). Landing on a hostile's head finishes it and bounces the
+// Stomping (bead 49d / ADR 0071). Landing on a hostile's head finishes it and bounces the
 // player. Playtest 2026-10-30: a hand-drawn level's enemies could not be jumped on at all, and
 // a T-Rex pet "stomping" zombies only worked because its mod hand-rolled the check. The rule is
 // the engine's now, so every hostile answers to the same landing.

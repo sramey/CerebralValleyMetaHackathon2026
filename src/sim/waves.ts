@@ -219,7 +219,7 @@ export class WaveController implements IWaveController {
   private spawnedThisWave = 0;
   private bannerAnnouncedLevel = 0;
   private trackedEnemies = new Map<number, Entity>();
-  /** When each enemy last flipped its sprite, so the sprite never strobes (ADR 0070). */
+  /** When each enemy last flipped its sprite, so the sprite never strobes (ADR 0071). */
   private facingClock: FacingClock = new Map();
   private disposed = false;
   private onLevelUpCallbacks: Array<(level: number) => void> = [];
@@ -426,7 +426,7 @@ export class WaveController implements IWaveController {
         if (player) {
           const dx = (player.x + player.w / 2) - (enemy.x + enemy.w / 2);
           // Velocity follows the player; only the SPRITE lags, so it cannot strobe when the
-          // player stands on the enemy's centre (ADR 0070).
+          // player stands on the enemy's centre (ADR 0071).
           const dir = dx >= 0 ? 1 : -1;
           faceToward(enemy, dir, this.facingClock, tick);
           enemy.vx = dir * this.currentSpeed;

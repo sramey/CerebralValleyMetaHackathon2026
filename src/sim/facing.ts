@@ -1,4 +1,4 @@
-// Which way a creature's sprite looks (ADR 0070). Pure and deterministic.
+// Which way a creature's sprite looks (ADR 0071). Pure and deterministic.
 // The engine owns facing, so a creature that is pinned (against a wall, or parked on a
 // narrow drawn ledge with a drop on both sides) can no longer flip left-right EVERY frame
 // while its own code keeps pushing one way and the engine keeps pushing back: the T-Rex pet
