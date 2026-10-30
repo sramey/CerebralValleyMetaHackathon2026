@@ -1389,3 +1389,68 @@ export function isPlayerAbilityCommand(command: string): boolean {
   }
   return false;
 }
+
+/**
+ * What a level request asks for (ADR 0074). `fresh`: build a new layout (a new seed); `difficulty`/`length`:
+ * "up" and "down" step the current level, a number sets it. Nothing here needs a model.
+ */
+export interface LevelIntent { fresh: boolean; difficulty?: "up" | "down" | number; length?: "up" | "down" }
+
+const LEVEL_NOUN = String.raw`(?:level|stage|course|obstacle\s+course|platformer\s+level|platforming\s+level)`;
+const LEVEL_HARDER = String.raw`(?:harder|tougher|more\s+difficult|more\s+challenging|more\s+hard|difficult|challenging|hard|tough|insane|brutal|crazy)`;
+const LEVEL_EASIER = String.raw`(?:easier|gentler|simpler|less\s+hard|less\s+difficult|easy|gentle|beginner|simple)`;
+const LEVEL_LONGER = String.raw`(?:longer|bigger|larger|wider|huge|long|big|large|massive|giant|epic)`;
+const LEVEL_FILLER = String.raw`(?:new|fresh|different|random|real|proper|full|fun|cool|better|fleshed[- ]out|interesting|impressive|complete|actual|good|great|nice|awesome|platformer|platforming|obstacle|jumping|adventure|side[- ]scrolling|whole|entire)`;
+const LEVEL_MORE = String.raw`(?:more\s+)?(?:obstacles?|hazards?|gaps?|pits?|enemies|spikes?|platforms?|traps?|challenges?)`;
+
+/**
+ * "make a harder level", "extend the level", "make the level longer", "build me a real platformer level",
+ * "make this level easier". `hasLevel` says a generated level is already in the world: only then do the
+ * level-less phrasings ("make it harder", "add obstacles") mean the level.
+ */
+export function detectLevelCommand(command: string, hasLevel = false): LevelIntent | null {
+  const clean = command.trim().toLowerCase().replace(/[.!?,;:]+$/, "").trim().replace(/\s+/g, " ");
+  if (!clean || /\blevel[- ]?(?:up|ed)\b|\bnext level\b|\blevel\s+\d|\blevels?\s+(?:of|for)\b/.test(clean)) return null;
+  const lead = String.raw`^(?:(?:please|can\s+you|could\s+you|let'?s|i\s+want\s+to|i'?d\s+like\s+to|i\s+want|now)\s+)*`;
+  const out: LevelIntent = { fresh: false };
+  const take = (adj: string): void => {
+    if (new RegExp(String.raw`\b${LEVEL_HARDER}\b`).test(adj)) out.difficulty = "up";
+    else if (new RegExp(String.raw`\b${LEVEL_EASIER}\b`).test(adj)) out.difficulty = "down";
+    if (new RegExp(String.raw`\b${LEVEL_LONGER}\b`).test(adj)) out.length = "up";
+    else if (/\b(?:shorter|smaller|short|small|tiny)\b/.test(adj)) out.length = "down";
+  };
+  // "extend the level" / "extend the level to the right and add obstacles" / "add more level"
+  const extend = new RegExp(String.raw`${lead}(?:extend|lengthen|stretch|expand|grow|keep\s+going|continue)\s+(?:the\s+|this\s+|my\s+|our\s+)?${LEVEL_NOUN}\b(.*)$`).exec(clean)
+    ?? new RegExp(String.raw`${lead}(?:add|give\s+me|i\s+want)\s+more\s+${LEVEL_NOUN}\b(.*)$`).exec(clean);
+  if (extend) {
+    const rest = extend[1] ?? "";
+    // "extend the level and add obstacles": one more thing of the same family is fine, a different request is not.
+    const tail = new RegExp(String.raw`^(?:\s+(?:to\s+the\s+(?:right|left)|further|farther|more|out|on|a\s+lot|a\s+bit))*(?:\s*,?\s*(?:and|then|also|plus)?\s*(?:add|put|with|give)\s+(?:me\s+)?(?:some\s+|lots\s+of\s+)?${LEVEL_MORE}.*)?$`);
+    if (rest.trim() && !tail.test(rest)) return null;
+    out.length = "up";
+    if (new RegExp(LEVEL_MORE).test(rest)) out.difficulty = "up";
+    return out;
+  }
+  // "make the level longer" / "make it harder" (only with a level) / "make this stage easier"
+  const tweak = new RegExp(String.raw`${lead}(?:make|turn|get)\s+(?:me\s+)?(?:(?:the|this|my|our)\s+${LEVEL_NOUN}|it)\s+(?:a\s+(?:bit|little)\s+|much\s+|way\s+|even\s+|a\s+lot\s+|quite\s+)?((?:more\s+)?\w+(?:\s+(?:and|but)\s+\w+)?)$`).exec(clean);
+  if (tweak) {
+    const viaIt = !new RegExp(String.raw`${LEVEL_NOUN}\b`).test(clean);
+    if (viaIt && !hasLevel) return null;
+    take(tweak[1]);
+    return out.difficulty !== undefined || out.length !== undefined ? out : null;
+  }
+  // "make me a harder level", "build a real platformer level", "give me a longer course"
+  const adjs = String.raw`(?:${LEVEL_FILLER}|${LEVEL_HARDER}|${LEVEL_EASIER}|${LEVEL_LONGER})`;
+  const build = new RegExp(String.raw`${lead}(?:make|build|create|generate|give|design|set\s+up|add|do|try|show|let\s+me\s+(?:have|play))\s+(?:me\s+|us\s+)?(?:(?:a|an|the|some|another|one\s+more|a\s+whole)\s+)?((?:${adjs}(?:\s+and\s+|,?\s+))*)${LEVEL_NOUN}$`).exec(clean);
+  if (build) {
+    out.fresh = true;
+    take(build[1] ?? "");
+    return out;
+  }
+  // With a level in the world: "add obstacles", "more enemies", "make it harder" were meant for it.
+  if (hasLevel) {
+    if (new RegExp(String.raw`${lead}(?:add|put|throw\s+in|give\s+me)\s+(?:some\s+|lots\s+of\s+)?${LEVEL_MORE}$`).test(clean)) return { fresh: false, difficulty: "up" };
+    if (new RegExp(String.raw`${lead}(?:make\s+)?(?:it\s+)?${LEVEL_HARDER}$`).test(clean)) return { fresh: false, difficulty: "up" };
+  }
+  return null;
+}

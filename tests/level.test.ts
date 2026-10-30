@@ -147,3 +147,78 @@ describe("level size", () => {
     expect(l.pieces.filter((p) => p.kind === "flag")).toHaveLength(1);
   });
 });
+
+import { detectLevelCommand } from "../src/ontology";
+
+describe("detectLevelCommand (ADR 0074)", () => {
+  it.each([
+    ["make a harder level", { fresh: true, difficulty: "up" }],
+    ["Make a harder level.", { fresh: true, difficulty: "up" }],
+    ["make me a real platformer level", { fresh: true }],
+    ["build a longer obstacle course", { fresh: true, length: "up" }],
+    ["generate a new level", { fresh: true }],
+    ["give me an easier level", { fresh: true, difficulty: "down" }],
+    ["extend the level", { fresh: false, length: "up" }],
+    ["extend the level to the right", { fresh: false, length: "up" }],
+    ["extend the level and add obstacles", { fresh: false, length: "up", difficulty: "up" }],
+    ["can you extend this level and add more enemies", { fresh: false, length: "up", difficulty: "up" }],
+    ["make the level longer", { fresh: false, length: "up" }],
+    ["make this level much harder", { fresh: false, difficulty: "up" }],
+    ["make the stage easier", { fresh: false, difficulty: "down" }],
+    ["add more level", { fresh: false, length: "up" }],
+  ])("%s", (cmd, want) => {
+    expect(detectLevelCommand(cmd)).toEqual(want);
+  });
+
+  it.each([
+    "add a player", "level up", "make it rain", "make the dragon harder", "add a boss level 5", "add obstacles", "make it harder", "extend the level and add a dragon",
+    "make the ground wider", "change the background to medieval", "make a harder dragon", "next level",
+  ])("%s is not a level request (no level in the world)", (cmd) => {
+    expect(detectLevelCommand(cmd)).toBeNull();
+  });
+
+  it("level-less phrasings mean the level once one exists", () => {
+    expect(detectLevelCommand("add obstacles", true)).toEqual({ fresh: false, difficulty: "up" });
+    expect(detectLevelCommand("make it harder", true)).toEqual({ fresh: false, difficulty: "up" });
+    expect(detectLevelCommand("add some spikes", true)).toEqual({ fresh: false, difficulty: "up" });
+    expect(detectLevelCommand("add a dragon", true)).toBeNull();
+  });
+});
+
+import { compileMod } from "../server/compile";
+import { verifyMod } from "../server/verify";
+import { FIRST_LEVEL, currentLevelParams, levelModSource, levelParamsFor, levelSay } from "../server/levelmod";
+
+describe("level mod (server template)", () => {
+  it("the template compiles, passes the verifier and builds a real level", async () => {
+    const src = levelModSource({ ...FIRST_LEVEL, seed: 77 });
+    const c = compileMod(src);
+    expect(c.ok).toBe(true);
+    if (!c.ok) return;
+    const v = await verifyMod(src, c.js);
+    expect(v.errors ?? []).toEqual([]);
+    expect(v.ok).toBe(true);
+    expect(v.msPerFrame).toBeLessThan(2);
+  });
+
+  it("first 'harder level' lands on difficulty 4; later asks step the level that is already there", () => {
+    const first = levelParamsFor({ fresh: true, difficulty: "up" }, undefined, () => 0.5);
+    expect(first.difficulty).toBe(FIRST_LEVEL.difficulty + 1);
+    expect(first.length).toBe(FIRST_LEVEL.length);
+    const knobs = { difficulty: { value: 4 }, length: { value: 4800 }, seed: { value: 321 } };
+    const cur = currentLevelParams(knobs);
+    expect(levelParamsFor({ fresh: false, difficulty: "up" }, cur, () => 0.1)).toEqual({ difficulty: 5, length: 4800, seed: 321 });
+    expect(levelParamsFor({ fresh: false, difficulty: "up" }, { ...cur, difficulty: 5 }, () => 0.1).difficulty).toBe(5); // clamped
+    expect(levelParamsFor({ fresh: false, length: "up" }, cur, () => 0.1)).toEqual({ difficulty: 4, length: 7200, seed: 321 });
+    const fresh = levelParamsFor({ fresh: true }, cur, () => 0.9);
+    expect(fresh.seed).not.toBe(321);
+    expect(fresh.difficulty).toBe(4);
+    expect(levelParamsFor({ fresh: false, length: "down" }, { ...cur, length: 1500 }, () => 0.1).length).toBe(1200); // clamped
+  });
+
+  it("describes the level it built", () => {
+    const text = levelSay({ difficulty: 4, length: 4800, seed: 5 }, { gaps: 4, hazards: 7, enemies: 6, platforms: 20 }, "built");
+    expect(text).toMatch(/tough level/);
+    expect(text).toMatch(/4 pits/);
+  });
+});

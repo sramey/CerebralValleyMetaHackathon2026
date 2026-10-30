@@ -6,7 +6,7 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
 import { SIM, sheetsOf } from "../src/contract";
-import { detectBackdropCommand, detectMoodCommand, extractSpawnedEntities, isPlayerAbilityCommand, isPlayerCommand } from "../src/ontology";
+import { detectBackdropCommand, detectLevelCommand, detectMoodCommand, extractSpawnedEntities, isPlayerAbilityCommand, isPlayerCommand } from "../src/ontology";
 import { moodKey, moodSpecFor, pool, restyleSheet, sheetPath } from "./mood";
 import { fallbackVisual, lookFor, parseShape, parseVisual } from "./visual";
 import type { Visual } from "./visual";
@@ -16,6 +16,8 @@ import type { Routed } from "./router-model";
 import { chat, hasApiKey, loadEnv, SPARK, WONDER } from "./meta";
 import type { ChatMessage } from "./meta";
 import { compileMod } from "./compile";
+import { FIRST_LEVEL, LEVEL_MOD_ID, currentLevelParams, levelModSource, levelParamsFor, levelSay } from "./levelmod";
+import { generateLevel } from "../src/sim/levelgen";
 import { importMod, verifyMod } from "./verify";
 import { inspectWorld, playtestMod } from "./playtest";
 import type { PlaytestWorldMod } from "./playtest";
@@ -653,6 +655,11 @@ async function handleCommand(ws: WebSocket, text: string): Promise<void> {
   // back at an earlier one is merged by a deterministic guard; the word splitter is the fallback.
   // The router starts beside the split (ADR 0058): a command that turns out to be one request
   // no longer waits for the split first.
+  // "Extend the level and add obstacles" is one level request, not two builds racing each other (ADR 0074).
+  if (detectLevelCommand(text, sess(ws).manifest.has(LEVEL_MOD_ID))) {
+    await handleSingle(ws, text);
+    return;
+  }
   if (mightBeCompound(text)) {
     await adoptingOf.get(ws);
     noteCommand(sess(ws).recent, text);
@@ -764,6 +771,15 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     if (!spend(ws, "build")) return;
     await handleMood(ws, backdrop, true);
     send(ws, { kind: "timing", command, ms: { route: 0, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) } });
+    return;
+  }
+
+  // "Make a harder level", "extend the level": the engine's level generator answers, no router and no model (ADR 0074).
+  const levelIntent = forceEditModId ? null : detectLevelCommand(command, manifest.has(LEVEL_MOD_ID));
+  if (levelIntent) {
+    routing?.catch(() => {});
+    console.log(`[route] level ${JSON.stringify(levelIntent)} (no router call) for: ${command}`);
+    await handleLevel(ws, command, levelIntent, t0);
     return;
   }
 
@@ -1242,6 +1258,39 @@ const BUILTIN_IDS: ReadonlySet<string> = new Set(BUILTINS.map((b) => b.id));
  * "make it spooky": Spark routed here. Design the mood, tell the client to repaint, then it asks for the sprite edits (ADR 0017).
  * `background` ("change the background to medieval", ADR 0067) scopes it to the backdrop: no sprite edits.
  */
+/** A level request (ADR 0074): build the generated level, or step the one in the world by changing its knobs. Free: no model is called. */
+async function handleLevel(ws: WebSocket, command: string, intent: import("../src/ontology").LevelIntent, t0: number): Promise<void> {
+  const manifest = sess(ws).manifest;
+  const rec = manifest.get(LEVEL_MOD_ID);
+  const params = levelParamsFor(intent, currentLevelParams(rec?.knobs), Math.random);
+  const stats = generateLevel(params).stats;
+  const ms = () => ({ route: 0, write: 0, compile: 0, verify: 0, total: Math.round(performance.now() - t0) });
+  if (rec) {
+    for (const [knob, value] of Object.entries(params)) {
+      if (rec.knobs[knob] && rec.knobs[knob].value !== value) {
+        rec.knobs[knob] = { ...rec.knobs[knob], value };
+        send(ws, { kind: "tweak", modId: rec.id, knob, value });
+      }
+    }
+    noteTouched(sess(ws).recent, rec.id);
+    send(ws, { kind: "say", text: levelSay(params, stats, "changed") });
+    send(ws, { kind: "timing", command, ms: ms() });
+    logBuild({ command, route: "tweak", outcome: "tweak", modId: rec.id, knob: "level", value: params.difficulty, timings: ms(), fixAttempted: false });
+    return;
+  }
+  const timings: DeliverTimings = { route: 0, write: 0, compile: 0, verify: 0 };
+  stage(ws, { kind: "stage", stage: "writing", detail: "building the level", command });
+  const ok = await deliverMod(ws, command, levelModSource(params), "level", t0, timings);
+  if (!ok) {
+    send(ws, { kind: "say", text: "I couldn't lay that level out. Try again?" });
+    send(ws, { kind: "timing", command, ms: ms() });
+    return;
+  }
+  noteTouched(sess(ws).recent, LEVEL_MOD_ID);
+  send(ws, { kind: "say", text: levelSay(params, stats, "built") });
+  send(ws, { kind: "timing", command, ms: { route: 0, write: 0, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) } });
+}
+
 async function handleMood(ws: WebSocket, moodWords: string, background = false): Promise<void> {
   const t0 = performance.now();
   const words = moodWords.trim() || "spooky";
