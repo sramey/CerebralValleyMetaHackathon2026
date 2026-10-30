@@ -24,7 +24,7 @@ Entry for the Meta Global AI Developer Hackathon (solo, Indie track). **Deadline
 |---|---|---|
 | **Impact (30)** | Anyone makes a playable game by talking, with no code and no game-engine knowledge. A sentence becomes a working, playable change in about 10 s. | [96% of AI builds land verified, median 10.2 s](docs/evidence/build-stats.md) · first-run coach for non-coders · share links and one-file offline export |
 | **Meta tooling (25)** | Five Meta models do real jobs at runtime, plus Wonder's agent features. No other AI provider is used anywhere in the product. | [Who does what](#meta-models-who-does-what) below |
-| **Depth (20)** | A pure, deterministic 60 Hz engine runs the same in the browser and headless. Every AI-written mod is compiled, then playtested by a bot in a copy of *your* world before it may load. Failures are rejected with a reason and auto-fixed by a tool-using agent. | [ARCHITECTURE.md](docs/ARCHITECTURE.md) · [61 ADRs](docs/adr/README.md) · 814 tests · `npm run cold:check` |
+| **Depth (20)** | A pure, deterministic 60 Hz engine runs the same in the browser and headless. Every AI-written mod is compiled, then playtested by a bot in a copy of *your* world before it may load. Failures are rejected with a reason and auto-fixed by a tool-using agent. | [ARCHITECTURE.md](docs/ARCHITECTURE.md) · [64 ADRs](docs/adr/README.md) · 900+ tests · `npm run cold:check` |
 | **Demo (25)** | Voice in, game out, live. The "make me huge" beat shows the verifier reject a change and Wonder fix it on camera, then **How was this made?** replays the whole chain for that object. | [Shot list](docs/DEMO.md) · [rejected → fixed GIF](docs/img/make-me-huge-rejected-fixed.gif) |
 
 **What's new here:** most "AI makes a game" demos generate a game once. Here the software **rewrites itself while you use it**, and **no change goes live until an agent has proved you can still play**. Click anything and choose **How was this made?** to see the whole chain for that one object: your words, Spark's route, Wonder's code and the test it wrote, the rejected draft and the fix, every check the verifier ran, the Muse Image prompt and sheet, and the timings ([ADR 0065](docs/adr/0065-how-was-this-made-receipt.md)).
@@ -64,7 +64,7 @@ Entry for the Meta Global AI Developer Hackathon (solo, Indie track). **Deadline
 
 ## Run it in 5 minutes (judges start here)
 
-You need **Node 22+**. To let the AI build things you also need a **Meta Model API key**, from the [Meta Model API docs](https://dev.meta.ai/docs/models); without one the game still runs (built-in mods and demo worlds, no AI calls, see **No key?** below). Calls are billed to your account through the standard billing setup, and a card must be on file before calls work. Every model the game calls at runtime is a Meta model; no other AI provider is used.
+You need **Node 22+**. To let the AI build things you also need a **Meta Model API key**, from the [Meta Model API docs](https://dev.meta.ai/docs/models); without one the game still runs (built-in mods and demo worlds, no AI calls, see **No key?** below). Calls are billed to your account through the standard billing setup, and a card must be on file before calls work. Every model the game calls at runtime is a Meta model; no other AI provider is used. `BASETEN_API_KEY` (open-weights router and reviewer, see **Open weights** below) is optional.
 
 ```sh
 git clone https://github.com/sramey/CerebralValleyMetaHackathon2026.git
@@ -88,6 +88,8 @@ Open **http://127.0.0.1:8787/** (or your configured `PORT`) in Chrome, click the
 | `make it spooky` (or `neon`, `snowy`) | Spark art-directs a whole-world mood: the palette, fog and lighting change in ~3 s, then Muse Image redraws every AI sprite in the new style (~20–30 s). `undo` restores it |
 | `make this christmas themed` | Theme words restyle the world (no new code): snow-frosted surfaces, icy hills, falling snow |
 | `change the background to medieval` (or `…to be in an Indiana farm`, `desert`, `city`) | A new themed parallax backdrop in under a second, with no router call: a castle on the hill, village, church, windmills, tents and torches (or barns, silos, corn and hay bales on flat farmland). Sprites keep their look. Other places ("ancient Egypt", "a jungle") get palette and scenery from one Spark call. `spooky castle` puts the spooky palette on the medieval scenery. `undo` restores it ([ADR 0067](docs/adr/0067-themed-parallax-backdrops.md)) |
+| `turn this into a 2d space shooter` | Genre change in one sentence: the terrain and scenery disappear, a space sky replaces the world, the ninja becomes a generated ship, and there are targets to shoot. `undo` brings the platformer back exactly ([ADR 0066](docs/adr/0066-genre-change-set-scene.md)) |
+| `build a volcano` | A real drawn prop, not a flat shape: named things get Muse Image art and are sliced pose by pose ([item quality review](docs/process/item-quality-review.md)). Set-pieces and debris rendering for big props like this are still being merged |
 | `add some stairs` | Wonder builds code-drawn stone steps; the player walks up them |
 | `give me a gun`, then press **F** | Equips a hand cannon; F (or X) fires shots that damage enemies |
 | **✏️ Draw a level** (or say "let me draw a level") | Sketch ledges, coins and enemies over the game; Wonder reads the drawing and builds it |
@@ -133,7 +135,7 @@ Wonder's tool loop (inspect_world, run_playtest, fix) is visible live in the pip
 
 ## Open weights (optional)
 
-Router: Muse Spark Open (open weights) on Baseten when `BASETEN_API_KEY` is set, otherwise hosted Muse Spark; it falls back automatically, and the orb shows which model routed each command. `npm run bench:router` compares latency (ADR 0032).
+With `BASETEN_API_KEY` set, Muse Spark Open (open weights, served on Baseten) does two jobs. **Router:** it routes commands instead of hosted Muse Spark, falls back automatically, and the orb shows which model routed each one; `npm run bench:router` compares latency ([ADR 0032](docs/adr/0032-open-weights-router-on-baseten.md)). **Reviewer:** after a build lands, it reviews the code in the background and swaps in a fix only if the fix passes the same compile, 600-frame verify and playtest gates, then learns a rule from it; the object's **How was this made?** receipt shows the review ([ADR 0068](docs/adr/0068-open-weights-build-reviewer.md); `REVIEWER=off` disables it). Without the key both are off and nothing else changes.
 
 ## How it works
 
@@ -211,13 +213,17 @@ Never commit keys. `.env` is gitignored.
 - **Voice orders and living creations:** "chickens, follow me", "everyone stay", "dragon, go away" route locally in 1–4 ms with no model call (works with no key) and the engine steers the creatures; mods get events, speech bubbles and an action-key interaction ([ADR 0059](docs/adr/0059-living-creations-events-speech-orders-and-route-rules.md), `tests/interact.test.ts`, `tests/route-rules.test.ts`).
 - **Genre change:** "turn this into a space shooter" hides the platformer terrain and scenery, paints a space sky, re-skins the player as a generated ship and builds shootable targets on the shared combat path; one undo restores everything ([ADR 0066](docs/adr/0066-genre-change-set-scene.md), `tests/scene.test.ts`, `tests/genre-change.test.ts`).
 - **"How was this made?":** every AI-built object carries a receipt of its whole chain, from words to verified, playable mod, opened from the radial menu with no model call ([ADR 0065](docs/adr/0065-how-was-this-made-receipt.md), `tests/receipt.test.ts`). Sketch, paper and photo builds show their code and test but no build record yet.
-- Tests: 814 passing (`npm test`, green in a fresh clone), typecheck clean, production build green.
+- **Themed backdrops, item quality, UI:** "change the background to medieval" repaints the sky and scenery with no model call ([ADR 0067](docs/adr/0067-themed-parallax-backdrops.md)); named props get real art with pose-bound sheet slicing, not flat shapes; the health bar draws above every sprite and follows size changes; undoing a mood restores the world cleanly.
+- **Rehearsed:** the eight demo commands ran 20 times each against the live server, with pass rates and timings in [docs/process/rehearsal-20x.md](docs/process/rehearsal-20x.md).
+- **Open-weights reviewer:** Muse Spark Open reviews finished builds in the background and swaps in verified fixes ([ADR 0068](docs/adr/0068-open-weights-build-reviewer.md)).
+- Tests: 900+ passing (`npm test`, green in a fresh clone with no keys), typecheck clean, production build green.
 
 **Art pipeline: first proof (2026-10-27)**
 
 - Muse Image (`muse-image-1.0`) generates a sprite sheet in ~17 s (p50 over 77 logged sheets, p90 23 s); the client chroma-keys the magenta background, slices frames, and animates the player as a real AI-drawn ninja (idle/run/jump). Regenerate with `npx tsx scripts/art-sheet.ts`. SAM 3.1 answers in ~1.2s with box + encoded mask (mask decode pending — [ADR 0007](docs/adr/0007-art-pipeline-chroma-key-first.md)). Art is now generated on demand per mod subject and streams asynchronously with a digitize placeholder while it loads ([ADR 0008](docs/adr/0008-async-art-digitize-placeholder.md)); scenery subjects render as static variants with no animation cycling ([ADR 0009](docs/adr/0009-scenery-vs-creature-art.md)).
 
 **Not built yet**
+- Set-pieces and debris rendering (big props breaking apart): being merged.
 - Goal-reachability search (the playtest bot runs right and jumps; it doesn't prove a goal is reachable).
 - Endless level generator (cut for the hackathon).
 - Public hosting (deploy-ready; host not chosen yet), worker-thread verifier isolation ([ADR 0003](docs/adr/0003-verifier-in-process-empty-world.md)).
