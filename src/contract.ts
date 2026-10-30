@@ -396,10 +396,34 @@ export type ClientMsg =
       view?: { x: number; y: number; w: number; h: number };
     };
 
+/** A sprite sheet a mod's subject is drawn from: the key the client files its frames under, and where the image is. */
+export interface ArtSheet { key: string; url: string; scenery?: boolean }
+
+/**
+ * Every sheet a mod carries. A build can add several subjects (ADR 0066 note: no per-build cap), so `arts` holds all of
+ * them; `art` is the first and is still read for worlds saved before `arts` existed. Deduped by key, first one wins.
+ */
+export function sheetsOf(m: { art?: ArtSheet; arts?: readonly ArtSheet[] }): ArtSheet[] {
+  const out: ArtSheet[] = [];
+  const seen = new Set<string>();
+  for (const s of [...(m.arts ?? []), ...(m.art ? [m.art] : [])]) {
+    if (!s || typeof s.key !== "string" || typeof s.url !== "string" || seen.has(s.key)) continue;
+    seen.add(s.key);
+    out.push(s);
+  }
+  return out;
+}
+
+/** Every art key a mod message says is still being drawn: the list, or the single older `artPending`. */
+export function pendingArtKeys(m: { artPending?: string; artPendingList?: string[] }): string[] {
+  const list = Array.isArray(m.artPendingList) ? m.artPendingList.filter((k) => typeof k === "string") : [];
+  return list.length > 0 ? list : m.artPending ? [m.artPending] : [];
+}
+
 /** One mod in a saved world: a built-in the client bundles, or a verified AI mod with its source. */
 export type WorldMod =
   | { builtin: true; id: string; values: KnobValues }
-  | { builtin?: false; id: string; title: string; source: string; compiled: string; knobs: KnobDefs; values: KnobValues; art?: { key: string; url: string; scenery?: boolean }; skinArt?: { key: string; url: string }; look?: Look };
+  | { builtin?: false; id: string; title: string; source: string; compiled: string; knobs: KnobDefs; values: KnobValues; art?: ArtSheet; arts?: ArtSheet[]; skinArt?: { key: string; url: string }; look?: Look };
 
 /** One step of the session's time-travel strip (ADR 0041): what the world was after a build, mood, undo or restore. */
 export interface TimelineStep { n: number; kind: "start" | "build" | "mood" | "undo" | "restore"; label: string; mood?: string; mods: { id: string; title: string }[] }
@@ -505,7 +529,7 @@ export type BuildStage = "routing" | "writing" | "compiling" | "verifying" | "re
 
 export type ServerMsg =
   | { kind: "stage"; stage: BuildStage; detail: string; command?: string }
-  | { kind: "mod"; mod: { id: string; title: string; source: string; compiled: string; knobs: KnobDefs; art?: { key: string; url: string; scenery?: boolean }; artPending?: string; skinArt?: { key: string; url: string }; skinPending?: string; look?: Look } }
+  | { kind: "mod"; mod: { id: string; title: string; source: string; compiled: string; knobs: KnobDefs; art?: { key: string; url: string; scenery?: boolean }; artPending?: string; artPendingList?: string[]; skinArt?: { key: string; url: string }; skinPending?: string; look?: Look } }
   | { kind: "art"; modId: string; art: { key: string; url: string; scenery?: boolean } }
   | { kind: "mood"; mood: MoodSpec | null }
   | { kind: "restyled"; mood: string; key: string; url: string | null }
@@ -586,6 +610,8 @@ export interface BuildReceipt {
   /** What the verifier ran before this could load. */
   proof: { healthFrames: number; msBudget: number; msPerFrame: number; playtestSeeds: number; playtests: number; fixed: boolean };
   art?: ReceiptArt;
+  /** Every art order of the build, first one included (`art` stays the first for older readers). */
+  arts?: ReceiptArt[];
   review?: ReceiptReview;
   timings?: { route: number; write: number; compile: number; verify: number; total: number };
   at?: string;

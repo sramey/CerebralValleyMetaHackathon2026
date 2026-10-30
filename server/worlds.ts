@@ -5,7 +5,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
-import type { DemoWorld, KnobDefs, Look, KnobValue, KnobValues, MoodSpec, WorldMod } from "../src/contract";
+import { sheetsOf } from "../src/contract";
+import type { ArtSheet, DemoWorld, KnobDefs, Look, KnobValue, KnobValues, MoodSpec, WorldMod } from "../src/contract";
 import { moodKey, parseBackdrop, restyledUrl } from "./mood";
 
 export const MAX_WORLD_MODS = 40;
@@ -98,7 +99,7 @@ export function restyledForWorld(
   for (const m of mods) {
     if (m.id === "player") keys.add("ninja");
     else if (m.id === "chicken") keys.add("chicken");
-    if (!m.builtin && m.art?.key) keys.add(m.art.key);
+    if (!m.builtin) for (const s of sheetsOf(m)) keys.add(s.key);
     if (!m.builtin && m.skinArt?.key) keys.add(m.skinArt.key);
   }
   const mk = moodKey(mood.name);
@@ -111,6 +112,27 @@ export function restyledForWorld(
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+const MAX_SHEETS = 24;
+const SHEET_KEY = /^[a-z0-9-]{1,64}$/;
+
+/** A stored sheet list, defensively: a hand-edited world must not smuggle a path or a script in as art. */
+function cleanSheets(v: unknown): ArtSheet[] {
+  if (!Array.isArray(v)) return [];
+  const out: ArtSheet[] = [];
+  for (const s of v.slice(0, MAX_SHEETS)) {
+    const o = s as Partial<ArtSheet> | null;
+    if (!o || typeof o.key !== "string" || !SHEET_KEY.test(o.key) || typeof o.url !== "string" || !/^\/art\/gen\/[a-z0-9-]+(--[a-z0-9-]+)?\.webp$/.test(o.url)) continue;
+    out.push({ key: o.key, url: o.url, ...(o.scenery === true ? { scenery: true } : {}) });
+  }
+  return out;
+}
+
+/** The art fields a stored mod carries: `arts` (all sheets) plus `art` (the first, which older readers know). */
+function artFields(m: { art?: ArtSheet; arts?: unknown }): { art?: ArtSheet; arts?: ArtSheet[] } {
+  const all = sheetsOf({ arts: cleanSheets(m.arts), ...(m.art ? { art: m.art } : {}) });
+  return all.length > 0 ? { art: all[0], arts: all } : {};
+}
+
 export interface SessionMod {
   id: string;
   title: string;
@@ -118,6 +140,7 @@ export interface SessionMod {
   compiled: string;
   knobs: KnobDefs;
   art?: { key: string; url: string; scenery?: boolean };
+  arts?: ArtSheet[];
   skinArt?: { key: string; url: string };
   look?: Look;
 }
@@ -145,7 +168,7 @@ export function snapshotWorld(
     if (!rec) continue;
     const values: KnobValues = {};
     for (const [k, d] of Object.entries(rec.knobs)) values[k] = d.value;
-    mods.push({ id: rec.id, title: rec.title, source: rec.source, compiled: rec.compiled, knobs: rec.knobs, values, ...(rec.art ? { art: rec.art } : {}), ...(rec.skinArt ? { skinArt: rec.skinArt } : {}), ...(rec.look ? { look: rec.look } : {}) });
+    mods.push({ id: rec.id, title: rec.title, source: rec.source, compiled: rec.compiled, knobs: rec.knobs, values, ...artFields(rec), ...(rec.skinArt ? { skinArt: rec.skinArt } : {}), ...(rec.look ? { look: rec.look } : {}) });
   }
   return mods;
 }
@@ -160,7 +183,7 @@ export function parseWorld(text: string): StoredWorld | null {
       if (!m || typeof m.id !== "string") continue;
       if (m.builtin === true) mods.push({ builtin: true, id: m.id, values: sanitizeValues(m.values) });
       else if (typeof m.title === "string" && typeof m.source === "string" && typeof m.compiled === "string" && m.knobs && typeof m.knobs === "object") {
-        mods.push({ id: m.id, title: m.title, source: m.source, compiled: m.compiled, knobs: m.knobs, values: sanitizeValues(m.values), ...(m.art ? { art: m.art } : {}), ...(m.look ? { look: m.look } : {}) });
+        mods.push({ id: m.id, title: m.title, source: m.source, compiled: m.compiled, knobs: m.knobs, values: sanitizeValues(m.values), ...artFields(m), ...(m.look ? { look: m.look } : {}) });
       }
     }
     const mood = sanitizeMood(w.mood);

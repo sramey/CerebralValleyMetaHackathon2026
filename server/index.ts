@@ -5,12 +5,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
-import { SIM } from "../src/contract";
+import { SIM, sheetsOf } from "../src/contract";
 import { detectBackdropCommand, detectMoodCommand, extractSpawnedEntities, isPlayerAbilityCommand, isPlayerCommand } from "../src/ontology";
 import { moodKey, moodSpecFor, pool, restyleSheet, sheetPath } from "./mood";
 import { fallbackVisual, lookFor, parseShape, parseVisual } from "./visual";
 import type { Visual } from "./visual";
-import type { BuildReceipt, ClientMsg, ReceiptArt, ReceiptRoute, KnobDefs, Look, MoodSpec, ShapeName, KnobValue, ServerMsg, TimelineStep, WorldMod } from "../src/contract";
+import type { ArtSheet, BuildReceipt, ClientMsg, ReceiptArt, ReceiptRoute, KnobDefs, Look, MoodSpec, ShapeName, KnobValue, ServerMsg, TimelineStep, WorldMod } from "../src/contract";
 import { routerChat } from "./router-model";
 import type { Routed } from "./router-model";
 import { chat, hasApiKey, loadEnv, SPARK, WONDER } from "./meta";
@@ -66,6 +66,8 @@ interface ManifestRec {
   compiled: string;
   knobs: KnobDefs;
   art?: { key: string; url: string; scenery?: boolean };
+  /** Every sheet of the build, the first included (`art` is the first, kept for saved worlds that only know it). */
+  arts?: ArtSheet[];
   /** The player's re-skin sheet from api.setScene({ playerSkin }) (ADR 0066). */
   skinArt?: { key: string; url: string };
   look?: Look;
@@ -259,7 +261,7 @@ function handleTimelineRestore(ws: WebSocket, n: number): void {
   if (!step) { send(ws, { kind: "say", text: "That step is no longer in the timeline." }); return; }
   s.manifest.clear();
   for (const m of step.mods) {
-    if (m.builtin !== true) s.manifest.set(m.id, { id: m.id, title: m.title, source: m.source, compiled: m.compiled, knobs: structuredClone(m.knobs), ...(m.art ? { art: m.art } : {}), ...(m.skinArt ? { skinArt: m.skinArt } : {}), ...(m.look ? { look: m.look } : {}) });
+    if (m.builtin !== true) s.manifest.set(m.id, { id: m.id, title: m.title, source: m.source, compiled: m.compiled, knobs: structuredClone(m.knobs), ...(sheetsOf(m).length > 0 ? { art: sheetsOf(m)[0], arts: sheetsOf(m) } : {}), ...(m.skinArt ? { skinArt: m.skinArt } : {}), ...(m.look ? { look: m.look } : {}) });
   }
   s.mood = step.mood;
   s.moodMods = step.mood ? new Set(s.manifest.keys()) : undefined;
@@ -1129,6 +1131,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
       : { extra: [], pending: [] };
     const art = artPlan.art;
     const artPending = artPlan.artPending;
+    const artPendingList = artPlan.artPendingList;
     const extraArt = artPlan.extra;
     const pendingArts = artPlan.pending;
     // A genre change re-skins the player (ADR 0066): its own sheet, cached or ordered like any other art.
@@ -1141,22 +1144,24 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
       if (cachedUrl) skinArt = { key, url: cachedUrl };
       else if (spend(ws, "image")) skinPending = key;
     }
-    const rec: ManifestRec = { id: def.id, title: def.title, source, compiled: first.js, knobs: def.knobs ?? {}, ...(art ? { art } : {}), ...(skinArt ? { skinArt } : {}), ...(look ? { look } : {}) };
+    const rec: ManifestRec = { id: def.id, title: def.title, source, compiled: first.js, knobs: def.knobs ?? {}, ...(art ? { art } : {}), ...(art ? { arts: [art, ...extraArt] } : {}), ...(skinArt ? { skinArt } : {}), ...(look ? { look } : {}) };
     // The receipt (ADR 0065): the whole chain behind this mod, kept with it for "How was this made?".
-    const receiptArt: ReceiptArt | undefined = look
-      ? { model: "code", subject: artType ?? def.title, state: "code-drawn" }
-      : pendingArts[0]
-        ? { model: IMAGE_MODEL, subject: pendingArts[0].subject, prompt: subjectArtPrompt(pendingArts[0].subject, pendingArts[0].key, pendingArts[0].scenery, pendingArts[0].flying), state: "drawing" }
-        : art
-          ? { model: IMAGE_MODEL, subject: artType ?? def.title, url: art.url, state: "cached" }
-          : undefined;
+    // One entry per art order, in the order they were planned: sheets still drawing first, then cached ones.
+    const drawingReceipts = new Map(pendingArts.map((o) => [o, { model: IMAGE_MODEL, subject: o.subject, prompt: subjectArtPrompt(o.subject, o.key, o.scenery, o.flying), state: "drawing" } as ReceiptArt]));
+    const receiptArts: ReceiptArt[] = look
+      ? [{ model: "code", subject: artType ?? def.title, state: "code-drawn" }]
+      : [
+        ...drawingReceipts.values(),
+        ...[...(art ? [art] : []), ...extraArt].map((s, i): ReceiptArt => ({ model: IMAGE_MODEL, subject: i === 0 && pendingArts.length === 0 ? (artType ?? def.title) : s.key.replace(/-/g, " "), url: s.url, state: "cached" })),
+      ];
+    const receiptArt: ReceiptArt | undefined = receiptArts[0];
     rec.receipt = aiReceipt({
       modId: def.id, title: def.title, command,
       route: routed ?? { action: route.action, model: SPARK, open: false, fellBack: false, ms: routeMs, rules: [] },
       source, rejected: rejectedDrafts, tools: agentTrace.map((t) => ({ name: t.name, ms: t.ms, ...(t.ok === undefined ? {} : { ok: t.ok }) })), turns: agentTurns,
       playtests, msPerFrame: first.res.msPerFrame,
       timings: { route: routeMs, write: writeMs, compile: compileMs, verify: verifyMs, total: Math.round(performance.now() - t0) },
-      ...(receiptArt ? { art: receiptArt } : {}),
+      ...(receiptArt ? { art: receiptArt, arts: receiptArts } : {}),
     });
     // Edit keeps the same id so the client loader replaces it; if Wonder
     // renamed it anyway, drop the stale entry instead of duplicating.
@@ -1165,7 +1170,7 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     noteTouched(session.recent, def.id);
     const notes = genreWarnings(command, source);
     stage(ws, { kind: "stage", stage: "done", detail: `loaded ${def.id} (${SIM.healthFrames} frames OK)${notes.length ? ` — note: ${notes.join("; ")}` : ""}`, command });
-    send(ws, { kind: "mod", mod: { id: def.id, title: def.title, source, compiled: first.js, knobs: rec.knobs, ...(art ? { art } : {}), ...(artPending ? { artPending } : {}), ...(skinArt ? { skinArt } : {}), ...(skinPending ? { skinPending } : {}), ...(look ? { look } : {}) } });
+    send(ws, { kind: "mod", mod: { id: def.id, title: def.title, source, compiled: first.js, knobs: rec.knobs, ...(art ? { art } : {}), ...(artPending ? { artPending } : {}), ...(artPendingList ? { artPendingList } : {}), ...(skinArt ? { skinArt } : {}), ...(skinPending ? { skinPending } : {}), ...(look ? { look } : {}) } });
     // The other cached sheets ride the same async path: the client keys art by subject,
     // so several `art` messages for one mod all land (a build can add several new things).
     for (const cachedArt of extraArt) { try { send(ws, { kind: "art", modId: def.id, art: cachedArt }); } catch {} }
@@ -1179,14 +1184,14 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
       send(ws, { kind: "say", text: `Drawing your ${skin.replace(/-/g, " ")}...` });
     }
     if (pendingArts.length > 0) {
-      const receiptOrder = pendingArts[0];
       // Every sheet is drawn in parallel; each one lands as its own `art` message (ADR 0008).
       drawPendingArt(pendingArts, (order) => generateSubjectArt(order.subject, order.type, order.scenery, order.flying), (order, url, ms) => {
-        const ra = rec.receipt?.art;
-        if (ra && order === receiptOrder) Object.assign(ra, url ? { state: "drawn", url, ms } : { state: "none" });
+        const ra = drawingReceipts.get(order);
+        if (ra) Object.assign(ra, url ? { state: "drawn", url, ms } : { state: "none" });
         if (!url) return;
         const drawn = { key: order.key, url, ...(order.scenery ? { scenery: true } : {}) };
         if (!rec.art) rec.art = drawn;
+        rec.arts = sheetsOf({ ...(rec.arts ? { arts: rec.arts } : {}), art: drawn });
         try { send(ws, { kind: "art", modId: def.id, art: drawn }); } catch {}
       });
       send(ws, { kind: "say", text: `Drawing ${pendingArts.map((o) => o.subject).join(", ")}...` });
@@ -1299,7 +1304,7 @@ function handleWorldLoad(ws: WebSocket, msg: Extract<ClientMsg, { kind: "worldLo
   const manifest = s.manifest;
   manifest.clear();
   for (const m of w.mods) {
-    if (m.builtin !== true) manifest.set(m.id, { id: m.id, title: m.title, source: m.source, compiled: m.compiled, knobs: structuredClone(m.knobs), ...(m.art ? { art: m.art } : {}), ...(m.skinArt ? { skinArt: m.skinArt } : {}), ...(m.look ? { look: m.look } : {}) });
+    if (m.builtin !== true) manifest.set(m.id, { id: m.id, title: m.title, source: m.source, compiled: m.compiled, knobs: structuredClone(m.knobs), ...(sheetsOf(m).length > 0 ? { art: sheetsOf(m)[0], arts: sheetsOf(m) } : {}), ...(m.skinArt ? { skinArt: m.skinArt } : {}), ...(m.look ? { look: m.look } : {}) });
   }
   s.mood = w.mood;
   s.moodMods = w.mood ? new Set(manifest.keys()) : undefined;
@@ -1376,7 +1381,7 @@ async function handleFeedback(ws: WebSocket, msg: Extract<ClientMsg, { kind: "fe
     if (rec?.art?.key) clearCachedArt(rec.art.key);
     if (entityType) clearCachedArt(artKeyForType(entityType));
     if (modId) clearCachedArt(artKeyForType(modId));
-    if (rec) delete rec.art;
+    if (rec) { const gone = rec.art?.key; delete rec.art; if (rec.arts) rec.arts = rec.arts.filter((s) => s.key !== gone); }
   }
 
   if (fixNow && rec) {

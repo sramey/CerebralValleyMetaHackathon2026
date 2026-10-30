@@ -21,6 +21,8 @@ export interface ReceiptStep {
   code?: { label: string; text: string };
   /** Seconds, when this step has its own time. */
   secs?: number;
+  /** The sheet image to show beside its cut-out (art steps). */
+  artUrl?: string;
 }
 
 const secs = (ms: number | undefined): number | undefined => (ms === undefined || !Number.isFinite(ms) || ms <= 0 ? undefined : Math.round(ms / 100) / 10);
@@ -132,14 +134,15 @@ export function receiptSteps(r: BuildReceipt): ReceiptStep[] {
     });
   }
 
-  const a = r.art;
-  if (a && a.state !== "none") {
+  // One step per art order: a build can add several subjects, each with its own sheet (`art` alone is an older receipt).
+  for (const a of r.arts ?? (r.art ? [r.art] : [])) {
+    if (a.state === "none") continue;
     if (a.state === "code-drawn") {
       steps.push({ tone: "art", title: "Drawn in code", by: "engine", lines: ["A shape or effect the engine draws itself: no image call, no wait."] });
     } else {
       const lines = [`Subject: ${a.subject}`];
       lines.push(a.state === "drawing" ? "Still drawing: a digitize placeholder stands in until the sheet lands." : a.state === "cached" ? "Reused a sheet drawn earlier for the same subject." : "One sprite sheet on a magenta background, cut out and sliced into frames in your browser.");
-      steps.push({ tone: "art", title: a.state === "drawing" ? "Drawing the art" : "Drew the art", by: modelName(a.model), lines, ...(a.prompt ? { code: { label: "Show the image prompt", text: a.prompt } } : {}), secs: secs(a.ms) });
+      steps.push({ tone: "art", title: a.state === "drawing" ? `Drawing the art: ${a.subject}` : `Drew the art: ${a.subject}`, by: modelName(a.model), lines, ...(a.prompt ? { code: { label: "Show the image prompt", text: a.prompt } } : {}), secs: secs(a.ms), ...(a.url ? { artUrl: a.url } : {}) });
     }
   }
 

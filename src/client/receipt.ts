@@ -117,7 +117,7 @@ export function initReceipt(opts: ReceiptOptions) {
         }
         li.append(ul);
       }
-      if (s.tone === "art" && r.art?.url) li.append(artPair(r.art.url));
+      if (s.tone === "art" && s.artUrl) li.append(artPair(s.artUrl));
       if (s.code) {
         const d = el("details", "receipt-code");
         d.append(el("summary", undefined, s.code.label), el("pre", undefined, s.code.text));
