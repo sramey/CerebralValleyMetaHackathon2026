@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/src/client/style.css" />
   </head>
   <body>
-    <div id="app">
+    <div id="app" class="drawer-hidden">
       <main id="stage-wrap">
         <div id="stage"></div>
         <div id="timeline" aria-label="Time travel"></div>
@@ -74,7 +74,7 @@
       </aside>
     </div>
     <div id="hud">
-      <button id="drawer-toggle" type="button" aria-label="Toggle panel" title="Toggle panel">»</button>
+      <button id="drawer-toggle" type="button" aria-label="Toggle panel" title="Toggle panel" aria-expanded="false">«</button>
     </div>
     <div id="camera-modal" hidden>
       <div class="camera-card">

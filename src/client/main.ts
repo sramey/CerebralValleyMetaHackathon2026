@@ -36,6 +36,7 @@ import { createGhost } from "./ghost";
 import { mountTimeline } from "./timeline";
 import { createPipeline } from "./pipeline";
 import { createBrain } from "./brain";
+import { createQuickbar } from "./quickbar";
 import { createTheater } from "./build-theater";
 import { createHud } from "./hud";
 import { createSpeech } from "./speech";
@@ -666,6 +667,7 @@ drawerToggle.addEventListener("click", () => {
   setTimeout(fitRenderer, 400);
 });
 addEventListener("resize", fitRenderer);
+createQuickbar(stageWrapEl);
 const RADIAL_PAD_X = 104;
 const RADIAL_PAD_TOP = 134;
 const RADIAL_PAD_BOTTOM = 128;
