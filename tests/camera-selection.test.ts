@@ -2,8 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   segmentImage,
   toggleSelectionAtPoint,
+  selectForegroundInBox,
   isPointInBox,
+  isSelectionTooLarge,
+  isBoxTooLarge,
   colorDiff,
+  buildSelectionState,
 } from "../src/client/camera-selection";
 import {
   drawCartoonHead,
@@ -14,6 +18,7 @@ import {
   BG_COLOR,
 } from "./fixtures/drawn-head";
 import { drawMug } from "../scripts/make-mug-fixture";
+import { drawToyDeskScene } from "../scripts/make-toy-fixture";
 import { candidatePrompts } from "../server/photo";
 
 describe("camera object selection (bead bgh)", () => {
@@ -114,15 +119,46 @@ describe("camera object selection (bead bgh)", () => {
     expect(selection.box1600!.h).toBeGreaterThan(500);
     // Corner pixel is not in mask
     expect(selection.mask[0]).toBe(0);
+    expect(selection.isTooLarge).toBe(false);
   });
 });
 
-describe("candidatePrompts for SAM (bead bgh)", () => {
+describe("selection size guard (camfix)", () => {
+  it("flags selection as too large when exceeding 60% of frame", () => {
+    expect(isSelectionTooLarge(601, 1000)).toBe(true);
+    expect(isSelectionTooLarge(600, 1000)).toBe(false);
+    expect(isSelectionTooLarge(100, 1000)).toBe(false);
+    expect(isSelectionTooLarge(0, 1000)).toBe(false);
+  });
+
+  it("flags 1600-space box as too large when exceeding 60% of area", () => {
+    // 1600 * 1600 = 2,560,000. 60% = 1,536,000.
+    const fullBox = { x: 0, y: 0, w: 1600, h: 1600 };
+    expect(isBoxTooLarge(fullBox)).toBe(true);
+
+    const largeBox = { x: 100, y: 100, w: 1300, h: 1300 }; // 1,690,000 > 1,536,000
+    expect(isBoxTooLarge(largeBox)).toBe(true);
+
+    const normalBox = { x: 400, y: 400, w: 600, h: 600 }; // 360,000 < 1,536,000 (~14%)
+    expect(isBoxTooLarge(normalBox)).toBe(false);
+  });
+
+  it("buildSelectionState marks isTooLarge when all segments in image are active", () => {
+    const headImg = drawCartoonHead();
+    const segResult = segmentImage(headImg);
+    const allSegments = new Set(segResult.segments.map((s) => s.id));
+    const sel = buildSelectionState(segResult, allSegments);
+    expect(sel.isTooLarge).toBe(true);
+  });
+});
+
+describe("candidatePrompts for SAM (bead bgh + camfix)", () => {
   it("expands empty prompt to fallback candidates including object and person", () => {
     const prompts = candidatePrompts("");
     expect(prompts).toContain("object");
-    expect(prompts).toContain("person");
+    expect(prompts).toContain("toy");
     expect(prompts).toContain("item");
+    expect(prompts).toContain("person");
   });
 
   it("expands hair prompt to include head and person", () => {
@@ -142,7 +178,7 @@ describe("candidatePrompts for SAM (bead bgh)", () => {
   });
 });
 
-describe("SAM box path preference (bead bgh)", () => {
+describe("SAM box path preference & clipping (bead bgh + camfix)", () => {
   const samBox = { x: 320, y: 320, w: 960, h: 960 };
 
   it("recognizes when a click falls inside the SAM box", () => {
@@ -154,6 +190,49 @@ describe("SAM box path preference (bead bgh)", () => {
     expect(isPointInBox(0.05, 0.05, samBox)).toBe(false);
     expect(isPointInBox(0.95, 0.95, samBox)).toBe(false);
   });
+
+  it("selectForegroundInBox selects only foreground within the SAM box", () => {
+    const mug = drawMug();
+    const mugSeg = segmentImage({ w: mug.width, h: mug.height, data: mug.rgba });
+    // Mug in mug-photo is centered around x: 128..332 (1600 space: ~420..1100), y: 130..300 (~570..1330)
+    const mugBox = { x: 400, y: 500, w: 750, h: 850 };
+    const sel = selectForegroundInBox(mugSeg, mugBox);
+    expect(sel.count).toBeGreaterThan(0);
+    expect(sel.isTooLarge).toBe(false);
+    // Mask does not leak outside mug box into corners
+    expect(sel.mask[0]).toBe(0);
+  });
+
+  it("clips click selection to SAM box when clipBox is provided", () => {
+    const headImg = drawCartoonHead();
+    const segResult = segmentImage(headImg);
+    // Small box covering only the hair at top
+    const hairBox = { x: 400, y: 200, w: 800, h: 400 };
+    const sel = toggleSelectionAtPoint(segResult, 100 / HEAD_W, 70 / HEAD_H, new Set(), hairBox);
+    // Should be clipped to hairBox
+    expect(sel.box1600).not.toBeNull();
+    expect(sel.isTooLarge).toBe(false);
+    // Bottom of face should NOT be selected because it is outside hairBox
+    const chinPixelIdx = 160 * HEAD_W + 100;
+    expect(sel.mask[chinPixelIdx]).toBe(0);
+  });
+
+  it("selects toy on realistic cluttered desk scene without leaking into wall or keyboard", () => {
+    const scene = drawToyDeskScene();
+    const seg = segmentImage({ w: scene.width, h: scene.height, data: scene.rgba });
+    // Electronic toy is at (185..271, 135..250), center fx ~0.47, fy ~0.53
+    // With SAM box around the toy:
+    const toyBox = { x: 600, y: 550, w: 400, h: 600 };
+    const sel = toggleSelectionAtPoint(seg, 225 / scene.width, 190 / scene.height, new Set(), toyBox);
+
+    expect(sel.count).toBeGreaterThan(500);
+    expect(sel.isTooLarge).toBe(false);
+
+    // Wall at top-left (x=50, y=50) must NOT be selected
+    expect(sel.mask[50 * scene.width + 50]).toBe(0);
+    // Keyboard at bottom-left (x=100, y=280) must NOT be selected
+    expect(sel.mask[280 * scene.width + 100]).toBe(0);
+    // Shelf at top-right (x=400, y=70) must NOT be selected
+    expect(sel.mask[70 * scene.width + 400]).toBe(0);
+  });
 });
-
-

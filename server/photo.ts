@@ -20,8 +20,8 @@ export function candidatePrompts(prompt: string): string[] {
     raw.push("head", "person", "face", "hair");
   }
 
-  // Broad semantic fallbacks for objects / figures
-  raw.push("object", "person", "item", "subject", "foreground");
+  // Broad semantic fallbacks for objects / toys / props (person at end as fallback)
+  raw.push("object", "toy", "handheld object", "item", "gadget", "device", "prop", "person");
 
   const seen = new Set<string>();
   const out: string[] = [];
@@ -68,7 +68,11 @@ async function segmentOnce(
     const y2 = Number(m[4]);
     const W = Number(m[5]) || 1600;
     const H = Number(m[6]) || 1600;
-    return { x: x1 * 1600 / W, y: y1 * 1600 / H, w: (x2 - x1) * 1600 / W, h: (y2 - y1) * 1600 / H };
+    const box = { x: x1 * 1600 / W, y: y1 * 1600 / H, w: (x2 - x1) * 1600 / W, h: (y2 - y1) * 1600 / H };
+    // Guard against oversized boxes (covers > 60% of frame area, e.g. whole room or entire person)
+    const areaFraction = (box.w * box.h) / (1600 * 1600);
+    if (areaFraction > 0.60) return null;
+    return box;
   } catch {
     return null;
   }
