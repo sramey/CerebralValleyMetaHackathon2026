@@ -1,5 +1,7 @@
 # Win plan (set 2026-10-29)
 
+2026-10-31: feature freeze. Remaining work is rehearsal, docs and the video.
+
 **Deadline:** Wed Nov 4, 9:00 PM ET. We submit by **3 PM**. Recording is **Tue Nov 3**. Feature freeze **Mon Nov 2, 10 PM**.
 
 ## What wins
@@ -14,10 +16,10 @@ Rubric: Impact 30 · Meta tooling 25 · Depth 20 · Demo 25. Category risk: "AI 
 | # | Item | Moves | Owner / day |
 |---|---|---|---|
 | 1 | Voice hold-to-talk (Muse Voice Transcribe, live partials under the orb) (**done**) | Demo, Meta tooling | done |
-| 2 | Visible verifier: ghost playtest window + "can you still play?" bot + rejected→auto-fixed beat with the orb explaining | Depth, Demo | bottom · Thu–Fri |
+| 2 | Visible verifier: ghost playtest window + "can you still play?" bot + rejected→auto-fixed beat with the orb explaining (**done**) | Depth, Demo | done |
 | 3 | Deploy-ready server, share links, spend guard, visitor mode (**done**). Public hosting is **optional** per CV (10-29); only if time allows for the X post / Community vote | Impact | done |
 | 3b | Judge-ready repo: README quickstart with your own Meta key, built-during-event section (kickoff ended Oct 26 12:24 PM ET), sanitized live-demo evidence, fresh-clone test | Required | Sun–Mon |
-| 4 | Non-coder test: 3–5 people, 15 min each; capture clips and numbers | Impact | Sun |
+| 4 | Non-coder test: two sessions held, see [USER-TEST.md](USER-TEST.md) / [evidence](evidence) (**done**) | Impact | done |
 | 5 | "Make it spooky" world restyle | Demo | Sun if time |
 | 6 | Rehearse the 8 demo commands 20× each; fix flakiness only | Demo | Mon–Tue |
 | 7 | Cold-start paint: the stage renders before the sprite sheets load, so a stalled sheet can't show a black stage (**done**, bead 8zu) | Demo (judging "runs cold") | done |

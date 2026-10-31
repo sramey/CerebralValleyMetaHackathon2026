@@ -24,6 +24,13 @@ Total planned: 170 s (2:50). Slack: 10 s. Every command above is in a rehearsed 
 
 **Speed-up and cut plan.** Only waits get compressed, and each speed-up carries a visible "⏩ N×" label: beat 2 (build wait), beat 3 (dragon art), beat 5 (fix wait), beat 7 (sprite redraw), beat 8 (ship art). Hard cuts are fine at the two slow builds: beat 4 (double jump, 13–20 s live) and beat 8. If the edit runs long, drop beat 9 (camera, 18 s) first, then beat 3.
 
+## Optional beats (new 10-30/31)
+
+Two candidate swaps built 10-30/31 that demonstrate the deterministic generator and place backdrops ([ADR 0073](adr/0073-generated-levels.md)). Note: these are not yet in a rehearsed set.
+
+- **"make a harder level"** (level generator): Replaces flat starter ground with a multi-height obstacle course containing pits, ledges, spikes, patrolling walkers, coins, checkpoints, and a goal flag in under a second (`api.buildLevel`). Candidate swap for beat 4 or beat 8.
+- **"make this look like England"** (place theme): Deterministic themed parallax backdrop swapping sky, hills, architecture (clocktower, phonebox), and flag with no model call. Candidate swap for beat 7 or alongside mood restyling.
+
 ## Measured on the live server (bead ki5, 3 runs each)
 | Beat | Command | Pass | p50 | p90 | Notes |
 |---|---|---|---|---|---|
