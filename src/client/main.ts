@@ -51,7 +51,7 @@ import { CAMERA_LABEL, CAPTURE_LABEL, UPLOAD_LABEL, defaultAction, dialogCssVars
 import type { DialogPhase } from "./camera-dialog";
 import { FINDER_IDLE, finderLine, finderNext } from "./camera-finder";
 import type { FinderEvent, FinderState } from "./camera-finder";
-import { isPointInBox, segmentImage, toggleSelectionAtPoint } from "./camera-selection";
+import { isBoxTooLarge, isPointInBox, isSelectionTooLarge, segmentImage, selectForegroundInBox, toggleSelectionAtPoint } from "./camera-selection";
 import type { SegmentationResult, SelectionState } from "./camera-selection";
 import { compactPaperImage, paperImageSize, paperLevelMessage } from "./paper-image";
 import { matchPaperIntent, matchSketchIntent } from "./phrases";
@@ -1421,11 +1421,21 @@ function updateCameraConfirm(): void {
     return;
   }
   cameraConfirm.textContent = "Bring it into the game";
+  const tooLarge =
+    (activeSelection !== null && (activeSelection.isTooLarge || isSelectionTooLarge(activeSelection.count, (currentSegmentation?.w ?? 1) * (currentSegmentation?.h ?? 1)))) ||
+    (foundBox !== null && isBoxTooLarge(foundBox));
+
+  if (tooLarge) {
+    cameraConfirm.disabled = true;
+    return;
+  }
+
   cameraConfirm.disabled = !(
     (diffComponents.length > 0 && selectedComponent >= 0) ||
-    (activeSelection !== null && activeSelection.count > 0) ||
+    (activeSelection !== null && activeSelection.count > 0 && !activeSelection.isTooLarge) ||
     (wandMask !== null && wandMask.count >= 300) ||
-    foundBox !== null || clickPoint !== null
+    (foundBox !== null && !isBoxTooLarge(foundBox)) ||
+    clickPoint !== null
   );
 }
 function clearDetection(): void {
@@ -1872,12 +1882,17 @@ function cutoutTexture(key: string, src: HTMLCanvasElement, box: SegmentBox): HT
 function handleSegment(key: string, rawBox: unknown): void {
   if (key !== currentKey || cameraModal.hidden) return;
   const box = rawBox === null ? null : normalizeBox(rawBox);
-  if (box === null) {
+  if (box === null || isBoxTooLarge(box)) {
     foundBox = null;
     cachedSamBox = null;
     samBoxActive = false;
     cameraBoxEl.hidden = true;
-    cameraFinder({ kind: "missed" });
+    if (box !== null && isBoxTooLarge(box)) {
+      cameraFinder({ kind: "covered" });
+      setCameraStatus("That selected too much of the photo (over 60%). Click directly on the object to select it.");
+    } else {
+      cameraFinder({ kind: "missed" });
+    }
     updateCameraConfirm();
     return;
   }
@@ -1889,6 +1904,22 @@ function handleSegment(key: string, rawBox: unknown): void {
   cameraBoxEl.style.width = `${box.w / 16}%`;
   cameraBoxEl.style.height = `${box.h / 16}%`;
   cameraBoxEl.hidden = false;
+
+  // Prefer Meta SAM 3.1: auto-seed selection to foreground inside model box
+  if (pendingCapture) {
+    if (!currentSegmentation) {
+      const img = workImage(pendingCapture.canvas, 384);
+      if (img) currentSegmentation = segmentImage(img);
+    }
+    if (currentSegmentation) {
+      const sel = selectForegroundInBox(currentSegmentation, box);
+      if (sel.count > 0 && !sel.isTooLarge) {
+        activeSelection = sel;
+        redrawPreview();
+      }
+    }
+  }
+
   cameraFinder({ kind: "found" });
   updateCameraConfirm();
 }
@@ -1971,41 +2002,21 @@ cameraPreview.addEventListener("click", (e) => {
     }
     return;
   }
-  if (cachedSamBox !== null && isPointInBox(fx, fy, cachedSamBox)) {
-    if (samBoxActive) {
-      samBoxActive = false;
-      foundBox = null;
-      cameraBoxEl.hidden = true;
-      cameraFinder({ kind: "covered" });
-      setCameraStatus("Removed detection box — click object to select, or click again to restore.");
-      redrawPreview();
-      updateCameraConfirm();
-      return;
-    } else {
-      samBoxActive = true;
-      foundBox = cachedSamBox;
-      activeSelection = null;
-      cameraBoxEl.style.left = `${foundBox.x / 16}%`;
-      cameraBoxEl.style.top = `${foundBox.y / 16}%`;
-      cameraBoxEl.style.width = `${foundBox.w / 16}%`;
-      cameraBoxEl.style.height = `${foundBox.h / 16}%`;
-      cameraBoxEl.hidden = false;
-      cameraFinder({ kind: "covered" });
-      setCameraStatus("Selected object (AI box) — Bring it in, or click to adjust.");
-      redrawPreview();
-      updateCameraConfirm();
-      return;
-    }
-  }
   if (!currentSegmentation) {
     const img = workImage(pendingCapture.canvas, 384);
     if (img) currentSegmentation = segmentImage(img);
   }
   if (currentSegmentation) {
-    activeSelection = toggleSelectionAtPoint(currentSegmentation, fx, fy, activeSelection?.activeSegments);
+    const clipBox = (cachedSamBox !== null && !isBoxTooLarge(cachedSamBox)) ? cachedSamBox : null;
+    activeSelection = toggleSelectionAtPoint(currentSegmentation, fx, fy, activeSelection?.activeSegments, clipBox);
     foundBox = null;
     samBoxActive = false;
-    if (activeSelection.count > 0 && activeSelection.box1600) {
+
+    if (activeSelection.isTooLarge || isSelectionTooLarge(activeSelection.count, currentSegmentation.w * currentSegmentation.h)) {
+      cameraBoxEl.hidden = true;
+      cameraFinder({ kind: "covered" });
+      setCameraStatus("That selected too much of the photo (over 60%). Click directly on the object to select it.");
+    } else if (activeSelection.count > 0 && activeSelection.box1600) {
       const b = activeSelection.box1600;
       cameraBoxEl.style.left = `${b.x / 16}%`;
       cameraBoxEl.style.top = `${b.y / 16}%`;
@@ -2027,7 +2038,10 @@ cameraPreview.addEventListener("click", (e) => {
 });
 cameraConfirm.addEventListener("click", () => {
   if (cameraPaper?.checked) {
-    if (!pendingCapture) return;
+    if (!pendingCapture) {
+      setCameraStatus("Please upload or capture a drawing first.");
+      return;
+    }
     // A compact JPEG, not the raw photo (bead 9ch, ADR 0054): the drawing still travels at up
     // to 1024 px so Wonder can read it, but at tens of KB instead of megabytes of base64.
     const image = compactPaperImage(pendingCapture.canvas);
@@ -2041,9 +2055,33 @@ cameraConfirm.addEventListener("click", () => {
     say("Reading your paper level drawing...", "building");
     return;
   }
-  if (!pendingCapture || !currentKey) return;
-  const hasMask = (diffComponents.length > 0 && selectedComponent >= 0) || (wandMask !== null && wandMask.count >= 300);
-  if (!hasMask && foundBox === null && clickPoint === null) return;
+  if (!pendingCapture || !currentKey) {
+    setCameraStatus("Upload or capture a photo first.");
+    return;
+  }
+  if (builderOffline()) {
+    setCameraStatus("The server is offline — cannot bring objects into the game.");
+    return;
+  }
+  if (
+    activeSelection?.isTooLarge ||
+    (activeSelection && isSelectionTooLarge(activeSelection.count, (currentSegmentation?.w ?? 1) * (currentSegmentation?.h ?? 1))) ||
+    (foundBox && isBoxTooLarge(foundBox))
+  ) {
+    setCameraStatus("That selected too much of the photo (over 60%). Click directly on the object to select it.");
+    return;
+  }
+
+  const hasActiveSelection = activeSelection !== null && activeSelection.count > 0 && currentSegmentation !== null;
+  const hasDiff = diffComponents.length > 0 && selectedComponent >= 0;
+  const hasWand = wandMask !== null && wandMask.count >= 300;
+  const hasBox = foundBox !== null && !isBoxTooLarge(foundBox);
+  const hasClick = clickPoint !== null;
+
+  if (!hasActiveSelection && !hasDiff && !hasWand && !hasBox && !hasClick) {
+    setCameraStatus("No object selected — click your object in the photo to select it.");
+    return;
+  };
   const key = currentKey;
   const canvas = pendingPhotos.get(key) ?? pendingCapture.canvas;
   if (diffComponents.length > 0 && selectedComponent >= 0) {

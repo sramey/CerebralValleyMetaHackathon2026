@@ -295,7 +295,7 @@ function manifestText(ws: WebSocket): string {
 
 function photoTitle(prompt: string): string {
   const trimmed = prompt.trim();
-  const cap = trimmed ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1) : trimmed;
+  const cap = trimmed ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1) : "Object";
   return `${cap} (photo)`;
 }
 
@@ -463,6 +463,7 @@ async function handlePhotoBring(ws: WebSocket, msg: Extract<ClientMsg, { kind: "
   perWs!.delete(key);
   if (perWs!.size === 0) pendingFinds.delete(ws);
   const aspect = entry.box.h !== 0 ? entry.box.w / entry.box.h : 1;
+  console.info(`[photo] bring key=${key} prompt="${entry.prompt}" aspect=${aspect.toFixed(3)}`);
   await buildPhotoMod(ws, key, entry.prompt, aspect);
 }
 
@@ -474,6 +475,7 @@ async function handlePhotoBringLocal(ws: WebSocket, msg: Extract<ClientMsg, { ki
     send(ws, { kind: "say", text: "That photo didn't come through — try taking it again." });
     return;
   }
+  console.info(`[photo] bringLocal key=${key} prompt="${prompt}" aspect=${aspect.toFixed(3)}`);
   await buildPhotoMod(ws, key, prompt, aspect);
 }
 
