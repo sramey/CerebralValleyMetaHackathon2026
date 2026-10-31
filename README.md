@@ -22,9 +22,9 @@ Entry for the Meta Global AI Developer Hackathon (solo, Indie track). **Deadline
 
 | Rubric | What to look at | Evidence |
 |---|---|---|
-| **Impact (30)** | Anyone makes a playable game by talking, with no code and no game-engine knowledge. A sentence becomes a working, playable change in about 10 s. | [96% of AI builds land verified, median 10.2 s](docs/evidence/build-stats.md) · first-run coach for non-coders · share links and one-file offline export |
+| **Impact (30)** | Anyone makes a playable game by talking, with no code and no game-engine knowledge. A sentence becomes a working, playable change in about 11 s. | [93% of AI builds land verified (162 of 175), median 11.2 s](docs/evidence/build-stats.md) · first-run coach for non-coders · share links and one-file offline export |
 | **Meta tooling (25)** | Five Meta models do real jobs at runtime, plus Wonder's agent features. No other AI provider is used anywhere in the product. | [Who does what](#meta-models-who-does-what) below |
-| **Depth (20)** | A pure, deterministic 60 Hz engine runs the same in the browser and headless. Every AI-written mod is compiled, then playtested by a bot in a copy of *your* world before it may load. Failures are rejected with a reason and auto-fixed by a tool-using agent. | [ARCHITECTURE.md](docs/ARCHITECTURE.md) · [64 ADRs](docs/adr/README.md) · 900+ tests · `npm run cold:check` |
+| **Depth (20)** | A pure, deterministic 60 Hz engine runs the same in the browser and headless. Every AI-written mod is compiled, then playtested by a bot in a copy of *your* world before it may load. Failures are rejected with a reason and auto-fixed by a tool-using agent. | [ARCHITECTURE.md](docs/ARCHITECTURE.md) · [73 ADRs](docs/adr/README.md) · 1100+ tests · `npm run cold:check` |
 | **Demo (25)** | Voice in, game out, live. The "make me huge" beat shows the verifier reject a change and Wonder fix it on camera, then **How was this made?** replays the whole chain for that object. | [Shot list](docs/DEMO.md) · [rejected → fixed GIF](docs/img/make-me-huge-rejected-fixed.gif) |
 
 **What's new here:** most "AI makes a game" demos generate a game once. Here the software **rewrites itself while you use it**, and **no change goes live until an agent has proved you can still play**. Click anything and choose **How was this made?** to see the whole chain for that one object: your words, Spark's route, Wonder's code and the test it wrote, the rejected draft and the fix, every check the verifier ran, the Muse Image prompt and sheet, and the timings ([ADR 0065](docs/adr/0065-how-was-this-made-receipt.md)).
@@ -102,7 +102,7 @@ Open **http://127.0.0.1:8787/** (or your configured `PORT`) in Chrome, click the
 | Changed your mind mid-build? | Click the **×** on the build's chip under the orb; just that build stops and nothing lands ([ADR 0060](docs/adr/0060-cancel-a-running-build.md)) |
 | Click **👍** or **👎** on any mod card or radial menu | Feedback modal lets you teach the engine rules, distill skills, or auto-fix the mod live |
 
-Move with A/D or the arrows, jump with W or Space, shoot with X, use items with F. Sound is synthesized in the browser: M mutes, [ and ] change volume, ?mute starts muted, ?noshake turns off screen shake. First visit shows a skippable 3-step coach (?coach shows it again, ?nocoach hides it); in a scripted fresh-browser run the first build landed 15.5 s after page load. Watch the top-left HUD (health, mod counters). **Fresh-clone check (2026-10-30, a clean clone of `main`, README steps only, Windows, Node 24, npm 11):** clone 1.8 s, `npm install` 7.9 s, `npm run build` 6.1 s, server listening 1.3 s after `npm start`; "add a bouncing green slime" was verified and live 7.2 s after typing (Spark 1.0 s, Wonder 6.2 s), and its AI-drawn sprite replaced the placeholder 27 s after that. With no key the same page loads, shows the demo worlds, and the orb says the AI is not connected.
+Move: A/D or arrows, Jump: W or Space, Shoot: X or B (also J/F), Items: Q switch, G drop, R reload (or 1–9, mouse wheel), use items with F or E. Talk: hold Shift. Sound is synthesized in the browser: M mutes, [ and ] change volume, ?mute starts muted, ?noshake turns off screen shake. First visit shows a skippable 3-step coach (?coach shows it again, ?nocoach hides it); in a scripted fresh-browser run the first build landed 15.5 s after page load. Watch the top-left HUD (health, mod counters). **Fresh-clone check (2026-10-30, a clean clone of `main`, README steps only, Windows, Node 24, npm 11):** clone 1.8 s, `npm install` 7.9 s, `npm run build` 6.1 s, server listening 1.3 s after `npm start`; "add a bouncing green slime" was verified and live 7.2 s after typing (Spark 1.0 s, Wonder 6.2 s), and its AI-drawn sprite replaced the placeholder 27 s after that. With no key the same page loads, shows the demo worlds, and the orb says the AI is not connected.
 
 **No key?** The game still runs: built-in mods and curated demo worlds (for example `http://127.0.0.1:8787/?w=demo-bouncy`) play without any AI calls. Developing instead? `npm run dev` (Vite on :5173) plus `npm run server` (:8787) in a second terminal, then `npm test`. Both ports come from `.env` (`VITE_PORT` / `PORT` / `VITE_WS_URL`), so a second checkout can run beside the first. Port 8787 busy? Set `PORT=8788` in `.env` and reopen on that port — the production build finds its server on the page's own origin, no rebuild needed.
 
@@ -124,7 +124,7 @@ All code, docs and assets in this repo were created during the hackathon. Kickof
 
 ## Does it work? The numbers
 
-Every build is logged as it happens. [docs/evidence/build-stats.md](docs/evidence/build-stats.md) aggregates that log (numbers only, no prompts): about 93% of AI builds land verified and hot-loaded (162 of 175 requests, 146 on the first try), with a median of about 11 s from request to playable. Regenerate it with `npm run stats`.
+Every build is logged as it happens. [docs/evidence/build-stats.md](docs/evidence/build-stats.md) aggregates that log (numbers only, no prompts): about 93% of AI builds land verified and hot-loaded (162 of 175 requests, 146 on the first try), with a median of 11.2 s from request to playable. Regenerate it with `npm run stats`.
 
 ## Testing with non-coders
 
@@ -195,7 +195,7 @@ Never commit keys. `.env` is gitignored.
 
 [MIT](LICENSE). How the work was organized during the event (orchestrator and AI worker sessions in git worktrees) is recorded in [docs/process/](docs/process/README.md).
 
-## Status (2026-10-30)
+## Status (2026-10-31)
 
 **Working and verified**
 
@@ -218,8 +218,12 @@ Never commit keys. `.env` is gitignored.
 - **Rehearsed:** the eight demo commands ran 20 times each against the live server, with pass rates and timings in [docs/process/rehearsal-20x.md](docs/process/rehearsal-20x.md).
 - **Open-weights reviewer:** Muse Spark Open reviews finished builds in the background and swaps in verified fixes ([ADR 0068](docs/adr/0068-open-weights-build-reviewer.md)).
 - **What it has learned:** the gold **🧠 What it has learned** button at the top right of the game opens a live scorecard of the reviewer, each fix with its code diff and the rule it taught, plus the rules and skills library; works without the open-weights key ([ADR 0069](docs/adr/0069-what-it-has-learned-area.md)).
-- **Playtest fixes (2026-10-30):** after a first-time player's session, drawn enemies now patrol, chase, take bullets and die to a stomp; pets never hurt the player ([ADR 0071](docs/adr/0071-hostile-identity-stomp-pets-and-facing.md)); creature sheets slice into 4 whole frames at one scale, wave walkers stay on the ground, and "make it shoot fire" keeps the creature's art ([ADR 0072](docs/adr/0072-walker-hostiles-grounding-and-art-persistence.md)); the world survives a reload or restart and stays editable after a reconnect ([ADR 0070](docs/adr/0070-world-survives-reload.md), [ADR 0077](docs/adr/0077-reconnect-adopts-the-home-world.md)); a drawn crosshair shows where you aim ([ADR 0076](docs/adr/0076-drawn-crosshair-over-the-stage.md)); a hit flashes you red, blinks you and knocks you back ([ADR 0075](docs/adr/0075-engine-owned-hurt-window-and-knockback.md)); mod sliders drag smoothly and Ground width really resizes the floor; "a basketball rival" gets a character, not a ball; a basketball has a hold-to-charge shot meter where only the green zone swishes; "give me a jetpack" flies on the first try; expired shots vanish without phantom explosions. Levels: say "make a harder level", "extend the level" or "make this look like England" and a deterministic generator builds pits, ledges at several heights, spikes, enemies and a goal flag in under a second ([ADR 0073](docs/adr/0073-generated-levels.md)). Gear: you hold one item at a time; Q switches, G drops, R reloads, and a tank's own cannon takes over while you drive it, firing the way it faces; vehicles run over hostiles ([ADR 0074](docs/adr/0074-engine-loadout.md)).
-- Tests: 1000+ passing (`npm test`, green in a fresh clone with no keys), typecheck clean, production build green.
+- **Playtest fixes (2026-10-30):** after a first-time player's session, drawn enemies now patrol, chase, take bullets and die to a stomp; pets never hurt the player ([ADR 0071](docs/adr/0071-hostile-identity-stomp-pets-and-facing.md)); creature sheets slice into 4 whole frames at one scale, wave walkers stay on the ground, and "make it shoot fire" keeps the creature's art ([ADR 0072](docs/adr/0072-walker-hostiles-grounding-and-art-persistence.md)); a drawn crosshair shows where you aim ([ADR 0076](docs/adr/0076-drawn-crosshair-over-the-stage.md)); a hit flashes you red, blinks you and knocks you back ([ADR 0075](docs/adr/0075-engine-owned-hurt-window-and-knockback.md)); mod sliders drag smoothly and Ground width really resizes the floor; "a basketball rival" gets a character, not a ball; a basketball has a hold-to-charge shot meter where only the green zone swishes; "give me a jetpack" flies on the first try; expired shots vanish without phantom explosions.
+- **Generated levels and place themes (ADR 0073):** say "make a harder level", "extend the level" or "make this look like England" and a deterministic generator builds pits, ledges at several heights, spikes, enemies and a goal flag in under a second ([ADR 0073](docs/adr/0073-generated-levels.md)).
+- **The loadout (ADR 0074):** you hold one item at a time; Q switches, G drops, R reloads, vehicle weapons take over while driving, and vehicles run over hostiles ([ADR 0074](docs/adr/0074-engine-loadout.md)).
+- **World survives reload with New world (ADR 0070):** your world saves itself across reloads and server restarts, and stays editable after a reconnect; **New world** starts a clean world ([ADR 0070](docs/adr/0070-world-survives-reload.md), [ADR 0077](docs/adr/0077-reconnect-adopts-the-home-world.md)).
+- **Quick-action bar:** quick-action buttons at top right provide one-click access to Draw a level, Bring an object in, and What it has learned, with the side panel collapsed by default.
+- Tests: 1100+ passing (`npm test`, green in a fresh clone with no keys), typecheck clean, production build green.
 
 **Art pipeline: first proof (2026-10-27)**
 
@@ -227,6 +231,6 @@ Never commit keys. `.env` is gitignored.
 
 **Not built yet**
 - Goal-reachability search (the playtest bot runs right and jumps; it doesn't prove a goal is reachable).
-- Endless level generator (cut for the hackathon).
+- Infinite/endless level streaming (levels are generated on demand with pits, ledges, spikes and goal flags via [ADR 0073](docs/adr/0073-generated-levels.md), but continuous infinite streaming was cut for the hackathon).
 - Public hosting (deploy-ready; host not chosen yet), worker-thread verifier isolation ([ADR 0003](docs/adr/0003-verifier-in-process-empty-world.md)).
 - Some relative wording ("make it bigger") can still build a new mod or rewrite one instead of tweaking a knob ([ADR 0005](docs/adr/0005-tweak-edit-fallbacks.md)). "Make them faster", "jump higher" and "more chickens" already tweak a knob instantly ([ADR 0058](docs/adr/0058-faster-builds-fewer-sequential-model-turns.md)).
