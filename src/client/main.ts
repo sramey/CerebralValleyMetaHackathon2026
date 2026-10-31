@@ -1,4 +1,5 @@
 import { createBuilds } from "./builds";
+import { createNoKeyModal } from "./nokey-modal";
 import { createBootGate } from "./boot-gate";
 import { initFeedback } from "./feedback";
 import { initExplain } from "./explain";
@@ -162,6 +163,17 @@ const receipt = initReceipt({
   connected: () => ws?.readyState === WebSocket.OPEN,
   log,
 });
+/** Startup modal explaining visitor mode when MODEL_API_KEY is missing (ADR 0079). */
+const noKeyModal = createNoKeyModal({
+  modal: $("#nokey-modal"),
+  acceptBtn: $("#nokey-accept-btn"),
+  onAccept: () => {
+    keys.clear();
+    syncInput();
+    $("#stage")?.focus();
+  },
+});
+(window as unknown as { preview_nokey_modal: () => void }).preview_nokey_modal = () => noKeyModal.show();
 /** While other builds are in flight the orb keeps saying "building"; returns true if it did. */
 function sayWhileBuilding(): boolean {
   if (builds.active() === 0) return false;
@@ -1073,6 +1085,7 @@ addEventListener("keydown", (e) => {
   // Typing a command is not a game command (bead wgt): a text box keeps every key it gets,
   // including M (mute), B/X/J/F (fire), brackets (volume) and P (pipeline).
   if (!isGameKeyEvent(e)) return;
+  if (noKeyModal.isOpen()) return;
   if (e.code === "KeyM" && !e.repeat) { log(sound.toggleMute() ? "sound muted (M)" : "sound on (M)"); syncSoundButton(); return; }
   if (["KeyA", "KeyD", "KeyW", "Space", "ArrowLeft", "ArrowRight", "ArrowUp"].includes(e.code)) onboarding.event("move");
   if (e.code === "BracketLeft" || e.code === "BracketRight") sound.setVolume(sound.volume + (e.code === "BracketRight" ? 0.1 : -0.1));
@@ -2195,7 +2208,7 @@ function startNewWorld(): void {
 }
 $("#new-world-btn")?.addEventListener("click", () => startNewWorld());
 
-function showDemos(demos: { id: string; title: string; blurb: string }[]): void {
+function showDemos(demos: { id: string; title: string; blurb: string }[], reason?: string): void {
   const box = $("#demo-worlds");
   box.replaceChildren();
   if (demos.length === 0) { box.hidden = true; return; }
@@ -2210,6 +2223,13 @@ function showDemos(demos: { id: string; title: string; blurb: string }[]): void 
     b.addEventListener("click", () => send({ kind: "worldLoad", id: d.id }));
     box.append(b);
   }
+  const infoBtn = document.createElement("button");
+  infoBtn.type = "button";
+  infoBtn.className = "nokey-banner-btn";
+  infoBtn.textContent = "⚠️ Visitor mode: Why is AI off?";
+  infoBtn.title = "View what requires an API key and how to enable AI features";
+  infoBtn.addEventListener("click", () => noKeyModal.show());
+  box.append(infoBtn);
   box.hidden = false;
 }
 
@@ -2301,7 +2321,11 @@ function connect(): void {
     }
     if (msg.kind === "mood") { onMood(msg.mood); autosaveTouch(); return; }
     if (msg.kind === "restyled") { await onRestyled(msg); return; }
-    if (msg.kind === "visitor") { showDemos(msg.demos); return; }
+    if (msg.kind === "visitor") {
+      showDemos(msg.demos, msg.reason);
+      if (msg.reason === "nokey") noKeyModal.showIfStartup();
+      return;
+    }
     if (msg.kind === "worldSaved") {
       if (msg.slot) return; // the browser's own autosave (ADR 0070): nothing to announce
       const url = shareUrl(msg.id);

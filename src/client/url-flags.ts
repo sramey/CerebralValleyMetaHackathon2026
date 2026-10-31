@@ -23,6 +23,7 @@ export interface UrlFlags {
   readonly noShake: boolean;
   readonly coach: boolean;
   readonly noCoach: boolean;
+  readonly noKeyModal: boolean;
   /** QA-only flag: gates the `window.__urlFlags` test hook. No gameplay effect. */
   readonly tester: boolean;
   /** 0..1, or null when the link did not ask for a volume (or asked with junk). */
@@ -41,6 +42,7 @@ interface FlagParts {
   noShake?: boolean;
   coach?: boolean;
   noCoach?: boolean;
+  noKeyModal?: boolean;
   tester?: boolean;
   volume?: number | null;
   mood?: string | null;
@@ -54,6 +56,7 @@ function makeFlags(p: FlagParts): UrlFlags {
     noShake: p.noShake === true,
     coach: p.coach === true,
     noCoach: p.noCoach === true,
+    noKeyModal: p.noKeyModal === true,
     tester: p.tester === true,
     volume: p.volume ?? null,
     mood: p.mood ?? null,
@@ -65,6 +68,7 @@ function makeFlags(p: FlagParts): UrlFlags {
         case "noshake": return f.noShake;
         case "coach": return f.coach;
         case "nocoach": return f.noCoach;
+        case "nokey": return f.noKeyModal;
         case "tester": return f.tester;
         default: return false;
       }
@@ -169,6 +173,7 @@ export function parseUrlFlags(search: unknown, hash: unknown = ""): UrlFlags {
     noShake: presence(params, "noshake"),
     coach: presence(params, "coach"),
     noCoach: presence(params, "nocoach"),
+    noKeyModal: presence(params, "nokey"),
     tester: presence(params, "tester"),
     volume: parseVolume(lastParam(params, "vol")),
     mood: moodSlug(lastParam(params, "mood")),

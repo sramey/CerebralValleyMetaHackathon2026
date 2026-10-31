@@ -126,6 +126,90 @@
         </div>
       </form>
     </div>
+        <div id="nokey-modal" hidden>
+      <div class="nokey-card" role="dialog" aria-modal="true" aria-labelledby="nokey-title">
+        <div class="nokey-head">
+          <span class="nokey-badge">Visitor Mode · AI Paused</span>
+          <h2 id="nokey-title">No Meta API Key Detected</h2>
+        </div>
+        <p class="nokey-lead">
+          Metabuild connects to Meta Model API to write code, transcribe voice, and generate pixel art in real time. Because <code>MODEL_API_KEY</code> is not set on this server, AI features are temporarily paused, but the full game engine and pre-built worlds are ready to play.
+        </p>
+
+        <div class="nokey-grid">
+          <div class="nokey-col disabled-features">
+            <h3><span>⚠️</span> What Won't Work (Needs Meta Key)</h3>
+            <ul>
+              <li>
+                <strong>Voice Control (Hold Shift) <span class="model-tag">Muse Voice</span></strong>
+                <span>Real-time voice-to-command speech transcription</span>
+              </li>
+              <li>
+                <strong>AI Mod Generation <span class="model-tag">Wonder</span></strong>
+                <span>Live code writing for custom entities, hazards, &amp; weapons</span>
+              </li>
+              <li>
+                <strong>Autonomous Playtest &amp; Fix <span class="model-tag">Wonder + Bot</span></strong>
+                <span>Headless bot simulation loop that tests and repairs broken mods</span>
+              </li>
+              <li>
+                <strong>Natural Language Routing <span class="model-tag">Muse Spark</span></strong>
+                <span>Translating conversational prompts into game actions &amp; parameters</span>
+              </li>
+              <li>
+                <strong>AI Pixel Art &amp; Camera Cutouts <span class="model-tag">Muse Image / SAM</span></strong>
+                <span>Custom sprite sheets and webcam photo object segmentation</span>
+              </li>
+              <li>
+                <strong>World Mood Restyling <span class="model-tag">Image EDIT</span></strong>
+                <span>Whole-world palette restyling and sprite editing</span>
+              </li>
+            </ul>
+          </div>
+
+          <div class="nokey-col enabled-features">
+            <h3><span>✅</span> What You Can Play Right Now</h3>
+            <ul>
+              <li>
+                <strong>Full Game Physics &amp; Combat</strong>
+                <span>Move (A/D/arrows), jump (W/Space), shoot (X/B), and cycle/drop items (Q/G/R)</span>
+              </li>
+              <li>
+                <strong>Curated Demo Worlds</strong>
+                <span>Pre-built platformer stages, enemies, bouncy slimes, and obstacles</span>
+              </li>
+              <li>
+                <strong>Level Drawing Tool</strong>
+                <span>Sketch platforms and terrain by hand with <em>✏️ Draw a level</em></span>
+              </li>
+              <li>
+                <strong>Radial Menu &amp; Knobs</strong>
+                <span>Click any entity in-world to resize, send front/back, or tune properties</span>
+              </li>
+              <li>
+                <strong>Standalone Offline Export</strong>
+                <span>Download the running game as a single-file, zero-dependency HTML file</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="nokey-why">
+          <strong>Why:</strong> Generative commands invoke Meta's hosted models (<code>api.meta.ai</code>). Running without an authorized key switches the server into visitor mode so you can play without errors or unexpected costs.
+        </div>
+
+        <div class="nokey-setup">
+          <h4>How to enable all AI features:</h4>
+          <p>Add your Meta Model API key to <code>.env</code> in the project root and restart the server:</p>
+          <pre><code>MODEL_API_KEY=your_key_here
+npm start</code></pre>
+        </div>
+
+        <div class="nokey-actions">
+          <button id="nokey-accept-btn" type="button" class="nokey-accept-btn">Got It — Play Demo Worlds</button>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/client/main.ts"></script>
   </body>
 </html>
