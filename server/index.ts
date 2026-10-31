@@ -435,7 +435,6 @@ async function handlePhotoFind(ws: WebSocket, msg: Extract<ClientMsg, { kind: "p
       return;
     }
     if (!spend(ws, "sam")) { send(ws, { kind: "segment", key, box: null }); return; }
-    // Nobody typed a name: Meta Spark looks at the photo and names the held thing, so SAM gets a real noun.
     // The client sends the placeholder "object" when the name box is empty: let Meta Spark look at
     // the photo and name the held thing, so SAM gets real nouns to try.
     let extra: string[] = [];

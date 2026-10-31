@@ -2086,7 +2086,7 @@ cameraConfirm.addEventListener("click", () => {
   if (!hasActiveSelection && !hasDiff && !hasWand && !hasBox && !hasClick) {
     setCameraStatus("No object selected — click your object in the photo to select it.");
     return;
-  };
+  }
   const key = currentKey;
   const canvas = pendingPhotos.get(key) ?? pendingCapture.canvas;
   if (diffComponents.length > 0 && selectedComponent >= 0) {
