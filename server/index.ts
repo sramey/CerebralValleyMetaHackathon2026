@@ -39,7 +39,7 @@ import { artCachedUrl, artCachedUrlByKey, artKeyForType, clearCachedArt, generat
 import { drawPendingArt, planBuildArt } from "./art-orders";
 import { aiReceipt, plainReceipt } from "./receipt";
 import { learnFromFix, learnRuleFromFeedback, learnSkillFromFeedback } from "./learn";
-import { segmentPhoto } from "./photo";
+import { nameHeldObject, segmentPhoto } from "./photo";
 import { Budget, readLimits } from "./budget";
 import type { Kind } from "./budget";
 import { Timeline, type Snapshot } from "./timeline";
@@ -295,7 +295,7 @@ function manifestText(ws: WebSocket): string {
 
 function photoTitle(prompt: string): string {
   const trimmed = prompt.trim();
-  const cap = trimmed ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1) : trimmed;
+  const cap = trimmed ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1) : "Object";
   return `${cap} (photo)`;
 }
 
@@ -428,14 +428,21 @@ async function handlePhoto(ws: WebSocket, msg: Extract<ClientMsg, { kind: "photo
 
 async function handlePhotoFind(ws: WebSocket, msg: Extract<ClientMsg, { kind: "photoFind" }>): Promise<void> {
   const key = typeof msg.key === "string" ? msg.key : "";
-  const prompt = typeof msg.prompt === "string" ? msg.prompt : "";
+  let prompt = typeof msg.prompt === "string" ? msg.prompt : "";
   try {
     if (typeof msg.image !== "string" || !msg.image.startsWith("data:image") || msg.image.length >= 4_000_000) {
       send(ws, { kind: "segment", key, box: null });
       return;
     }
     if (!spend(ws, "sam")) { send(ws, { kind: "segment", key, box: null }); return; }
-    const box = await segmentPhoto(msg.image, prompt);
+    // The client sends the placeholder "object" when the name box is empty: let Meta Spark look at
+    // the photo and name the held thing, so SAM gets real nouns to try.
+    let extra: string[] = [];
+    if (!prompt.trim() || /^(object|thing|item|something)$/i.test(prompt.trim())) {
+      extra = await nameHeldObject(msg.image);
+      if (extra[0]) prompt = extra[0];
+    }
+    const box = await segmentPhoto(msg.image, prompt, extra);
     if (box) {
       let perWs = pendingFinds.get(ws);
       if (!perWs) {
@@ -463,6 +470,7 @@ async function handlePhotoBring(ws: WebSocket, msg: Extract<ClientMsg, { kind: "
   perWs!.delete(key);
   if (perWs!.size === 0) pendingFinds.delete(ws);
   const aspect = entry.box.h !== 0 ? entry.box.w / entry.box.h : 1;
+  console.info(`[photo] bring key=${key} prompt="${entry.prompt}" aspect=${aspect.toFixed(3)}`);
   await buildPhotoMod(ws, key, entry.prompt, aspect);
 }
 
@@ -474,6 +482,7 @@ async function handlePhotoBringLocal(ws: WebSocket, msg: Extract<ClientMsg, { ki
     send(ws, { kind: "say", text: "That photo didn't come through — try taking it again." });
     return;
   }
+  console.info(`[photo] bringLocal key=${key} prompt="${prompt}" aspect=${aspect.toFixed(3)}`);
   await buildPhotoMod(ws, key, prompt, aspect);
 }
 

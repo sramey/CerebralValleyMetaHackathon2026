@@ -1,12 +1,10 @@
 // Smart object selection for camera capture and photo import.
 //
-// Solves bead bgh:
-// - Clicking someone's hair selected only a tiny color patch instead of the whole head.
-// - Clicking selects the whole connected object (grows generously, merges adjacent segments).
-// - Allows subsequent clicks to add or remove segments.
-// - Prefers the SAM box path when present, letting user toggle it.
-//
-// Pure on purpose (no DOM, no network): checkable headless in Vitest.
+// Solves bead bgh + camfix:
+// - Clicking selects the connected object, bounded to the object.
+// - Clips client flood fill and click selection to the SAM box when present.
+// - Identifies failed selections covering > 60% of the frame.
+// - Pure on purpose (no DOM, no network): checkable headless in Vitest.
 
 export interface Box {
   x: number; // 0..1600 coordinate space
@@ -44,6 +42,23 @@ export interface SelectionState {
   count: number;
   bbox: { x0: number; y0: number; x1: number; y1: number } | null;
   box1600: Box | null;
+  isTooLarge: boolean;
+}
+
+/** Maximum allowed frame fraction (60%) for an object selection. */
+export const MAX_SELECTION_FRAME_SHARE = 0.60;
+
+/** Check if selection pixel count exceeds 60% of the image frame. */
+export function isSelectionTooLarge(activeCount: number, totalPixels: number): boolean {
+  if (totalPixels <= 0) return false;
+  return activeCount / totalPixels > MAX_SELECTION_FRAME_SHARE;
+}
+
+/** Check if bounding box in 1600 space exceeds 60% of the frame area. */
+export function isBoxTooLarge(box: Box | null): boolean {
+  if (!box) return false;
+  const areaShare = (box.w * box.h) / (1600 * 1600);
+  return areaShare > MAX_SELECTION_FRAME_SHARE;
 }
 
 /** Check if normalized point (0..1) is inside a 1600-space box (with optional fractional margin). */
@@ -208,20 +223,20 @@ export function segmentImage(
     }
   }
 
-  // Expand background to contiguous border-touching segments with similar color to confirmed background
-  let expanded = true;
-  while (expanded) {
-    expanded = false;
-    for (const bgId of Array.from(backgroundSegmentIds)) {
-      const bgSeg = segments[bgId];
-      for (const nbrId of bgSeg.neighbors) {
-        if (backgroundSegmentIds.has(nbrId)) continue;
-        const nbr = segments[nbrId];
-        if (nbr.touchesBorder && colorDiff(bgSeg.avgColor, nbr.avgColor) < 36) {
-          nbr.isBackground = true;
-          backgroundSegmentIds.add(nbrId);
-          expanded = true;
-        }
+  // Expand background to contiguous border-touching segments with similar color to confirmed background (O(V+E) queue)
+  const bgQueue = Array.from(backgroundSegmentIds);
+  let bgHead = 0;
+  while (bgHead < bgQueue.length) {
+    const bgId = bgQueue[bgHead++];
+    const bgSeg = segments[bgId];
+    if (!bgSeg) continue;
+    for (const nbrId of bgSeg.neighbors) {
+      if (backgroundSegmentIds.has(nbrId)) continue;
+      const nbr = segments[nbrId];
+      if (nbr && nbr.touchesBorder && colorDiff(bgSeg.avgColor, nbr.avgColor) < 36) {
+        nbr.isBackground = true;
+        backgroundSegmentIds.add(nbrId);
+        bgQueue.push(nbrId);
       }
     }
   }
@@ -232,10 +247,12 @@ export function segmentImage(
 /**
  * Build a SelectionState from an active set of segment IDs.
  * Applies hole-filling and generous 1-pixel dilation so the selected object is solid and complete.
+ * If clipBox is provided, clips the mask strictly to the SAM bounding box (plus fractional margin).
  */
 export function buildSelectionState(
   segResult: SegmentationResult,
   activeSegments: Set<number>,
+  clipBox?: Box | null,
 ): SelectionState {
   const { w, h, segments } = segResult;
   const total = w * h;
@@ -247,6 +264,7 @@ export function buildSelectionState(
       count: 0,
       bbox: null,
       box1600: null,
+      isTooLarge: false,
     };
   }
 
@@ -324,6 +342,24 @@ export function buildSelectionState(
     }
   }
 
+  // 3. Clip mask to SAM model box when provided
+  if (clipBox) {
+    const margin = 0.05;
+    const minCx = Math.max(0, Math.floor((clipBox.x / 1600 - margin) * w));
+    const minCy = Math.max(0, Math.floor((clipBox.y / 1600 - margin) * h));
+    const maxCx = Math.min(w - 1, Math.ceil(((clipBox.x + clipBox.w) / 1600 + margin) * w));
+    const maxCy = Math.min(h - 1, Math.ceil(((clipBox.y + clipBox.h) / 1600 + margin) * h));
+
+    for (let y = 0; y < h; y++) {
+      if (y < minCy || y > maxCy) {
+        for (let x = 0; x < w; x++) dilatedMask[y * w + x] = 0;
+      } else {
+        for (let x = 0; x < minCx; x++) dilatedMask[y * w + x] = 0;
+        for (let x = maxCx + 1; x < w; x++) dilatedMask[y * w + x] = 0;
+      }
+    }
+  }
+
   // Compute bounding box & count
   let minX = w, maxX = -1, minY = h, maxY = -1, count = 0;
   for (let y = 0; y < h; y++) {
@@ -345,6 +381,7 @@ export function buildSelectionState(
       count: 0,
       bbox: null,
       box1600: null,
+      isTooLarge: false,
     };
   }
 
@@ -363,26 +400,29 @@ export function buildSelectionState(
     h: Math.round((y1 - y0 + 1) * 1600 / h),
   };
 
+  const isTooLarge = isSelectionTooLarge(count, total) || isBoxTooLarge(box1600);
+
   return {
     activeSegments: new Set(activeSegments),
     mask: dilatedMask,
     count,
     bbox: { x0, y0, x1, y1 },
     box1600,
+    isTooLarge,
   };
 }
 
 /**
  * Handle a click at normalized point (fx, fy) on the image.
  * - If the clicked segment is already selected: REMOVES it from the selection.
- * - If the clicked segment is unselected: GROWS the object generously by merging
- *   connected adjacent non-background segments, and ADDS them to the selection.
+ * - If the clicked segment is unselected: GROWS the object, clipped to SAM box when present.
  */
 export function toggleSelectionAtPoint(
   segResult: SegmentationResult,
   fx: number,
   fy: number,
   currentActive: Set<number> = new Set(),
+  clipBox?: Box | null,
 ): SelectionState {
   const { w, h, segmentMap, segments } = segResult;
   const sx = Math.min(w - 1, Math.max(0, Math.floor(fx * w)));
@@ -391,32 +431,41 @@ export function toggleSelectionAtPoint(
   const clickedId = segmentMap[p];
 
   if (clickedId < 0 || clickedId >= segments.length) {
-    return buildSelectionState(segResult, currentActive);
+    return buildSelectionState(segResult, currentActive, clipBox);
   }
 
   // If already active: REMOVE action
   if (currentActive.has(clickedId)) {
     const nextActive = new Set(currentActive);
     nextActive.delete(clickedId);
-    return buildSelectionState(segResult, nextActive);
+    return buildSelectionState(segResult, nextActive, clipBox);
   }
 
-  // Unselected: ADD action (grow generously across adjacent foreground segments)
+  // Unselected: ADD action (grow across adjacent foreground segments)
   const nextActive = new Set(currentActive);
   const clickedSeg = segments[clickedId];
 
   // If the clicked segment is marked as background, still select it specifically if user clicked it
   if (clickedSeg.isBackground) {
     nextActive.add(clickedId);
-    return buildSelectionState(segResult, nextActive);
+    return buildSelectionState(segResult, nextActive, clipBox);
   }
 
-  // BFS to merge all connected foreground (non-background) segments belonging to the same object
-  const toAdd = new Set<number>([clickedId]);
-  const queue = [clickedId];
+  // Helper to check if a segment is inside the clip box
+  const inClip = (seg: Segment): boolean => {
+    if (!clipBox) return true;
+    const cx = (seg.minX + seg.maxX) / 2 / w;
+    const cy = (seg.minY + seg.maxY) / 2 / h;
+    return isPointInBox(cx, cy, clipBox, 0.05);
+  };
 
-  while (queue.length > 0) {
-    const currId = queue.shift()!;
+  // BFS to merge connected foreground segments belonging to the same object
+  const toAdd = new Set<number>([clickedId]);
+  const queue: number[] = [clickedId];
+  let qh = 0;
+
+  while (qh < queue.length) {
+    const currId = queue[qh++];
     const curr = segments[currId];
     if (!curr) continue;
 
@@ -425,11 +474,40 @@ export function toggleSelectionAtPoint(
       const nbr = segments[nbrId];
       if (!nbr || nbr.isBackground) continue; // Boundary stop: never leak into background!
 
+      // If a SAM box exists, strictly clip growth to within the model box
+      if (clipBox && !inClip(nbr)) continue;
+
+      // Without a SAM box, prevent leaking into outer border background surfaces (wall, desk, floor)
+      if (!clipBox && nbr.touchesBorder && nbr.borderPixelCount > 8) continue;
+
       toAdd.add(nbrId);
       queue.push(nbrId);
     }
   }
 
   for (const id of toAdd) nextActive.add(id);
-  return buildSelectionState(segResult, nextActive);
+  return buildSelectionState(segResult, nextActive, clipBox);
+}
+
+/**
+ * Automatically select foreground segments inside a SAM model bounding box.
+ * Preferred path for Meta SAM 3.1: creates an immediate clean cutout hugging the object.
+ */
+export function selectForegroundInBox(
+  segResult: SegmentationResult,
+  box: Box,
+): SelectionState {
+  const { w, h, segments } = segResult;
+  const activeSegments = new Set<number>();
+
+  for (const seg of segments) {
+    if (seg.isBackground) continue;
+    const cx = (seg.minX + seg.maxX) / 2 / w;
+    const cy = (seg.minY + seg.maxY) / 2 / h;
+    if (isPointInBox(cx, cy, box, 0.02)) {
+      activeSegments.add(seg.id);
+    }
+  }
+
+  return buildSelectionState(segResult, activeSegments, box);
 }
