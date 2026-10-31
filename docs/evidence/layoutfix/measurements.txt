@@ -1,0 +1,121 @@
+Layout leftovers — bug "layoutfix"
+==================================
+Visual-only CSS fix for four overlapping stage overlays. No behaviour, IDs or clicks changed.
+
+Measured live in Chrome against this worktree's server (PORT 8795 from .env, production
+`npm run build` + `npm start`, one port, client + websocket) with the build theater streaming
+its code card. Rects are `getBoundingClientRect()` in CSS px. "clear" = the rect does not
+intersect the other one.
+
+What the card streams in the screenshots
+- `window.preview_idle_fx()` — the app's own canned build, pushed through the same
+  `theater.onMsg` path as a real one (no API call). Both the before and the after screenshots
+  use it, so the two sets are directly comparable.
+- Two real Meta builds were also run live on this branch and measured while streaming:
+  "add a bouncing green slime" (before: `.bt-card` 800..1220 y 68..144) and
+  "add a spinning coin" (after: `.bt-card` 800..1220 y 170..270, then the receipt in
+  after-1280x720-receipt.png is that build's real receipt: Muse Spark 4.4 s, Muse Wonder
+  5.0 s, verifier 0.0 s).
+
+The starter world only declares top-left HUD widgets (health, score), so the top-right row
+that bug 3 is about (level progress + a score stat) was injected for the measurement with the
+app's own markup and classes (`.hud-pos.hud-pos-top-right`, `.hud-widget.hud-bar`,
+`.hud-widget.hud-stat`) — the same nodes `src/client/hud.ts` builds for `position: "top-right"`
+widgets (`src/sim/level.ts` sets the level bar there). The second-opinion fix card is
+transient (5 s, only after a real review finds a bug), so its exact markup from
+`src/client/second-opinion.ts` (`.so-card` with `<b>/<p>/<i>`, a deliberately long issue
+sentence) was placed in `#second-opinion[data-state="card"]` for the geometry check.
+Everything else is the unmodified app.
+
+The fixed geometry (after)
+- `.bt-stream` (code card): top 170 px (was 68), bottom 48 px, card max-height 100%.
+  170 clears the stepper (bottom 114..119) and the top-right HUD (bottom 157); 48 stops the
+  card above the bottom row (key hint, pipeline button, timeline) on a short stage.
+- `.hud-pos-top-right`: top 62 px in both drawer states (the `#app.drawer-hidden` override to
+  106 px is gone). The row now always sits above the card.
+- `#receipt-panel`: right 60 px (was 14) + width `min(460px, calc(100% - 74px))`, and the
+  <=900 px rule uses `right: 60px` (was 10). It ends 8 px left of #quickbar.
+- `#explain-panel`: width `min(380px, calc(100% - 82px))` and `right: 60px` in the <=900 px
+  rule. Same 8 px gutter.
+- `#second-opinion`: top 124 px (was 76). On a narrow stage the centred stepper reaches into
+  the left column (x 253..647 at 900x600), so the card used to cover its first two pips.
+- `@media (max-height: 640px)`: the card's padding and gap shrink, the long "Wonder · …"
+  status is dropped and the code area is capped at 96 px, so a 330 px-tall stage (900x600)
+  still shows the head, the step chips and ~3 code lines instead of overflowing.
+
+BEFORE (measured on this branch before the CSS change, at HEAD 8866fe6 + the streaming card)
+
+1280x720 (stage 1280x720, panel collapsed)
+  #quickbar            1228..1268  y 106..242
+  .bt-card              800..1220  y  68..263
+  .bt-stepper           422..858   y  94..114   -> card covers 800..858: the LIVE pip
+  .hud-pos-top-right   1052..1220  y 106..201   -> card covers it whole
+  #receipt-panel        806..1266  y  84..407   -> covers #quickbar (1228..1266)
+  #explain-panel         14..394   y  84..377   -> clear here, but see 900x600
+  #second-opinion        14..374   y  76..211   -> clear at this size
+
+900x600 (stacked layout: stage 900x330, rail below)
+  #quickbar             848..888  y 106..242
+  .bt-card              420..840  y  68..248
+  .bt-stepper           253..647  y  94..114   -> card covers 420..647 (PLAYTEST + LIVE)
+  .hud-pos-top-right    672..840  y 106..201   -> card covers it whole
+  #explain-panel         10..890  y  76..254   -> covers #quickbar (848..888)
+  #second-opinion        14..374  y  76..211   -> covers the stepper's 253..374 (ROUTE, FORGE)
+
+1920x1080
+  #quickbar            1868..1908  y 106..242
+  .bt-card             1440..1860  y  68..331
+  .bt-stepper           725..1195  y  94..119   -> clear (card starts at 1440)
+  .hud-pos-top-right   1692..1860  y 106..201   -> card covers it whole
+
+AFTER (this change)
+
+1920x1080
+  #quickbar            1868..1908  y 106..242
+  .bt-card             1440..1860  y 170..409   clear of the stepper, the HUD and the bar
+  .bt-stepper           725..1195  y  94..119   clear, full strip readable
+  .hud-pos-top-right   1692..1860  y  62..157   clear
+  #receipt-panel       1400..1860  y  84..1006  clear of #quickbar (8 px gutter)
+  #explain-panel         14..394   y  84..398   clear
+  #second-opinion        14..374   y 124..259   clear of orb, card, stepper, HUD, bar
+
+1280x720 (panel collapsed; the open-panel stage, 940 px wide, measures the same way:
+  #quickbar 888..928, .bt-card 460..880 y 170..365, .bt-stepper 252..688, HUD 712..880)
+  #quickbar            1228..1268  y 106..242
+  .bt-card              800..1220  y 170..365   clear
+  .bt-stepper           422..858   y  94..114   clear, full strip readable
+  .hud-pos-top-right   1052..1220  y  62..157   clear
+  #receipt-panel        760..1220  y  84..664   clear of #quickbar
+  #explain-panel         14..394   y  84..398   clear
+  #second-opinion        14..374   y 124..259   clear
+
+900x600 (stage 900x330)
+  #quickbar             848..888  y 106..242
+  .bt-card              420..840  y 170..282   clear; 282 is above the key hint (289) and
+                                               the pipeline button (288); code area 63 px
+  .bt-stepper           253..647  y  94..114   clear, full strip readable
+  .hud-pos-top-right    672..840  y  62..157   clear
+  #receipt-panel         10..840  y  76..274   clear of #quickbar
+  #explain-panel         10..840  y  76..254   clear of #quickbar
+  #second-opinion        14..374  y 124..259   clear of orb, card, stepper, HUD, bar
+
+Screenshots (same server, cropped to the page viewport, no browser chrome)
+  before-1920x1080-card.png          after-1920x1080-card.png
+  before-1280x720-card.png           after-1280x720-card.png
+  before-1280x720-receipt.png        after-1280x720-receipt.png
+  before-1280x720-explain.png        after-1280x720-explain.png
+                                     after-1280x720-panelopen-card.png
+                                     after-1280x720-secondopinion.png
+  before-900x600-card.png            after-900x600-card.png
+  before-900x600-explain.png         after-900x600-explain.png
+                                     after-900x600-receipt.png
+                                     after-900x600-secondopinion.png
+
+Known overlaps left alone (not in this bug, unchanged by it)
+- #receipt-panel / #explain-panel are user-opened panels and still cover the ambient layers
+  under them (the top-right HUD stats, and the code card while it streams). Only their
+  overlap with the quick-action column was in scope.
+- #explain-panel (top-left, 380 px) and the second-opinion card (top-left, 360 px) share the
+  left column and can overlap each other; that predates this change.
+- On the 330 px-tall stage at 900x600 the ghost playtest window (bottom-left) can sit under
+  the second-opinion card, as it did before.
