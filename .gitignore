@@ -16,3 +16,5 @@ data/
 
 # mood restyles are a runtime cache (re-generated on demand)
 public/art/gen/*--*.webp
+# new runtime sprites are a local cache too; the curated starter set is tracked on purpose
+public/art/gen/*.webp
