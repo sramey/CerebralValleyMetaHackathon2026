@@ -56,5 +56,73 @@
     "command": "give me a hideout",
     "note": "playtest: You'd get stuck by the wall and couldn't keep going. (playtest (seed 11): the bot only got 414px right (1560px without this mod), stuck against a \"wall\" at x=560,y=240,w=24,h=70. Player size 26x34 -> 26x34)",
     "createdAt": "2026-10-30T02:09:46.567Z"
+  },
+  {
+    "id": "autofix-1793395680956-gksr",
+    "subsystem": "wonder",
+    "rule": "Never spawn rideable/mount entities ahead of the player on the forward path; spawn behind/beside to avoid blocking progression.",
+    "source": "autofix",
+    "command": "add a dragon i can fly",
+    "note": "playtest: You'd get stuck by the platform and couldn't keep going. (playtest (seed 11): the bot only got 779px right (1560px without this mod), stuck against a \"platform\" at x=950,y=-600,w=200,h=928. Player size 26x34 -> 26x34)",
+    "createdAt": "2026-10-30T21:28:00.956Z"
+  },
+  {
+    "id": "review-1793396103214-dlc1",
+    "subsystem": "wonder",
+    "rule": "car uses solid:false so player falls through when not riding and cannot stand on it as platform",
+    "source": "review",
+    "modId": "driveable-car",
+    "command": "add a car",
+    "note": "car uses solid:false so player falls through when not riding and cannot stand on it as platform",
+    "createdAt": "2026-10-30T21:35:03.214Z"
+  },
+  {
+    "id": "review-1793396103218-eq55",
+    "subsystem": "wonder",
+    "rule": "car width knob logic reads knobs.speed instead of knobs.size so size knob is ignored",
+    "source": "review",
+    "modId": "driveable-car",
+    "command": "add a car",
+    "note": "car width knob logic reads knobs.speed instead of knobs.size so size knob is ignored",
+    "createdAt": "2026-10-30T21:35:03.218Z"
+  },
+  {
+    "id": "review-1793396157290-ao91",
+    "subsystem": "wonder",
+    "rule": "tank.facing never initialized so first shell velocity is NaN (tank.facing * shellSpeed) until player moves",
+    "source": "review",
+    "modId": "driveable-tank",
+    "command": "add a tank instead",
+    "note": "tank.facing never initialized so first shell velocity is NaN (tank.facing * shellSpeed) until player moves",
+    "createdAt": "2026-10-30T21:35:57.290Z"
+  },
+  {
+    "id": "review-1793396157294-ubku",
+    "subsystem": "wonder",
+    "rule": "tank.vy may be undefined on spawn causing Math.min(tank.vy,300) to produce NaN velocity",
+    "source": "review",
+    "modId": "driveable-tank",
+    "command": "add a tank instead",
+    "note": "tank.vy may be undefined on spawn causing Math.min(tank.vy,300) to produce NaN velocity",
+    "createdAt": "2026-10-30T21:35:57.294Z"
+  },
+  {
+    "id": "review-1793396474019-nngr",
+    "subsystem": "wonder",
+    "rule": "dispose() filtered coins by data.obstacle but coins were spawned with data.collectible only, leaving orphaned coin entities after dispose",
+    "source": "review",
+    "modId": "obstacle-course",
+    "command": "continue the level add obsticles",
+    "note": "dispose() filtered coins by data.obstacle but coins were spawned with data.collectible only, leaving orphaned coin entities after dispose",
+    "createdAt": "2026-10-30T21:41:14.019Z"
+  },
+  {
+    "id": "autofix-1793452658068-4xq1",
+    "subsystem": "wonder",
+    "rule": "Flapping bird pet must set gravityScale=0 and apply per-frame flapPhase/bobHeight vertical lift to stay airborne while following.",
+    "source": "autofix",
+    "command": "add a flapping bird pet",
+    "note": "test: bird stays airborne while flapping",
+    "createdAt": "2026-10-31T13:17:38.068Z"
   }
 ]
