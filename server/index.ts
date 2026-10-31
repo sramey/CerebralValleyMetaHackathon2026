@@ -39,7 +39,7 @@ import { artCachedUrl, artCachedUrlByKey, artKeyForType, clearCachedArt, generat
 import { drawPendingArt, planBuildArt } from "./art-orders";
 import { aiReceipt, plainReceipt } from "./receipt";
 import { learnFromFix, learnRuleFromFeedback, learnSkillFromFeedback } from "./learn";
-import { segmentPhoto } from "./photo";
+import { nameHeldObject, segmentPhoto } from "./photo";
 import { Budget, readLimits } from "./budget";
 import type { Kind } from "./budget";
 import { Timeline, type Snapshot } from "./timeline";
@@ -428,14 +428,22 @@ async function handlePhoto(ws: WebSocket, msg: Extract<ClientMsg, { kind: "photo
 
 async function handlePhotoFind(ws: WebSocket, msg: Extract<ClientMsg, { kind: "photoFind" }>): Promise<void> {
   const key = typeof msg.key === "string" ? msg.key : "";
-  const prompt = typeof msg.prompt === "string" ? msg.prompt : "";
+  let prompt = typeof msg.prompt === "string" ? msg.prompt : "";
   try {
     if (typeof msg.image !== "string" || !msg.image.startsWith("data:image") || msg.image.length >= 4_000_000) {
       send(ws, { kind: "segment", key, box: null });
       return;
     }
     if (!spend(ws, "sam")) { send(ws, { kind: "segment", key, box: null }); return; }
-    const box = await segmentPhoto(msg.image, prompt);
+    // Nobody typed a name: Meta Spark looks at the photo and names the held thing, so SAM gets a real noun.
+    // The client sends the placeholder "object" when the name box is empty: let Meta Spark look at
+    // the photo and name the held thing, so SAM gets real nouns to try.
+    let extra: string[] = [];
+    if (!prompt.trim() || /^(object|thing|item|something)$/i.test(prompt.trim())) {
+      extra = await nameHeldObject(msg.image);
+      if (extra[0]) prompt = extra[0];
+    }
+    const box = await segmentPhoto(msg.image, prompt, extra);
     if (box) {
       let perWs = pendingFinds.get(ws);
       if (!perWs) {

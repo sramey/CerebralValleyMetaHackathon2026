@@ -153,12 +153,19 @@ describe("selection size guard (camfix)", () => {
 });
 
 describe("candidatePrompts for SAM (bead bgh + camfix)", () => {
-  it("expands empty prompt to fallback candidates including object and person", () => {
+  it("an empty prompt tries held-object nouns and never falls back to the person holding it", () => {
     const prompts = candidatePrompts("");
     expect(prompts).toContain("object");
     expect(prompts).toContain("toy");
-    expect(prompts).toContain("item");
-    expect(prompts).toContain("person");
+    expect(prompts).toContain("calculator");
+    // "person" boxes the arm and shirt of whoever holds the toy (camfix, owner photo).
+    expect(prompts).not.toContain("person");
+  });
+
+  it("names from Meta Spark go right after the typed prompt, before the generic nouns", () => {
+    const prompts = candidatePrompts("object", ["speak and spell", "learning toy"]);
+    expect(prompts.slice(0, 3)).toEqual(["object", "speak and spell", "learning toy"]);
+    expect(prompts.indexOf("learning toy")).toBeLessThan(prompts.indexOf("handheld object"));
   });
 
   it("expands hair prompt to include head and person", () => {

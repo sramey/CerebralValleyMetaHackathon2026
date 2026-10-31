@@ -1414,6 +1414,7 @@ function cameraFinder(ev: FinderEvent): void {
 function builderOffline(): boolean {
   return ws?.readyState !== WebSocket.OPEN;
 }
+const TOO_MUCH_MSG = "That selected too much of the photo (over 60%). Click directly on the object to select it.";
 function updateCameraConfirm(): void {
   if (cameraPaper?.checked) {
     cameraConfirm.textContent = "Build this level";
@@ -1427,8 +1428,12 @@ function updateCameraConfirm(): void {
 
   if (tooLarge) {
     cameraConfirm.disabled = true;
+    setCameraStatus(TOO_MUCH_MSG);
     return;
   }
+  // The "too much" line must never outlive the selection that caused it (camfix): the button
+  // and the sentence beside it always say the same thing.
+  if (cameraStatus.textContent === TOO_MUCH_MSG) setCameraStatus("Selected object — Bring it in, or click again to add/remove parts.");
 
   cameraConfirm.disabled = !(
     (diffComponents.length > 0 && selectedComponent >= 0) ||
@@ -1889,7 +1894,7 @@ function handleSegment(key: string, rawBox: unknown): void {
     cameraBoxEl.hidden = true;
     if (box !== null && isBoxTooLarge(box)) {
       cameraFinder({ kind: "covered" });
-      setCameraStatus("That selected too much of the photo (over 60%). Click directly on the object to select it.");
+      setCameraStatus(TOO_MUCH_MSG);
     } else {
       cameraFinder({ kind: "missed" });
     }
@@ -2015,7 +2020,7 @@ cameraPreview.addEventListener("click", (e) => {
     if (activeSelection.isTooLarge || isSelectionTooLarge(activeSelection.count, currentSegmentation.w * currentSegmentation.h)) {
       cameraBoxEl.hidden = true;
       cameraFinder({ kind: "covered" });
-      setCameraStatus("That selected too much of the photo (over 60%). Click directly on the object to select it.");
+      setCameraStatus(TOO_MUCH_MSG);
     } else if (activeSelection.count > 0 && activeSelection.box1600) {
       const b = activeSelection.box1600;
       cameraBoxEl.style.left = `${b.x / 16}%`;
@@ -2068,7 +2073,7 @@ cameraConfirm.addEventListener("click", () => {
     (activeSelection && isSelectionTooLarge(activeSelection.count, (currentSegmentation?.w ?? 1) * (currentSegmentation?.h ?? 1))) ||
     (foundBox && isBoxTooLarge(foundBox))
   ) {
-    setCameraStatus("That selected too much of the photo (over 60%). Click directly on the object to select it.");
+    setCameraStatus(TOO_MUCH_MSG);
     return;
   }
 
