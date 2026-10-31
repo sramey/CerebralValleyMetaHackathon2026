@@ -637,7 +637,7 @@ function onMood(m: MoodSpec | null): void {
 }
 async function onRestyled(msg: Extract<ServerMsg, { kind: "restyled" }>): Promise<void> {
   if (!msg.url || !mood || mood.name !== msg.mood) return;
-  const frames = await loadSpriteSheet(msg.url);
+  const frames = await loadSpriteSheet(msg.url, msg.key);
   if (frames.length < 1 || !mood || mood.name !== msg.mood) return;
   morph.set(msg.key, performance.now() + 1000);
   setTimeout(() => {
@@ -1290,7 +1290,7 @@ function send(msg: ClientMsg): void {
 }
 function loadArtWithRetry(key: string, url: string, scenery = false): void {
   const attempt = (u: string, isRetry: boolean): void => {
-    loadSpriteSheet(u).then((frames) => {
+    loadSpriteSheet(u, key).then((frames) => {
       if (frames.length > 0) {
         if (mood && origFrames.has(key)) origFrames.set(key, frames);
         else framesBySubject[key] = frames;
@@ -2199,7 +2199,7 @@ async function applyWorld(msg: Extract<ServerMsg, { kind: "world" }>): Promise<v
   moodModCount = mood ? loader.list().length : 0;
   if (msg.mood && msg.restyled) {
     for (const [key, url] of Object.entries(msg.restyled)) {
-      void loadSpriteSheet(url).then((frames) => {
+      void loadSpriteSheet(url, key).then((frames) => {
         if (frames.length < 1 || !mood || mood.name !== msg.mood?.name) return;
         if (!origFrames.has(key)) origFrames.set(key, framesBySubject[key] ?? []);
         framesBySubject[key] = frames;

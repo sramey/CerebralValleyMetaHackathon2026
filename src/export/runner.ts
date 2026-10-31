@@ -180,7 +180,7 @@ async function boot(): Promise<void> {
   const framesBySubject: Record<string, Texture[]> = {};
   for (const [key, dataUri] of Object.entries(spritesData)) {
     try {
-      framesBySubject[key] = await loadSpriteSheet(dataUri);
+      framesBySubject[key] = await loadSpriteSheet(dataUri, key);
     } catch {
       framesBySubject[key] = [];
     }

@@ -1144,6 +1144,17 @@ export function artPlanFor(input: string | EntityLike): ArtPlan {
   return isHeldItemType(typeof input === "string" ? input : input.type) ? "held-item" : "scenery";
 }
 
+const LANDMARK_RE = /\b(?:volcano|volcanic|castle|fortress|palace|citadel|keep|waterfall|cascade|pyramid|ship|galleon|vessel|tower|spire|lighthouse|windmill|mountain|temple|monument|ruins|cathedral|pagoda|colosseum|campfire|bonfire)s?\b/i;
+
+/**
+ * True for a landmark: one big nameable thing (mountain, volcano, castle, pyramid, tower...) that the
+ * engine draws behind the play layer. Its art is ONE image of the whole subject, never a pose sheet or
+ * a row of variants (ADR 0080). Whole words only, so "goalkeeper" and "relationship" are not landmarks.
+ */
+export function isLandmarkSubject(text: string): boolean {
+  return LANDMARK_RE.test(text.replace(/[-_]+/g, " "));
+}
+
 export function isPropType(input: string | EntityLike): boolean {
   return entityKind(input) === "prop";
 }

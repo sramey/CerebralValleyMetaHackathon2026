@@ -25,10 +25,10 @@ export interface LateArt {
  */
 export async function loadAll<T>(
   map: Record<string, string>,
-  load: (url: string) => Promise<T>,
+  load: (url: string, key: string) => Promise<T>,
 ): Promise<Record<string, T>> {
   const keys = Object.keys(map);
-  const loaded = await Promise.all(keys.map((key) => load(map[key])));
+  const loaded = await Promise.all(keys.map((key) => load(map[key], key)));
   const out: Record<string, T> = {};
   for (let i = 0; i < keys.length; i++) out[keys[i]] = loaded[i];
   return out;

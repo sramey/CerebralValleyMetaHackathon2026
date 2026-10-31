@@ -1,5 +1,5 @@
 import { Texture } from "pixi.js";
-import { canUseSpriteSheet } from "../ontology";
+import { canUseSpriteSheet, isLandmarkSubject } from "../ontology";
 import { loadAll } from "./art-late";
 
 // Loads an AI sprite sheet (flat magenta background), chroma-keys it, splits
@@ -16,7 +16,7 @@ export function isMagenta(r: number, g: number, b: number): boolean {
  */
 export async function loadSubjects(
   map: Record<string, string>,
-  load: (url: string) => Promise<Texture[]> = loadSpriteSheet,
+  load: (url: string, key: string) => Promise<Texture[]> = loadSpriteSheet,
 ): Promise<Record<string, Texture[]>> {
   return loadAll(map, load);
 }
@@ -252,7 +252,19 @@ export function alignPoseBounds(bounds: FrameBounds[]): FrameBounds[] {
   }));
 }
 
-export async function loadSpriteSheet(url: string): Promise<Texture[]> {
+/**
+ * A landmark's art is ONE subject (ADR 0080). Given the tight bounds found in the picture, keep only
+ * the single largest one: a fresh image has exactly one, and an older cached 4-mountain sheet gets its
+ * biggest, most complete mountain instead of a walk cycle across different mountains.
+ */
+export function pickLandmarkBounds(bounds: FrameBounds[]): FrameBounds[] {
+  if (bounds.length <= 1) return bounds;
+  let best = bounds[0];
+  for (const b of bounds) if (b.w * b.h > best.w * best.h) best = b;
+  return [best];
+}
+
+export async function loadSpriteSheet(url: string, key = ""): Promise<Texture[]> {
   try {
     const img = new Image();
     img.src = url;
@@ -311,8 +323,8 @@ export async function loadSpriteSheet(url: string): Promise<Texture[]> {
     }
     ctx.putImageData(data, 0, 0);
 
-    const tightBounds = findPoseBounds(w, h, px);
-    const bounds = alignPoseBounds(tightBounds);
+    const single = key !== "" && isLandmarkSubject(key);
+    const bounds = single ? pickLandmarkBounds(findPoseBounds(w, h, px, 1)) : alignPoseBounds(findPoseBounds(w, h, px));
     const textures: Texture[] = [];
     for (const b of bounds) {
       const frame = document.createElement("canvas");
