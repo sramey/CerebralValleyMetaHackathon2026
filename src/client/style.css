@@ -17,6 +17,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e13; col
 #orb-dot { width: 30px; height: 30px; flex: none; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ffe9a8, #ffc94d 55%, #d99a1f); box-shadow: inset 0 0 8px rgba(255,255,255,.55), 0 0 12px rgba(255,201,77,.45); }
 #orb-dot.building { animation: orb-pulse .6s ease-in-out infinite; }
 #orb-dot.done { background: radial-gradient(circle at 35% 35%, #d2ffd2, #7ee081 55%, #3fa34d); box-shadow: inset 0 0 8px rgba(255,255,255,.55), 0 0 12px rgba(126,224,129,.5); }
+#orb-dot.off { background: radial-gradient(circle at 35% 35%, #d5dbe2, #7b8794 55%, #4d5762); box-shadow: inset 0 0 8px rgba(255,255,255,.4), 0 0 8px rgba(123,135,148,.35); }
 #orb-dot.failed { background: radial-gradient(circle at 35% 35%, #ffb3ab, #e2483d 55%, #a02722); box-shadow: inset 0 0 8px rgba(255,255,255,.45), 0 0 12px rgba(226,72,61,.5); }
 @keyframes orb-pulse { 50% { transform: scale(1.18); opacity: .75; } }
 @media (prefers-reduced-motion: reduce) { #orb-dot.building { animation: none; } }
@@ -68,6 +69,7 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #
 #orb[data-state="building"] { background: #39d0b0; animation-duration: .5s; }
 #orb[data-state="failed"] { background: #e2483d; animation: none; }
 #orb[data-state="done"] { background: #7ee081; animation: none; }
+#orb[data-state="off"] { background: #7b8794; animation: none; }
 @keyframes pulse { 50% { transform: scale(1.14); } }
 @media (prefers-reduced-motion: reduce) { #orb { animation: none; } }
 #orb-state { font-weight: 700; font-size: 13px; }

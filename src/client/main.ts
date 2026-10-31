@@ -20,6 +20,7 @@ import { Feel } from "./feel";
 import { Sound, buildSfx } from "./sound";
 import { createTester } from "./tester";
 import { createOnboarding, createSoundButton, plainBuildMessage } from "./onboard";
+import { AI_OFF } from "../ai-off";
 import { createMoodCard } from "./mood-card";
 import { createModsPanel } from "./mods-panel";
 import { createCrosshair } from "./crosshair";
@@ -120,11 +121,14 @@ function showToast(text: string, icon = "↩"): void {
   toastTimer = window.setTimeout(() => toastEl.classList.remove("show"), 2600);
 }
 
+/** True once the server says it has no AI (no key, kill switch): the orb stops claiming to listen for builds. */
+let aiOff = false;
 function say(text: string, state = "idle"): void {
+  if (aiOff && state === "idle") state = "off";
   orbSay.textContent = text;
   orb.dataset.state = state;
-  orbState.textContent = state === "building" ? "Building" : state === "failed" ? "Rolled back" : state === "done" ? "Done" : "Listening";
-  const orbClass = state === "building" ? "building" : state === "failed" ? "failed" : state === "done" ? "done" : "listening";
+  orbState.textContent = state === "building" ? "Building" : state === "failed" ? "Rolled back" : state === "done" ? "Done" : state === "off" ? AI_OFF.orbLabel : "Listening";
+  const orbClass = state === "building" ? "building" : state === "failed" ? "failed" : state === "done" ? "done" : state === "off" ? "off" : "listening";
   orbDot.className = `orb ${orbClass}`;
   orbFeedback.textContent = text;
   orbFeedback.title = text;
@@ -2185,7 +2189,7 @@ async function applyWorld(msg: Extract<ServerMsg, { kind: "world" }>): Promise<v
   }
   if (!msg.id) { say(`Restored a world of ${loaded} mods. The steps before it are still on the timeline.`, "done"); return; } // timeline restore (ADR 0041)
   history.replaceState(null, "", `?w=${msg.id}`);
-  say(`Opened a world with ${loaded} mods. Keep building to remix it.`, "done");
+  say(aiOff ? AI_OFF.worldOpened(loaded) : `Opened a world with ${loaded} mods. Keep building to remix it.`, "done");
 }
 
 /**
@@ -2316,13 +2320,19 @@ function connect(): void {
       // A saved world this browser had is gone (a fresh data folder, a pruned slot): start fresh.
       clearTimeout(resumeFallbackTimer);
       autoLoadStarterOnce();
-      say("This server doesn't have your last world, so here's a fresh start — say something to build.", "done");
+      say(aiOff ? "This server doesn't have your last world, so here's a fresh start. The AI is off, so open a demo world from the « panel." : "This server doesn't have your last world, so here's a fresh start — say something to build.", "done");
       return;
     }
     if (msg.kind === "mood") { onMood(msg.mood); autosaveTouch(); return; }
     if (msg.kind === "restyled") { await onRestyled(msg); return; }
     if (msg.kind === "visitor") {
       showDemos(msg.demos, msg.reason);
+      if (msg.reason === "nokey" || msg.reason === "killswitch") {
+        aiOff = true;
+        onboarding.aiOff();
+        inputEl.placeholder = AI_OFF.panelPlaceholder;
+        if (orb.dataset.state === "idle") say(orbSay.textContent ?? AI_OFF.greeting); // re-label an idle orb
+      }
       if (msg.reason === "nokey") noKeyModal.showIfStartup();
       return;
     }

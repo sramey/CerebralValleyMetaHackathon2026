@@ -58,6 +58,7 @@ import type { PendingVerdict } from "./safety";
 import { cachedExplanation, explainMod } from "./explain";
 import { anySignal, CANCEL_DETAIL, createCancelRegistry } from "./cancel";
 import type { CancelRegistry } from "./cancel";
+import { AI_OFF } from "../src/ai-off";
 
 loadEnv();
 const PORT = Number(process.env.PORT ?? 8787);
@@ -494,8 +495,11 @@ async function handleSketchMessage(ws: WebSocket, msg: Extract<ClientMsg, { kind
       return;
     }
   }
-  if (!spend(ws, "build")) {
-    // Budget/key denial used to `return` silently and leave the sketch overlay waiting out its
+  // Drawing a level needs no AI: with no key (or the kill switch on) the drawn boxes become the
+  // level directly (levelFromStrokes), so a keyless visitor can still draw and play.
+  const noAi = !hasApiKey() || killSwitchOn();
+  if (!noAi && !spend(ws, "build")) {
+    // Budget denial used to `return` silently and leave the sketch overlay waiting out its
     // watchdog; tell the overlay now so the player can keep drawing (bug q8x).
     stage(ws, { kind: "stage", stage: "failed", detail: "the AI build budget for this visit is used up", command });
     return;
@@ -543,7 +547,7 @@ async function handleSketchMessage(ws: WebSocket, msg: Extract<ClientMsg, { kind
       say: (text) => send(ws, { kind: "say", text }),
       stage: (s, detail) => stage(ws, { kind: "stage", stage: s, detail, command }),
       note: (text) => console.log(`[sketch] ${text}`),
-    }, msg);
+    }, msg, {}, { noAi });
   } catch (err) {
     if (job.cancelled) { sendCancelled(ws, command, { route: 0, write: timings.write, compile: timings.compile, verify: timings.verify, total: Math.round(performance.now() - t0) }, "new"); return; }
     const why = err instanceof Error ? err.message : String(err);
@@ -1651,7 +1655,8 @@ wss.on("connection", (ws: WebSocket, req) => {
   if ((connsByIp.get(ip) ?? 0) >= maxConnPerIp) { ws.close(1013, "too many connections"); return; }
   connsByIp.set(ip, (connsByIp.get(ip) ?? 0) + 1);
   sess(ws).ip = ip;
-  send(ws, { kind: "say", text: "hello! Tell me what to build — e.g. 'add a player'." });
+  // With no AI the greeting must not invite a build (a keyless judge reads this first).
+  send(ws, { kind: "say", text: !hasApiKey() || killSwitchOn() ? AI_OFF.greeting : "hello! Tell me what to build — e.g. 'add a player'." });
   if (!hasApiKey() || killSwitchOn()) send(ws, { kind: "visitor", reason: killSwitchOn() ? "killswitch" : "nokey", demos: worlds.demos() });
   ws.on("close", () => {
     connsByIp.set(ip, Math.max(0, (connsByIp.get(ip) ?? 1) - 1));

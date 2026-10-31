@@ -4,6 +4,7 @@
 import "./onboard.css";
 import type { Sound } from "./sound";
 import { coachBody, type InputMode } from "./gamepad";
+import { AI_OFF } from "../ai-off";
 
 /** Ideas the pipeline is known to land (from the rehearse sets), shown in the placeholder in rotation. */
 export const IDEAS: readonly string[] = [
@@ -17,6 +18,7 @@ export const IDEAS: readonly string[] = [
   "let me shoot fireballs",
 ];
 export const FIRST_IDEA = IDEAS[0];
+
 
 export type CoachEvent = "submit" | "working" | "built" | "move" | "skip";
 /** Steps are 1 (say it), 2 (watch it get built), 3 (play it); 4 means the tour is over. */
@@ -83,6 +85,8 @@ export interface OnboardingHooks {
 export interface Onboarding {
   event(ev: CoachEvent): void;
   readonly step: CoachStep;
+  /** The server has no AI: end the tour for this visit (without marking it done) and stop suggesting builds. */
+  aiOff(): void;
   /** Redraw the card, for when the input mode changed. */
   refresh(): void;
 }
@@ -90,8 +94,10 @@ export interface Onboarding {
 export function createOnboarding(h: OnboardingHooks): Onboarding {
   // Rotating suggestions in the orb placeholder (only while the box is empty and unfocused).
   let slot = 0;
+  let off = false;
   h.orbInput.placeholder = ideaPlaceholder(slot);
   window.setInterval(() => {
+    if (off) return;
     if (h.orbInput.value || document.activeElement === h.orbInput) return;
     h.orbInput.placeholder = ideaPlaceholder(++slot);
   }, 4500);
@@ -190,8 +196,15 @@ export function createOnboarding(h: OnboardingHooks): Onboarding {
     if (step === 4) store.set(KEY, "done");
     render();
   }
+  const aiOff = (): void => {
+    off = true;
+    h.orbInput.placeholder = AI_OFF.placeholder;
+    // Never persisted as "done": a later run with a key still gets its tour.
+    step = 4;
+    render();
+  };
   render();
-  return { event, refresh: render, get step() { return step; } };
+  return { event, aiOff, refresh: render, get step() { return step; } };
 }
 
 const ICON_ON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
