@@ -84,6 +84,47 @@ describe("quickButtonHtml", () => {
   });
 });
 
+// Bug qblayout: the bar is icon-only, so the words have to survive somewhere — every button
+// keeps a title, an aria-label and the label span that quickbar.css shows on hover/focus.
+describe("icon-only buttons stay labelled (bug qblayout)", () => {
+  it("gives every action a title and an aria-label", () => {
+    for (const action of QUICK_ACTIONS) {
+      expect(action.title.trim().length).toBeGreaterThan(0);
+      expect(action.ariaLabel.trim().length).toBeGreaterThan(0);
+      expect(action.label.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  it("renders icon, label, tooltip text and accessible name for all three buttons", () => {
+    for (const action of QUICK_ACTIONS) {
+      const html = quickButtonHtml(action);
+      expect(html).toContain(`id="${action.id}"`);
+      expect(html).toContain('type="button"');
+      expect(html).toContain(`title="${action.title}"`);
+      expect(html).toContain(`aria-label="${action.ariaLabel}"`);
+      expect(html).toContain(`class="quick-icon" aria-hidden="true">${action.icon}</span>`);
+      expect(html).toContain(`class="quick-label">${action.label}</span>`);
+    }
+  });
+
+  it("mounts one icon-only button per action, still 40 px-wide-friendly (no text node at the top level)", () => {
+    if (typeof document === "undefined") return;
+    const container = document.createElement("div");
+    const bar = createQuickbar(container, QUICK_ACTIONS);
+    const buttons = Array.from(bar.querySelectorAll<HTMLButtonElement>("button.quick-btn"));
+    expect(buttons).toHaveLength(QUICK_ACTIONS.length);
+    buttons.forEach((btn, i) => {
+      expect(btn.id).toBe(QUICK_ACTIONS[i].id);
+      expect(btn.title).toBe(QUICK_ACTIONS[i].title);
+      expect(btn.getAttribute("aria-label")).toBe(QUICK_ACTIONS[i].ariaLabel);
+      // Exactly two spans: the icon and the (hover-only) label.
+      expect(btn.children).toHaveLength(2);
+      expect(btn.querySelector(".quick-icon")?.textContent).toBe(QUICK_ACTIONS[i].icon);
+      expect(btn.querySelector(".quick-label")?.textContent).toBe(QUICK_ACTIONS[i].label);
+    });
+  });
+});
+
 describe("createQuickbar DOM mounting", () => {
   it("creates a nav with role/label and wires clicks to onTrigger when document is present", () => {
     if (typeof document !== "undefined") {

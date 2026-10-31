@@ -1,0 +1,67 @@
+Quick-action bar layout check — bug "qblayout"
+===============================================
+
+Measured live in Chrome against this worktree's dev servers (vite 5185, game server ws 8795),
+with the build theater streaming its code card (`window.preview_idle_fx()`).
+Rects are `getBoundingClientRect()` in CSS px; "clear" = the rect does not intersect #quickbar.
+
+The bar is always one column on the right edge: right 12 px, 40 px wide, top 106 px,
+three 40 px circles with 8 px gaps (136 px tall). The code card (.bt-stream) and the
+top-right HUD (.hud-pos-top-right) end 8 px left of it (right: 60px).
+
+Before (old wide buttons), 1280x720, panel collapsed:
+  #quickbar        1054..1218   y  12..109
+  .bt-card          844..1264   y  68..282   -> OVERLAP: the bar cut off the card's
+                                               title and the right end of every code line
+
+After, 1920x1080:
+  panel collapsed                                  panel open
+  #quickbar            1868..1908 y 106..242       #quickbar        1528..1568 y 106..242
+  #drawer-toggle «     1866..1908 y  12..54 clear  #drawer-toggle   1866..1908 y  12..54 clear
+  #sound-btn           1867..1907 y  58..98 clear  #sound-btn       1526..1566 y  12..52 clear
+  .bt-card             1440..1860 y  68..328 clear .bt-card         1100..1520 y  68..328 clear
+  .hud-pos-top-right   1692..1860 y 106..201 clear .hud-pos-top-right 1352..1520 y  62..157 clear
+  .hud-pos-top-center   786..1134 y 132..179 clear .hud-pos-top-center  616..964 y 132..179 clear
+  #orb-bar              700..1220 y  14..62 clear  #orb-bar          530..1050 y  14..62 clear
+  .bt-stepper           721..1199 y  94..119 clear .bt-stepper       551..1029 y  94..119 clear
+
+After, 1280x720:
+  panel collapsed                                  panel open
+  #quickbar            1228..1268 y 106..242       #quickbar         888..928 y 106..242
+  #drawer-toggle «     1226..1268 y  12..54 clear  #drawer-toggle   1226..1268 y  12..54 clear
+  #sound-btn           1227..1267 y  58..98 clear  #sound-btn        886..926 y  12..52 clear
+  .bt-card              800..1220 y  68..282 clear .bt-card          460..880 y  68..282 clear
+  .hud-pos-top-right   1052..1220 y 106..201 clear .hud-pos-top-right 712..880 y  62..157 clear
+  .hud-pos-top-center   466..814  y 132..179 clear .hud-pos-top-center 296..644 y 132..179 clear
+  #orb-bar              380..900  y  14..62 clear  #orb-bar          210..730 y  14..62 clear
+  .bt-stepper           419..861  y  94..114 clear .bt-stepper       249..691 y  94..114 clear
+
+After, 900x600 (panel opens as a bottom row below 900 px, so the stage stays 900 wide):
+  panel collapsed                                  panel open
+  #quickbar             848..888  y 106..242       #quickbar         848..888 y 106..242
+  #drawer-toggle «      846..888  y  12..54 clear  #drawer-toggle    846..888 y  12..54 clear
+  #sound-btn            847..887  y  58..98 clear  #sound-btn        846..886 y  12..52 clear
+  .bt-card              420..840  y  68..267 clear .bt-card          420..840 y  68..267 clear
+  .hud-pos-top-right    672..840  y 106..201 clear .hud-pos-top-right 672..840 y  62..157 clear
+  .hud-pos-top-center   276..624  y 132..179 clear .hud-pos-top-center 276..624 y 132..179 clear
+  #orb-bar              190..710  y  14..62 clear  #orb-bar          190..710 y  14..62 clear
+
+After, 1000x700, panel open (the narrowest real side-panel stage, 660 px wide):
+  #quickbar             608..648  y 106..242
+  .bt-card              180..600  y  68..279 clear
+  .hud-pos-top-right    432..600  y  62..157 clear
+  .hud-pos-top-center   165..495  y 132..204 clear
+  #orb-bar               70..590  y  14..62  clear
+  .bt-stepper           123..537  y  94..114 clear
+
+Notes
+- The starter world only declares a top-left health widget, so the top-right HUD row
+  (level progress + score) and the top-centre banner were injected for the measurement
+  with the app's own classes (`.hud-pos-top-right`, `.hud-widget.hud-bar`, `.hud-widget.hud-stat`,
+  `.hud-pos-top-center`, `.hud-widget.hud-banner`) — see after-1280x720-hud-banner-clear.png
+  and after-900x600-hud-banner-clear.png. Everything else is the unmodified app.
+- The card itself still sits over the top-right HUD while it streams (it is above it,
+  z-index 23 vs 22). That overlap predates this bug and is not caused by the quickbar.
+- Accessibility: `take_snapshot` reports `navigation "Quick actions"` with three buttons
+  named "What it has learned", "Draw a level" and "Bring an object in (camera)", each
+  carrying its `title` as the description.
