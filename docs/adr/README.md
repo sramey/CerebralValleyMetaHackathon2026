@@ -100,6 +100,8 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0070](0070-world-survives-reload.md) | The current world survives a reload and a server restart: one autosaved slot per browser, scrubbed files, one-click "New world" | Proposed |
 | [0071](0071-hostile-identity-stomp-pets-and-facing.md) | The engine owns stomping, pet friendly fire (a companion never hurts the player), no sinking into solids and steady facing | Proposed |
 | [0072](0072-walker-hostiles-grounding-and-art-persistence.md) | Creature sheets slice into 4 whole frames on one baseline; wave walkers are grounded unless flyers are asked for; editing a mod keeps its art unless the art is asked to change | Proposed |
+| [0073](0073-generated-levels.md) | Level requests go to a deterministic generator (`api.buildLevel`): pits, platforms at several heights, spikes, walkers, checkpoints and a goal; "harder", "extend" and "new" are knob changes; place themes are deterministic | Proposed |
+| [0074](0074-engine-loadout.md) | The engine owns the loadout: one active item, switch (Q), drop (G), reload (R), a mounted vehicle's weapon overrides the player's gear, vehicles run over hostiles | Proposed |
 | [0075](0075-engine-owned-hurt-window-and-knockback.md) | Getting hurt is engine-owned: a short invulnerability window, a knockback and a red flash | Proposed |
 | [0076](0076-drawn-crosshair-over-the-stage.md) | A drawn crosshair over the stage for aiming, hidden for keyboard and gamepad play | Proposed |
 | [0077](0077-reconnect-adopts-the-home-world.md) | A reconnect adopts the browser's own world file back into the session, so knobs, undo and edits keep working with no reload | Proposed |

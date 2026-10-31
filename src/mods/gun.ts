@@ -7,30 +7,20 @@ export const gunMod: ModDefinition = {
     damage: { value: 50, min: 10, max: 200, label: "Damage" },
     cooldown: { value: 12, min: 2, max: 60, label: "Cooldown (ticks)" },
     speed: { value: 650, min: 200, max: 1200, label: "Bullet speed" },
+    magSize: { value: 12, min: 4, max: 60, label: "Magazine size" },
   },
   setup(api, knobs) {
     const damage = Number(knobs.damage);
     const cooldown = Math.max(1, Math.floor(Number(knobs.cooldown)));
     const speed = Number(knobs.speed);
-    let lastShot = -10000;
 
-    // Usable item HUD badge (keybinding indicator)
-    api.setHud("weapon", {
-      kind: "stat",
-      icon: "🔫",
-      label: "Gun",
-      value: "F / X to shoot",
-      position: "top-left",
-    });
-
-    // Spawn held weapon entity attached to the player
+    // Spawn the held weapon; the engine mounts it on the hand (ADR 0057) and the loadout owns
+    // switching, dropping, ammo and the HUD line (ADR 0074).
     const p = api.player();
-    const px = p ? (p.facing > 0 ? p.x + p.w - 2 : p.x - 14) : 100;
-    const py = p ? p.y + p.h / 2 - 3 : 300;
     const gun = api.spawn({
       type: "gun",
-      x: px,
-      y: py,
+      x: p ? p.x : 100,
+      y: p ? p.y : 300,
       w: 16,
       h: 8,
       color: 0x5a5a66,
@@ -38,23 +28,17 @@ export const gunMod: ModDefinition = {
       gravityScale: 0,
       data: { heldByPlayer: true, item: "gun" },
     });
+    const gear = api.gear!({ label: "Gun", icon: "🔫", entity: gun, magSize: Math.max(1, Math.floor(Number(knobs.magSize))), cooldown, reloadTicks: 45 });
+    api.setHud("weapon", { kind: "banner", text: "Gun: F / X to shoot, R to reload, G to drop", duration: 3, position: "top-center" });
 
     api.onTick(() => {
       const player = api.player();
-      if (player) {
-        gun.facing = player.facing;
-        gun.x = player.facing > 0 ? player.x + player.w - 2 : player.x - gun.w + 2;
-        gun.y = player.y + player.h / 2 - 3;
-      }
-
-      // Check item use key (F / E via use) or shoot key (X / J via shoot)
       const input = api.input();
-      const fire = Boolean(input.use || input.shoot);
-      if (fire && api.tick() - lastShot >= cooldown) {
-        lastShot = api.tick();
+      if ((input.use || input.shoot) && gear.fire()) {
         const dir = player ? player.facing : 1;
-        const bx = dir > 0 ? gun.x + gun.w : gun.x - 8;
-        const by = gun.y + 2;
+        // Shots leave from the player, not the drawn gun: the engine mounts the gun after the step.
+        const bx = player ? (dir > 0 ? player.x + player.w - 2 + gun.w : player.x - 14 - 8) : gun.x;
+        const by = (player ? player.y + player.h / 2 - 3 : gun.y) + 2;
         api.spawn({
           type: "player-bullet",
           x: bx,

@@ -14,6 +14,13 @@ export interface InputState {
   pointerY?: number;
   /** Primary mouse button / touch is held. */
   pointerDown?: boolean;
+  /** Loadout keys (ADR 0074), held like the rest; the engine reads their edges. reload: R / pad L2. drop: G / pad d-pad down.
+   *  nextItem / prevItem: Q or wheel / pad L1 or d-pad up. slot: 1-9 picks that item. A mod sees `reload` only when its item has no engine ammo. */
+  reload?: boolean;
+  drop?: boolean;
+  nextItem?: boolean;
+  prevItem?: boolean;
+  slot?: number;
 }
 
 export const emptyInput = (): InputState => ({ left: false, right: false, jump: false, shoot: false, use: false });
@@ -304,6 +311,40 @@ export interface ModApi {
   buildLevel?: (options?: LevelBuildOptions) => LevelBuild;
   /** Tell every other mod something happened ("boss-down", "door-open"); they get a "signal" event next tick. */
   signal?: (name: string, value?: KnobValue) => void;
+  /** Register the thing you hold or wield with the engine loadout (ADR 0074): one item is active at a time, Q / wheel / L1 switches,
+   *  G drops it, R reloads it, and the HUD shows it. Optional: a mod that only reads `input.shoot` is registered automatically. */
+  gear?: (def: GearDef) => GearHandle;
+}
+
+/** What api.gear takes (ADR 0074). */
+export interface GearDef {
+  /** Short id for this item, unique within your mod. Defaults to your mod id. */
+  id?: string;
+  /** Name shown on the HUD ("Blaster"). */
+  label: string;
+  icon?: string;
+  /** The held entity (a gun prop). The engine stows it on the back when another item is active, drops it on G, and lets the player pick a dropped one up. Omit for abilities (a grapple) and weapons that only spawn shots. */
+  entity?: Entity;
+  /** Bullets per magazine. Omit for no ammo limit. */
+  magSize?: number;
+  /** Spare rounds beyond the magazine. Default 4 magazines. */
+  reserve?: number;
+  /** Ticks a reload takes. Default 60. */
+  reloadTicks?: number;
+  /** Ticks between shots for gear.fire(). Default 0. */
+  cooldown?: number;
+}
+
+/** The handle api.gear returns (ADR 0074). */
+export interface GearHandle {
+  /** True when this is the item in hand: carried, selected, and no vehicle has taken over. Gate your fire code on it. */
+  active(): boolean;
+  /** Ask to shoot: true (and one round used, cooldown started) only when active, not reloading, off cooldown and loaded. An empty magazine starts a reload. */
+  fire(): boolean;
+  /** Rounds now, or undefined for gear without ammo. */
+  ammo(): { mag: number; magSize: number; reserve: number; reloading: boolean } | undefined;
+  /** Add spare rounds (an ammo pickup). */
+  addAmmo(n: number): void;
 }
 
 /** Standing orders the player can give any creature by voice, with no rebuild (ADR 0059). The engine steers

@@ -5,9 +5,9 @@ import { emptyInput } from "../contract";
 import type { InputState } from "../contract";
 
 /** Standard-layout button indices (PlayStation names). */
-export const PAD = { CROSS: 0, CIRCLE: 1, SQUARE: 2, TRIANGLE: 3, L1: 4, R1: 5, OPTIONS: 9, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 } as const;
-/** Hold to talk, same handler as holding Shift. R1 or Triangle (L1 kept from the first version). */
-export const TALK_BUTTONS: readonly number[] = [PAD.TRIANGLE, PAD.L1, PAD.R1];
+export const PAD = { CROSS: 0, CIRCLE: 1, SQUARE: 2, TRIANGLE: 3, L1: 4, R1: 5, L2: 6, OPTIONS: 9, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 } as const;
+/** Hold to talk, same handler as holding Shift. R1 or Triangle. L1 is the item switch now (ADR 0074). */
+export const TALK_BUTTONS: readonly number[] = [PAD.TRIANGLE, PAD.R1];
 /** Stick travel below this counts as centred. */
 export const DEADZONE = 0.25;
 
@@ -30,6 +30,11 @@ export function inputFromPad(pad: PadLike | null | undefined): InputState {
   input.jump = down(pad, PAD.CROSS);
   input.shoot = down(pad, PAD.SQUARE);
   input.use = down(pad, PAD.CIRCLE) || input.shoot; // Square is the keyboard's X: shoot and use together
+  // Loadout (ADR 0074): L1 next item, d-pad up previous, d-pad down drop, L2 reload.
+  if (down(pad, PAD.L1)) input.nextItem = true;
+  if (down(pad, PAD.UP)) input.prevItem = true;
+  if (down(pad, PAD.DOWN)) input.drop = true;
+  if (down(pad, PAD.L2)) input.reload = true;
   return input;
 }
 
@@ -42,6 +47,11 @@ export function mergeInputs(a: InputState, b: InputState): InputState {
     jump: a.jump || b.jump,
     shoot: a.shoot || b.shoot,
     use: !!(a.use || b.use),
+    ...(a.nextItem || b.nextItem ? { nextItem: true } : {}),
+    ...(a.prevItem || b.prevItem ? { prevItem: true } : {}),
+    ...(a.drop || b.drop ? { drop: true } : {}),
+    ...(a.reload || b.reload ? { reload: true } : {}),
+    ...(a.slot !== undefined || b.slot !== undefined ? { slot: a.slot ?? b.slot } : {}),
   };
 }
 
