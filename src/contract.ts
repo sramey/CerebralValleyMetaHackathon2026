@@ -51,7 +51,7 @@ export interface Entity {
 }
 
 /** Procedural shapes the client draws in code, so primitives never go to Muse Image (ADR 0015). */
-export type ShapeName = "circle" | "ring" | "triangle" | "spikes" | "pill" | "diamond" | "star" | "block";
+export type ShapeName = "circle" | "ring" | "triangle" | "spikes" | "pill" | "diamond" | "star" | "block" | "flag";
 
 /** How the client draws entities of these types: a code-drawn shape, or an engine effect (no outline, no sprite). */
 export interface Look { visual: "shape" | "effect"; shape?: ShapeName; types: string[] }
@@ -72,6 +72,7 @@ export interface MoodSpec {
 export const BACKDROP_MOTIFS = [
   "castle", "tower", "village", "church", "windmill", "farmhouse", "barn", "silo", "watertower", "city", "pyramid", "tent",
   "pine", "oak", "deadtree", "palm", "cactus", "rock", "bush", "fence", "lamp", "torch", "haybale", "corn", "banner", "well", "cart",
+  "clocktower", "dome", "pagoda", "eiffel", "lighthouse", "igloo", "phonebox", "mesa",
 ] as const;
 export type BackdropMotif = (typeof BACKDROP_MOTIFS)[number];
 
@@ -177,6 +178,32 @@ export interface SwarmSeparationOptions {
   strength?: number;
 }
 
+/** api.buildLevel input (ADR 0073). Same seed and numbers, same level. */
+export interface LevelBuildOptions {
+  seed?: number;
+  /** 1 (gentle) to 5 (brutal). */
+  difficulty?: number;
+  /** Playable run in px from the start to the flag (1200..16000). */
+  length?: number;
+  /** x of the start platform. */
+  startX?: number;
+  /** Optional colours (numbers) for ground, platform, block, spikes, walker, flyer, flag. */
+  palette?: Partial<Record<"ground" | "platform" | "block" | "spikes" | "walker" | "flyer" | "flag", number>>;
+}
+
+/** What api.buildLevel returns: where the level ends, what is in it, and a way to take it down. */
+export interface LevelBuild {
+  readonly startX: number;
+  readonly endX: number;
+  readonly difficulty: number;
+  readonly length: number;
+  readonly stats: { sections: number; gaps: number; hazards: number; enemies: number; platforms: number; heights: number; coins: number };
+  readonly spec: unknown;
+  readonly cleared: boolean;
+  readonly falls: number;
+  dispose(): void;
+}
+
 export interface WaveControllerOptions {
   baseWaveSize?: number;
   killsPerLevel?: number;
@@ -273,6 +300,8 @@ export interface ModApi {
    *  backdrop paints a code-drawn sky ("space"); playerSkin re-skins the player with generated art (e.g. "spaceship") and
    *  the player's gravity is put back on unload. Calling it again from the same mod adds to its claim. */
   setScene?: (options: SceneOptions) => void;
+  /** Build a whole playable level (ADR 0073): floor with pits, platform runs at several heights, spikes, walkers and fliers on their ledges, coins, checkpoints and a goal flag, from a seed and a difficulty. Deterministic; the starter terrain is put aside and returns on undo. */
+  buildLevel?: (options?: LevelBuildOptions) => LevelBuild;
   /** Tell every other mod something happened ("boss-down", "door-open"); they get a "signal" event next tick. */
   signal?: (name: string, value?: KnobValue) => void;
 }

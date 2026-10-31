@@ -95,6 +95,55 @@ export const BACKDROP_PRESETS: Record<string, MoodSpec> = {
     grass: 0x5f8f5a, soil: 0x3a3a44, tint: 0xffb98a, grade: 0.08, dim: 1, fog: 0.12, vignette: 0.25, ambient: "none",
     backdrop: { skyline: "hills", landmark: "city", far: ["city", "watertower", "city"], mid: ["oak", "city", "lamp"], near: ["lamp", "bush", "fence"] },
   },
+  england: {
+    name: "england",
+    anchor: "rainy-bright England: Big Ben clock tower, red phone boxes, stone cottages and church spires, green rolling hills under soft grey-blue sky",
+    skyTop: 0x7b8ea3, skyBottom: 0xd6dde3, ridgeFar: 0x8fa08f, ridgeNear: 0x5d7f56, moon: 0xf2f0e4, star: 0xffffff,
+    grass: 0x5fae4a, soil: 0x4f3b2a, tint: 0xdfe6ee, grade: 0.08, dim: 1, fog: 0.22, vignette: 0.15, ambient: "none",
+    backdrop: { skyline: "hills", landmark: "clocktower", far: ["clocktower", "church", "village", "castle", "oak"], mid: ["oak", "village", "pine", "oak", "church"], near: ["phonebox", "fence", "lamp", "bush", "well"] },
+  },
+  india: {
+    name: "india",
+    anchor: "India at golden hour: white marble domed palaces with minarets, palms, bright saffron and turquoise light, dusty warm ground",
+    skyTop: 0xe9805a, skyBottom: 0xffd98a, ridgeFar: 0xc79a7a, ridgeNear: 0xa8774f, moon: 0xfff0b0, star: 0xffffff,
+    grass: 0xb5b04a, soil: 0x8a5a34, tint: 0xffc27a, grade: 0.1, dim: 1.02, fog: 0.14, vignette: 0.16, ambient: "none",
+    backdrop: { skyline: "hills", landmark: "dome", far: ["dome", "tower", "village", "palm"], mid: ["palm", "village", "oak", "tent"], near: ["banner", "cart", "bush", "well", "rock"] },
+  },
+  japan: {
+    name: "japan",
+    anchor: "Japan in spring: red pagodas, pine trees, soft pink dusk sky, lanterns and snow-capped mountains",
+    skyTop: 0x6d86c9, skyBottom: 0xffd1d9, ridgeFar: 0x8aa0c4, ridgeNear: 0x587a6a, moon: 0xfff6e0, star: 0xffffff,
+    grass: 0x6dbf6a, soil: 0x5b4636, tint: 0xffd6e0, grade: 0.08, dim: 1, fog: 0.16, vignette: 0.18, ambient: "none",
+    backdrop: { skyline: "mountains", landmark: "pagoda", far: ["pagoda", "village", "pine"], mid: ["pine", "pagoda", "oak", "village"], near: ["lamp", "bush", "fence", "torch", "rock"] },
+  },
+  france: {
+    name: "france",
+    anchor: "Paris in the evening: iron lattice tower, cream stone buildings, cafe lamps, lavender sky",
+    skyTop: 0x5b6fb5, skyBottom: 0xf3c9b0, ridgeFar: 0x8a93b5, ridgeNear: 0x6a7a68, moon: 0xfff0d0, star: 0xffffff,
+    grass: 0x78b45a, soil: 0x5a4a3a, tint: 0xffd0c0, grade: 0.08, dim: 1, fog: 0.15, vignette: 0.2, ambient: "none",
+    backdrop: { skyline: "hills", landmark: "eiffel", far: ["eiffel", "city", "church"], mid: ["oak", "city", "lamp", "oak"], near: ["lamp", "fence", "bush", "cart"] },
+  },
+  arctic: {
+    name: "arctic",
+    anchor: "frozen arctic tundra: igloos, snowy pines, icy blue light and drifting snow",
+    skyTop: 0x1f3a6b, skyBottom: 0xbfe0f5, ridgeFar: 0x9ab4cf, ridgeNear: 0xc9d9e8, moon: 0xffffff, star: 0xffffff,
+    grass: 0xe8f1fa, soil: 0x9fb4c8, tint: 0xcfe6ff, grade: 0.12, dim: 1.05, fog: 0.2, vignette: 0.18, ambient: "snow",
+    backdrop: { skyline: "mountains", landmark: "igloo", far: ["pine", "igloo", "pine"], mid: ["pine", "igloo", "deadtree", "pine"], near: ["rock", "bush", "fence", "torch"] },
+  },
+  coast: {
+    name: "coast",
+    anchor: "a windy seaside: striped lighthouse on the rocks, palms, warm sand and bright blue sky",
+    skyTop: 0x2f86d6, skyBottom: 0xbfe8ff, ridgeFar: 0x6aa5c9, ridgeNear: 0x4f8f9a, moon: 0xfff2b0, star: 0xffffff,
+    grass: 0xe6cf8f, soil: 0xb89a62, tint: 0xfff0c8, grade: 0.06, dim: 1.04, fog: 0.08, vignette: 0.1, ambient: "none",
+    backdrop: { skyline: "flat", landmark: "lighthouse", far: ["lighthouse", "palm", "rock"], mid: ["palm", "rock", "tent", "palm"], near: ["rock", "bush", "cart", "fence"] },
+  },
+  westerns: {
+    name: "wild west",
+    anchor: "dusty wild west: red rock mesas, cacti, wooden fences and a wagon under a hot orange sky",
+    skyTop: 0x3f7fd0, skyBottom: 0xffc48a, ridgeFar: 0xc9784a, ridgeNear: 0xa8603a, moon: 0xfff0b0, star: 0xffffff,
+    grass: 0xd9a86a, soil: 0x8a5230, tint: 0xffc890, grade: 0.1, dim: 1.02, fog: 0.1, vignette: 0.18, ambient: "none",
+    backdrop: { skyline: "hills", landmark: "mesa", far: ["mesa", "rock", "cactus"], mid: ["cactus", "mesa", "deadtree", "rock"], near: ["fence", "cactus", "cart", "haybale", "well"] },
+  },
 };
 const BACKDROP_ALIASES: Record<string, string> = {
   medieval: "medieval", medevil: "medieval", mideval: "medieval", medival: "medieval", medeval: "medieval", midevil: "medieval",
@@ -103,6 +152,13 @@ const BACKDROP_ALIASES: Record<string, string> = {
   cornfield: "farm", corn: "farm", indiana: "farm", iowa: "farm", kansas: "farm", nebraska: "farm", ohio: "farm", illinois: "farm", midwest: "farm",
   desert: "desert", egypt: "desert", egyptian: "desert", sahara: "desert", pyramids: "desert", pyramid: "desert", dunes: "desert",
   city: "city", downtown: "city", skyline: "city", skyscrapers: "city", urban: "city", metropolis: "city",
+  england: "england", english: "england", britain: "england", british: "england", uk: "england", london: "england",
+  india: "india", indian: "india", delhi: "india", mumbai: "india", taj: "india", bollywood: "india",
+  japan: "japan", japanese: "japan", tokyo: "japan", kyoto: "japan", pagoda: "japan", china: "japan", chinese: "japan", asia: "japan", asian: "japan", samurai: "japan",
+  france: "france", french: "france", paris: "france", eiffel: "france",
+  arctic: "arctic", antarctica: "arctic", tundra: "arctic", igloo: "arctic", polar: "arctic", iceland: "arctic", alaska: "arctic", siberia: "arctic",
+  coast: "coast", seaside: "coast", beach: "coast", lighthouse: "coast", ocean: "coast", island: "coast", tropical: "coast", hawaii: "coast", florida: "coast",
+  west: "westerns", western: "westerns", wildwest: "westerns", cowboy: "westerns", texas: "westerns", arizona: "westerns", mexico: "westerns", mexican: "westerns", canyon: "westerns",
 };
 
 const MOTIFS = new Set<string>(BACKDROP_MOTIFS);
