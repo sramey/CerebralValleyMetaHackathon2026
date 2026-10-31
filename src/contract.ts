@@ -633,6 +633,8 @@ export type ServerMsg =
   | { kind: "order"; modId: string; order: CreatureOrder }
   | { kind: "removed"; modId: string }
   | { kind: "say"; text: string }
+  /** The open-weights reviewer at work (ADR 0078): `running` while it reads a build, then `ok`, `fixed` (patched, re-verified, live) or `held` (a fix that did not pass the gates). `sweep` is set during "double-check my world". Additive. */
+  | { kind: "review"; modId: string; title: string; phase: "running" | "ok" | "fixed" | "held"; model: string; issue?: string; rule?: string; ms?: number; sweep?: { n: number; of: number } }
   | { kind: "segment"; key: string; box: { x: number; y: number; w: number; h: number } | null }
   /** One bot playtest. The client replays `inputs` (RLE of input masks) in a copy of its own world plus `mod`. */
   | { kind: "playtest"; command: string; attempt: number; ok: boolean; plain: string; seed: number; frames: number; inputs: number[]; mod: { id: string; compiled: string }; replaces?: string; ms: number }

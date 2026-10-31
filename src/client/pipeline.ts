@@ -11,7 +11,7 @@ import type { AgentStepMsg } from "./agent-steps";
 import { ON_DEMAND, ranNode } from "./pipeline-ran";
 import { isGameKeyEvent } from "./keys";
 
-type NodeId = "voice" | "spark" | "wonder" | "esbuild" | "verifier" | "live" | "image" | "sam";
+type NodeId = "voice" | "spark" | "wonder" | "esbuild" | "verifier" | "live" | "image" | "sam" | "reviewer";
 type Slot = "route" | "write" | "compile" | "verify";
 type Phase = "running" | "landed" | "failed" | "other";
 
@@ -41,6 +41,7 @@ const NODES: NodeDef[] = [
   { id: "live", name: "Hot-load", model: "mod loader", role: "Lands in the running game; undo stays clean", col: 6, row: 1 },
   { id: "image", name: "Muse Image", model: "muse-image-1.0", role: "Draws sprites on demand", col: 3, row: 2 },
   { id: "sam", name: "SAM 3.1", model: "sam-3.1", role: "Finds the object you hold up to the camera", col: 5, row: 2 },
+  { id: "reviewer", name: "Second opinion", model: "muse-spark-open · open weights", role: "Reads each finished build; patches only what re-verifies", col: 6, row: 2 },
 ];
 
 const STAGE_NODE: Record<string, NodeId> = {
@@ -79,6 +80,7 @@ export function createPipeline(host: HTMLElement): Pipeline {
   // Which models ran this session, and how many on-demand calls we saw (bead y0k).
   const ran = new Map<NodeId, { n: number; at: Date }>();
   let open = false;
+  const reviewing = new Set<string>(); // mods the open-weights reviewer is reading right now (ADR 0078)
   let ticker = 0;
 
   const root = document.createElement("section");
@@ -142,13 +144,14 @@ export function createPipeline(host: HTMLElement): Pipeline {
       const el = nodeEls.get(n.id)!;
       const running = c.get(n.id) ?? 0;
       const flashed = (flash.get(n.id) ?? 0) > now;
-      el.classList.toggle("on", running > 0 || flashed);
+      el.classList.toggle("on", running > 0 || flashed || (n.id === "reviewer" && reviewing.size > 0));
       el.classList.toggle("ran", ran.has(n.id));
       el.querySelector(".pl-count")!.textContent = running > 1 ? `${running} builds` : running === 1 ? "building" : "";
       const last = n.slot ? [...lanes].reverse().find((l) => l.times[n.slot!] !== undefined) : undefined;
       el.querySelector(".pl-last")!.textContent = last ? fmt(last.times[n.slot!]) : "";
       const seen = ran.get(n.id);
-      if (seen && ON_DEMAND.has(n.id)) {
+      if (n.id === "reviewer" && reviewing.size > 0) el.querySelector(".pl-count")!.textContent = reviewing.size === 1 ? "reviewing" : `${reviewing.size} reviewing`;
+      else if (seen && ON_DEMAND.has(n.id)) {
         if (running === 0) el.querySelector(".pl-count")!.textContent = seen.n === 1 ? "ran once" : `ran ${seen.n}x`;
         el.querySelector(".pl-last")!.textContent = `last ${seen.at.toTimeString().slice(0, 8)}`;
       }
@@ -240,7 +243,12 @@ export function createPipeline(host: HTMLElement): Pipeline {
       const prev = ran.get(proved);
       ran.set(proved, { n: (prev?.n ?? 0) + (ON_DEMAND.has(proved) ? 1 : 0), at: new Date() });
     }
-    if (msg.kind === "transcript") lit("voice");
+    if (msg.kind === "review") {
+      if (msg.phase === "running") reviewing.add(msg.modId); else reviewing.delete(msg.modId);
+      lit("reviewer");
+      paint();
+    }
+    else if (msg.kind === "transcript") lit("voice");
     else if (msg.kind === "routed") {
       // Name the model that actually answered on the Spark node (open weights or hosted).
       nodeEls.get("spark")!.querySelector(".pl-model")!.textContent = msg.open ? `${msg.model} (open weights)` : msg.model;

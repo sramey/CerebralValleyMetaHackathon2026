@@ -203,7 +203,7 @@ export function createBrain(host: HTMLElement): Brain {
     toggle: () => setOpen(!isOpen),
     onMsg(msg) {
       if (!isOpen) return;
-      const review = msg.kind === "say" && typeof msg.text === "string" && /reviewed by/i.test(msg.text);
+      const review = (msg.kind === "say" && typeof msg.text === "string" && /reviewed by/i.test(msg.text)) || msg.kind === "review";
       if (isLiveBuildMsg(msg) || review) {
         const wait = lastStarted === null ? 0 : Math.max(0, lastStarted + MIN_REFRESH_GAP_MS - Date.now());
         schedule(review ? 0 : Math.max(wait, 600));

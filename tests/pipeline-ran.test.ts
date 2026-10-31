@@ -31,6 +31,6 @@ describe("pipeline: which nodes a message proves ran", () => {
   });
 
   it("counts calls only for the on-demand models", () => {
-    expect([...ON_DEMAND].sort()).toEqual(["image", "sam", "voice"]);
+    expect([...ON_DEMAND].sort()).toEqual(["image", "reviewer", "sam", "voice"]);
   });
 });

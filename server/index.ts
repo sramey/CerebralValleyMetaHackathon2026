@@ -49,6 +49,7 @@ import { generateExportHtml } from "./export";
 import { createStaticHandler } from "./static";
 import { createVoiceHub } from "./voice";
 import { queueBuildReview } from "./reviewer";
+import { detectReviewSweep, runReviewSweep, sweepBlocked, sweepOffReply, sweepsPerSession, sweepSummary, aiBuilt } from "./review-sweep";
 import { appendTester, sanitizeTester } from "./testers";
 import { runSketchBuild } from "./sketch";
 import { runPaperBuild } from "./paper";
@@ -81,7 +82,7 @@ interface ManifestRec {
 // Each connection has its own world (ADR 0014): a public server must never mix visitors' mods.
 /** A screen verdict the build path may still read, tagged with the command it belongs to (ADR 0044). */
 interface PendingScreen { command: string; verdict: PendingVerdict }
-interface Session { /** Family-test tester index and session id once the page said ?tester=N (ADR 0034). */ tester?: { n: number; sid: string }; manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string>; mood?: MoodSpec; moodMods?: Set<string>; /** Level mods a sketch replaced, by the sketch mod id, so undo can put them back (bug j2t). */ levelStash?: Map<string, ManifestRec[]>; restyled?: Record<string, string>; /** Time-travel steps and the command that probably explains the next one (ADR 0041). */ timeline?: Timeline; lastCommand?: { text: string; at: number }; tlTimer?: ReturnType<typeof setTimeout>; /** Kid-safe verdict the screen did not wait for (ADR 0044). */ pendingSafety?: PendingScreen; /** Builds this connection can still cancel, keyed by command (ADR 0060). */ cancel?: CancelRegistry; /** Set once an autosave (ADR 0070) has been refused, so the player is told once, not every change. */ slotWarned?: boolean }
+interface Session { /** Family-test tester index and session id once the page said ?tester=N (ADR 0034). */ tester?: { n: number; sid: string }; manifest: Map<string, ManifestRec>; ip: string; recent: Recent; /** Ids claimed by builds still running, and their commands (ADR 0016). */ reserved: Set<string>; inflight: Set<string>; mood?: MoodSpec; moodMods?: Set<string>; /** Level mods a sketch replaced, by the sketch mod id, so undo can put them back (bug j2t). */ levelStash?: Map<string, ManifestRec[]>; restyled?: Record<string, string>; /** Time-travel steps and the command that probably explains the next one (ADR 0041). */ timeline?: Timeline; lastCommand?: { text: string; at: number }; tlTimer?: ReturnType<typeof setTimeout>; /** Kid-safe verdict the screen did not wait for (ADR 0044). */ pendingSafety?: PendingScreen; /** Builds this connection can still cancel, keyed by command (ADR 0060). */ cancel?: CancelRegistry; /** Set once an autosave (ADR 0070) has been refused, so the player is told once, not every change. */ slotWarned?: boolean; /** "Double-check my world" runs so far on this connection (ADR 0078). */ sweeps?: number }
 const sessions = new WeakMap<WebSocket, Session>();
 function sess(ws: WebSocket): Session {
   let s = sessions.get(ws);
@@ -635,7 +636,26 @@ function stripFences(src: string): string {
   return s;
 }
 
+/** "Double-check my world" (ADR 0078): the open-weights reviewer over every live AI-built mod. Local, no router. */
+async function handleReviewSweep(ws: WebSocket): Promise<void> {
+  const off = sweepBlocked();
+  if (off) { send(ws, { kind: "say", text: sweepOffReply(off) }); return; }
+  const s = sess(ws);
+  if ((s.sweeps ?? 0) >= sweepsPerSession()) {
+    send(ws, { kind: "say", text: "Muse Spark Open has already double-checked your world a few times this visit. Build something new, then ask again." });
+    return;
+  }
+  const live = new Set(worldMods(ws).map((m) => m.id));
+  const mods = aiBuilt([...s.manifest.values()].filter((m) => live.has(m.id)));
+  if (mods.length === 0) { send(ws, { kind: "say", text: sweepSummary({ reviewed: 0, fixed: 0, held: 0, clean: 0, failed: 0, skipped: 0, capped: 0 }) }); return; }
+  s.sweeps = (s.sweeps ?? 0) + 1;
+  send(ws, { kind: "say", text: `Asking Muse Spark Open (open weights) to double-check ${mods.length} build${mods.length === 1 ? "" : "s"}...` });
+  const res = await runReviewSweep({ ws, mods, send, worldMods: () => worldMods(ws) });
+  send(ws, { kind: "say", text: sweepSummary(res) });
+}
+
 async function handleCommand(ws: WebSocket, text: string): Promise<void> {
+  if (detectReviewSweep(text)) { await handleReviewSweep(ws); return; }
   // Kid-safe screen first (ADR 0044): a declined request never reaches the router, so it can
   // never spend a Wonder build or become a mod. The reply is one kind sentence with an
   // alternative; the player's words are not logged.
