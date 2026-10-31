@@ -1,9 +1,14 @@
 /* Build theater (ADR 0022): translucent code stream + live agent steps + stage stepper. */
 /* Positioned in top-right sky quadrant so it never covers player/ground at y=400 (bead 0g9).
    `right` leaves the 40 px quick-action gutter on the right edge free (bug qblayout): the card
-   ends 8 px left of #quickbar, so the bar can never cut off the code. */
+   ends 8 px left of #quickbar, so the bar can never cut off the code.
+   `top: 170px` clears the two things that live above it (bug layoutfix): the stage stepper
+   (.bt-stepper, y 94..119) and the top-right HUD stats (.hud-pos-top-right, y 62..157 in
+   style.css) — the card used to cover both. `bottom: 48px` stops the card above the bottom
+   row (the key hint and the pipeline button), and max-height 100% keeps it inside a short
+   stage (900x600: the stage is only 330 px tall) instead of clipping it. */
 .bt-stream {
-  position: absolute; right: 60px; top: 68px; z-index: 23; pointer-events: none; opacity: 0; transition: opacity .35s ease;
+  position: absolute; right: 60px; top: 170px; bottom: 48px; z-index: 23; pointer-events: none; opacity: 0; transition: opacity .35s ease;
   display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-end;
 }
 .bt-stream.on { opacity: 1; }
@@ -11,6 +16,7 @@
 .bt-card {
   width: min(420px, calc(100vw - 32px));
   max-width: 420px;
+  max-height: 100%;
   pointer-events: auto;
   background: linear-gradient(180deg, rgba(11, 16, 25, 0.9) 0%, rgba(7, 10, 16, 0.84) 100%);
   border: 1px solid rgba(84, 224, 255, 0.35);
@@ -76,6 +82,9 @@
   color: rgba(225, 242, 255, 0.92);
   white-space: pre;
   overflow: hidden;
+  /* Shrinks (never overflows) when the stage is short: the card is capped by .bt-stream. */
+  flex: 0 1 auto;
+  min-height: 0;
   max-height: clamp(100px, 16vh, 160px);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
   -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 12%, #000 100%);
@@ -119,3 +128,14 @@
   transition: background .2s, color .2s, border-color .2s;
 }
 .bt-min-btn:hover { background: rgba(255, 255, 255, 0.2); color: #fff; border-color: rgba(255, 255, 255, 0.4); }
+
+/* Short viewports (900x600: the stage is only 330 px tall) — bug layoutfix.
+   The card keeps its head, its step chips and a few code lines instead of overflowing into
+   the key hint and the pipeline button: the padding and the gap shrink and the long
+   "Wonder · …" status goes (the stepper above and the chips both already say where the
+   build is). */
+@media (max-height: 640px) {
+  .bt-card { padding: 8px 12px; gap: 6px; }
+  .bt-status { display: none; }
+  .bt-code { max-height: 96px; }
+}

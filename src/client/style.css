@@ -152,7 +152,9 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #
 #app.drawer-hidden { grid-template-columns: 1fr 0; }
 #app.drawer-hidden #rail { transform: translateX(105%); visibility: hidden; padding-left: 0; padding-right: 0; border-left: 0; overflow: hidden; }
 #app.drawer-hidden #sound-btn { top: 58px; right: 13px; }
-#app.drawer-hidden .hud-pos-top-right { top: 106px; }
+/* No HUD offset here any more (bug layoutfix): #sound-btn lives in the 12 px right gutter
+   (x 1227..1267 at 1280) and .hud-pos-top-right ends at right: 60px, so they never meet, and
+   the stats now stay in the top row instead of sliding under the streaming code card. */
 #drawer-toggle { position: absolute; right: 12px; top: 12px; z-index: 30; width: 42px; height: 42px; border-radius: 50%; background: #ffc94d; color: #171106; border: 2px solid #0b0e13; font-size: 20px; font-weight: 700; line-height: 1; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.5); pointer-events: auto; }
 #drawer-toggle:hover { background: #ffd97a; }
 #radial-menu { position: absolute; z-index: 28; width: 0; height: 0; pointer-events: none; --r: clamp(66px, 8.5vh, 76px); }
@@ -192,7 +194,9 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #
 .hud-pos { position: absolute; display: flex; flex-direction: column; gap: 7px; align-items: flex-start; }
 .hud-pos-top-left { left: 14px; top: 12px; }
 /* 60 px keeps the level bar and the stats clear of the quick-action column on the right
-   edge (bug qblayout); they still end 8 px left of #quickbar. */
+   edge (bug qblayout); they still end 8 px left of #quickbar. `top: 62px` (the same in both
+   drawer states — bug layoutfix) keeps the row above the streaming code card, which starts
+   at 170 px: the old 106 px in drawer-hidden mode put it right under the card. */
 .hud-pos-top-right { right: 60px; top: 62px; align-items: flex-end; }
 .hud-pos-top-center { left: 50%; top: 132px; transform: translateX(-50%); align-items: center; }
 .hud-pos-bottom-left { left: 14px; bottom: 44px; }
