@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Talk-to-Build</title>
-<meta name="description" content="Scroll-driven presentation of Talk-to-Build: a game that rewrites itself while you play, and proves every change before it ships.">
+<meta name="description" content="Scroll-driven presentation of Talk-to-Build: software that writes, tests, QA-plays and hot-loads its own code while it runs. The game is the showcase; the technology is the point.">
 <style>
 :root{
   --ink:#060912;          /* deepest night */
@@ -28,7 +28,7 @@
 html{background:var(--ink);color-scheme:dark}
 body{background:var(--ink);color:var(--text);font-family:var(--sans);font-size:clamp(15px,1.45vw,28px);line-height:1.45;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 img{display:block}
-code,kbd,.mono{font-family:var(--mono)}
+code,kbd,.mono{font-family:var(--mono);font-variant-ligatures:none}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 /* ---------- chrome ---------- */
@@ -55,11 +55,9 @@ html.clean #bar,html.clean #where,html.clean .hint{opacity:0!important}
 [data-b]{opacity:0;transform:translateY(16px);transition:opacity .55s var(--ease),transform .7s var(--ease);will-change:opacity,transform}
 [data-b].on{opacity:1;transform:none}
 [data-b].fade{transform:none}
-[data-b].pop{transform:scale(.94)}
-[data-b].pop.on{transform:none}
 
 /* pixel canvases */
-canvas.px{image-rendering:pixelated}
+canvas.px{image-rendering:pixelated;display:block}
 
 /* sky texture shared */
 .sky{position:absolute;inset:0;z-index:-1;background:
@@ -74,15 +72,17 @@ canvas.px{image-rendering:pixelated}
   radial-gradient(1px 1px at 23% 44%,#fff4 50%,transparent 51%),
   radial-gradient(1.5px 1.5px at 66% 51%,#fff3 50%,transparent 51%)}
 
-/* ---------- 0 hook ---------- */
+/* ---------- 1 hook ---------- */
 #hook .stage{justify-content:center}
 #hook .bg{position:absolute;inset:0;z-index:-1;overflow:hidden}
-#hook .bg img{position:absolute;left:0;bottom:-6%;width:100%;height:auto;opacity:.32;transform:translateY(calc(var(--p,0) * -6%)) scale(1.04);transform-origin:50% 100%;
-  -webkit-mask-image:linear-gradient(to bottom,transparent 0%,#000 55%,#000 100%);mask-image:linear-gradient(to bottom,transparent 0%,#000 55%,#000 100%)}
-#hook .bg::after{content:"";position:absolute;inset:0;background:radial-gradient(70% 60% at 35% 45%,rgba(6,9,18,.86),rgba(6,9,18,.25) 70%,rgba(6,9,18,.6))}
-#hook .lines{display:flex;flex-direction:column;gap:4.5vh}
-#hook .tag{margin-top:5vh;max-width:46ch;font-size:clamp(17px,1.7vw,34px);color:var(--bone);line-height:1.4}
+#hook .bg img{position:absolute;left:0;top:8%;width:100%;height:auto;opacity:.16;filter:saturate(.7);transform:translateY(calc(var(--p,0) * -6%)) scale(1.04);transform-origin:50% 0%;
+  -webkit-mask-image:linear-gradient(to bottom,#000 0%,#000 40%,transparent 95%);mask-image:linear-gradient(to bottom,#000 0%,#000 40%,transparent 95%)}
+#hook .bg::after{content:"";position:absolute;inset:0;background:radial-gradient(70% 60% at 35% 45%,rgba(6,9,18,.9),rgba(6,9,18,.35) 70%,rgba(6,9,18,.7))}
+.hk{display:grid}
+.hk > div{grid-area:1/1;display:flex;flex-direction:column;gap:4.5vh;align-self:center}
+#hook .tag{max-width:50ch;font-size:clamp(17px,1.7vw,34px);color:var(--bone);line-height:1.4}
 #hook .tag span{display:block;margin-top:1.6vh;font-size:.62em;color:var(--dim);line-height:1.5}
+#hook .tag b{color:var(--green);font-weight:600}
 .hint{position:absolute;right:var(--padx);bottom:2.2vh;font-size:clamp(11px,.78vw,15px);color:var(--dim);display:flex;gap:1.2em;align-items:center;transition:opacity .4s}
 kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;padding:.05em .45em;border-radius:3px;color:var(--bone);font-size:.92em;background:#0d1426}
 
@@ -93,19 +93,6 @@ kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;pa
 .frame::after{right:-1px;bottom:-1px;border-left:0;border-top:0}
 .frame .z{position:absolute;inset:0;transition:transform 1.1s var(--ease),opacity .6s var(--ease)}
 .frame .z img{width:100%;height:100%;object-fit:cover;object-position:50% 50%}
-.frame .z.off{opacity:0}
-
-/* ---------- 1 say it ---------- */
-#say .body{display:grid;grid-template-columns:minmax(0,.78fr) minmax(0,1.6fr);gap:3.2vw;align-items:center}
-.orb{display:flex;align-items:center;gap:.8em;border:1.5px solid #6b5a2a;background:#0d1426;border-radius:999px;padding:.55em 1em .55em .6em;font-size:.86em;color:var(--bone);box-shadow:0 0 0 4px rgba(242,191,74,.06)}
-.orb i{flex:0 0 auto;width:1.4em;height:1.4em;border-radius:50%;background:radial-gradient(circle at 35% 35%,#b6f7c4,#4fcf72 60%,#2b8a47);box-shadow:0 0 14px rgba(99,224,140,.55)}
-.orb .typed{font-family:var(--mono);font-size:.92em;white-space:nowrap;overflow:hidden;min-height:1.3em}
-.orb .typed::after{content:"";display:inline-block;width:.55em;height:1.05em;margin-left:2px;vertical-align:-.15em;background:var(--gold);animation:blink 1s steps(1) infinite}
-@keyframes blink{50%{opacity:0}}
-.says{position:relative;margin-top:3.5vh;min-height:13em}
-.says p{position:absolute;inset:0 0 auto 0;font-size:.92em;color:var(--bone);line-height:1.45}
-.says p small{display:block;margin-top:.8em;color:var(--dim);font-size:.72em}
-#say .frame{aspect-ratio:16/9;width:100%;max-height:100%}
 
 /* ---------- 2 loop ---------- */
 #loop .body{display:flex;flex-direction:column;gap:1.4vh}
@@ -137,16 +124,29 @@ kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;pa
 .reason.on{opacity:1;transform:translateX(-50%)}
 .reason.fixed{border-color:var(--green);background:#0f2a20;color:#d4ffe2}
 .reason::after{content:"";position:absolute;left:50%;bottom:-9px;width:14px;height:14px;background:inherit;border-right:1.5px solid;border-bottom:1.5px solid;border-color:inherit;transform:translateX(-50%) rotate(45deg)}
-.caps{position:relative;min-height:5.6em;max-width:62ch;font-size:.95em}
+.caps{position:relative;min-height:6.4em;max-width:62ch;font-size:.95em}
 .caps p{position:absolute;inset:0 0 auto 0;color:var(--bone);font-size:.95em}
 .caps p em{font-style:normal;color:var(--gold)}
+.caps p small{display:block;margin-top:.6em;color:var(--dim);font-size:.74em}
+.caps code{color:var(--blue);font-size:.92em}
 .bottom{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:3vw;align-items:start}
 .lane{width:100%;aspect-ratio:920/174;position:relative;overflow:hidden;border:1px solid var(--green)}
 .lane img{position:absolute;width:208.7%;left:-4.35%;top:-462.6%;max-width:none}
 .lane-wrap{position:relative}
 .lane-wrap small{display:block;margin-top:.5em;color:var(--dim);font-size:.62em}
 
-/* ---------- 3 meta roster ---------- */
+/* ---------- 3 second opinion ---------- */
+#learn .body{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.6fr);gap:3vw;align-items:center}
+#learn .frame{aspect-ratio:1568/698;width:100%}
+.stack{position:relative;min-height:20em}
+.stack > div{position:absolute;inset:0 0 auto 0}
+.stack p{color:var(--bone);font-size:.95em;line-height:1.45}
+.stack p + p{margin-top:.8em;color:var(--text);font-size:.8em}
+.stack em{font-style:normal;color:var(--green)}
+.stack q{color:var(--gold);font-family:var(--mono);font-size:.9em;quotes:"\201C" "\201D"}
+.ow{color:var(--violet)}
+
+/* ---------- 4 meta roster ---------- */
 .roster{display:grid;grid-template-columns:minmax(0,1fr);gap:.4vh}
 .row{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,2fr) minmax(0,.55fr);gap:2vw;align-items:baseline;padding:1.05vh 0 1.05vh 1.2vw;border-left:3px solid transparent;transition:opacity .5s,border-color .5s,background .5s}
 .row h3{font-size:1.18em;color:var(--bone);font-weight:700;line-height:1.15}
@@ -158,184 +158,96 @@ kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;pa
 .row.ow h3{color:var(--violet)}
 .row.ow.cur{border-left-color:var(--violet);background:linear-gradient(90deg,rgba(185,161,255,.1),transparent 70%)}
 .badge{display:inline-block;font-size:.5em;font-weight:600;color:#1a1033;background:var(--violet);padding:.15em .55em;margin-left:.6em;vertical-align:.25em;border-radius:2px;letter-spacing:.01em}
-.state{margin-top:2.4vh;font-size:1.05em;color:var(--bone);max-width:52ch;line-height:1.35}
+.state{position:absolute;bottom:0;left:0;margin:0;font-size:1.05em;color:var(--bone);max-width:56ch;line-height:1.35}
 .state b{color:var(--gold);font-weight:600}
 
-/* ---------- 4 mod ---------- */
-#mod .body{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:3vw}
-.code{position:relative;background:#0a1020;border:1px solid var(--line);padding:1.6vh 1.2vw;font-family:var(--mono);font-size:min(1.4vh,.95vw);line-height:1.42;color:#c9d1e6;overflow:hidden;height:100%;font-variant-ligatures:none}
-.code .ln{display:block;white-space:pre;position:relative;clip-path:inset(0 100% 0 0);transition:clip-path var(--d,.3s) linear var(--w,0s),background .4s,opacity .4s}
-.code.typed .ln{clip-path:inset(0 0 0 0)}
-.code .ln::before{content:attr(data-n);display:inline-block;width:2.6em;color:#3b4766;text-align:right;margin-right:1.2em}
-.code.hl .ln{opacity:.32}
-.code.hl .ln.h{opacity:1;background:rgba(242,191,74,.09)}
-.diff,.term{font-variant-ligatures:none}
-.code .ln.h::after{content:"";position:absolute;left:-1.2vw;top:0;bottom:0;width:3px;background:var(--gold)}
-.k{color:#c49bff}.s{color:#9be29f}.n{color:#ffb26b}.a{color:#8bb8ff}.c{color:#56607c}
-.code .tagline{position:absolute;right:1vw;top:1.2vh;font-family:var(--sans);font-size:1.05em;color:var(--dim)}
-.diff{position:absolute;inset:0;background:#0a1020;padding:1.8vh 1.4vw;opacity:0;transition:opacity .6s;font-size:1.06em}
-.diff.on{opacity:1}
-.diff h4{font-family:var(--sans);color:var(--bone);font-size:1.25em;font-weight:600;margin-bottom:.4em}
-.diff h4 + p{font-family:var(--sans);color:var(--dim);font-size:.95em;margin-bottom:1.4em;max-width:60ch;white-space:normal}
-.diff .m,.diff .p{display:block;white-space:pre;padding:.12em .6em}
-.diff .m{background:rgba(255,107,107,.13);color:#ffc2c2}
-.diff .p{background:rgba(99,224,140,.12);color:#c6f7d4}
-.diff .gap{height:1em}
-.side{position:relative}
-.note{position:absolute;inset:0 0 auto 0}
-.note h4{font-size:1.15em;color:var(--gold);font-weight:600;font-family:var(--mono);margin-bottom:.4em}
-.note p{font-size:.9em;color:var(--bone);line-height:1.45}
-.note p + p{margin-top:.8em;color:var(--text);font-size:.8em}
-.steps{list-style:none;counter-reset:s;display:flex;flex-direction:column;gap:1.5vh}
-.steps li{counter-increment:s;display:grid;grid-template-columns:2.2em 1fr;gap:.6em;font-size:.8em;color:var(--text);line-height:1.38}
-.steps li::before{content:counter(s);font-family:var(--mono);color:var(--ink);background:var(--green);width:1.7em;height:1.7em;display:grid;place-items:center;font-weight:700;font-size:.85em}
-.steps b{color:var(--bone);font-weight:600}
-
-/* ---------- 5 learns ---------- */
-#learn .body{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.6fr);gap:3vw;align-items:center}
-#learn .frame{aspect-ratio:16/9;width:100%}
-.stack{position:relative;min-height:22em}
-.stack > div{position:absolute;inset:0 0 auto 0}
-.stack p{color:var(--bone);font-size:.95em;line-height:1.45}
-.stack p + p{margin-top:.8em;color:var(--text);font-size:.8em}
-.rules{list-style:none;margin-top:1.2em;display:flex;flex-direction:column;gap:.7em}
-.rules li{font-size:.7em;color:var(--text);padding-left:1em;border-left:2px solid var(--violet);line-height:1.4}
-.rules li i{font-style:normal;color:var(--violet);font-family:var(--mono);font-size:.9em}
-
-/* ---------- 6 system ---------- */
-#sys .lead{font-size:1.1em;color:var(--bone);max-width:56ch;margin-bottom:2.2vh;line-height:1.35}
-.bento{display:grid;grid-template-columns:1.25fr 1fr 1fr .9fr;grid-template-rows:1fr 1fr;gap:1.1vw;height:100%}
-.tile{position:relative;overflow:hidden;background:#0a1020;border:1px solid var(--line)}
-.tile img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:transform 6s linear}
-.tile.on img{transform:scale(1.06)}
-.tile .cap{position:absolute;left:0;right:0;bottom:0;padding:1.2em .9em .7em;background:linear-gradient(transparent,rgba(5,8,16,.94) 45%);font-size:.66em;color:var(--text);line-height:1.35}
-.tile .cap b{display:block;color:var(--bone);font-size:1.32em;margin-bottom:.15em}
-.tile.txt{padding:1.1em 1em;display:flex;flex-direction:column;justify-content:flex-end;background:linear-gradient(160deg,#121c36,#0a1020)}
-.tile.txt b{color:var(--bone);font-size:.95em;margin-bottom:.3em}
-.tile.txt p{font-size:.64em;color:var(--text);line-height:1.4}
-.tile.txt .ico{position:absolute;top:1em;left:1em}
-.t-par{grid-column:1/3;grid-row:1}
-.t-lvl{grid-column:3/4;grid-row:1}
-.t-moo{grid-column:1/2;grid-row:2}
-.t-skt{grid-column:2/4;grid-row:2}
-.t-col{grid-column:4/5;grid-row:1/3;display:grid;grid-template-rows:1fr 1fr 1fr;gap:1.1vw}
-.t-col .tile{position:relative}
-#sys .body{display:flex;flex-direction:column}
-#sys .bwrap{flex:1 1 auto;min-height:0}
-
-/* ---------- 7 proof ---------- */
-.board{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7vh 4vw;align-content:center;height:88%}
+/* ---------- 5 proof ---------- */
+.board{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9vh 4vw;align-content:center;height:88%}
 .stat{border-top:2px solid var(--line);padding-top:1.4vh}
 .stat.on{border-top-color:var(--gold)}
 .stat .big{font-size:clamp(48px,7.4vw,150px);line-height:1;color:var(--bone);font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .stat .big small{font-size:.42em;color:var(--dim);font-weight:500;margin-left:.15em;letter-spacing:0}
 .stat p{font-size:.78em;color:var(--text);margin-top:.5em;max-width:40ch}
 .stat.g .big{color:var(--green)}
-.trio{display:flex;gap:3.5vw}
+.stat.wide{grid-column:1/3}
+.trio{display:flex;gap:6vw}
 .trio > div .big{font-size:clamp(36px,4.8vw,96px)}
 .src{margin-top:2.6vh;font-size:.62em;color:var(--dim)}
 
-/* ---------- 8 run ---------- */
-#run .body{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:4vw;align-items:start}
-.term{background:#0a1020;border:1px solid var(--line);padding:2vh 1.4vw;font-family:var(--mono);font-size:min(1.9vh,1.05vw);line-height:1.75;color:#c9d1e6}
-.term .p{color:var(--gold);user-select:none}
-.term .cm{color:#56607c}
-.term + p{margin-top:1.4vh;font-size:.8em;color:var(--bone)}
-.term + p code{color:var(--gold)}
-.nokey h4{font-size:1.05em;color:var(--bone);margin-bottom:.4em}
-.nokey p{font-size:.78em;color:var(--text)}
-.nokey ul{list-style:none;margin:.8em 0 1.2em;display:flex;flex-wrap:wrap;gap:.5em}
-.nokey li code{font-size:.7em;color:var(--green);border:1px solid #24503a;padding:.2em .5em;display:inline-block}
-.nokey .frame{aspect-ratio:16/9;margin-top:1vh;max-width:34vw}
-.repo{margin-top:3vh}
-.repo a{font-family:var(--mono);color:var(--gold);font-size:.9em;text-decoration:none;border-bottom:1px solid rgba(242,191,74,.4)}
-.final{position:absolute;left:var(--padx);right:var(--padx);bottom:calc(var(--pady) + 3.2vh);display:flex;align-items:flex-end;justify-content:space-between;gap:2vw}
-.final p{font-size:.7em;color:var(--dim);max-width:36ch;text-align:right}
+/* ---------- 6 watch ---------- */
+#watch .stage{justify-content:center}
+#watch .wrap{display:grid}
+#watch .wrap > div{grid-area:1/1;align-self:center}
+#watch .lead{font-size:clamp(22px,2.8vw,56px);color:var(--bone);max-width:34ch;line-height:1.3}
+#watch .lead span{display:block;margin-top:2.4vh;font-size:.56em;color:var(--dim);max-width:56ch;line-height:1.5}
+.loopline{display:flex;flex-wrap:wrap;gap:.5em;margin-top:4vh;font-family:var(--mono);font-size:clamp(12px,1vw,20px)}
+.loopline i{font-style:normal;color:var(--gold);border:1px solid #6b5a2a;background:#0d1426;padding:.3em .7em}
+.loopline i.v{color:var(--violet);border-color:#4b3f80}
+.foot{position:absolute;left:var(--padx);right:var(--padx);bottom:calc(var(--pady) + 3.2vh);display:flex;justify-content:space-between;align-items:flex-end;gap:2vw;font-size:.62em;color:var(--dim)}
+.foot a{font-family:var(--mono);color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(242,191,74,.4)}
+.foot code{color:var(--text)}
 a:focus-visible,button:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
 
 /* ---------- narrow screens ---------- */
 @media (max-width:900px){
   body{font-size:16px}
   .stage{height:auto;min-height:100vh;position:relative}
-  #say .body,#mod .body,#learn .body,#run .body{grid-template-columns:1fr}
+  #learn .body{grid-template-columns:1fr}
   .row{grid-template-columns:1fr}
   .row .t{text-align:left}
-  .bento{grid-template-columns:1fr 1fr;grid-template-rows:auto}
-  .bento > *{grid-column:auto!important;grid-row:auto!important;min-height:160px}
-  .t-col{grid-column:1/3!important}
   .board{grid-template-columns:1fr}
-  .code{font-size:11px}
-  .final{position:static;margin-top:4vh;flex-direction:column;align-items:flex-start}
-  .final p{text-align:left}
+  .stat.wide{grid-column:auto}
+  .trio{flex-wrap:wrap}
+  .bottom{grid-template-columns:1fr}
+  .hk > div,#watch .wrap > div{grid-area:auto}
+  .state{position:static;margin-top:2vh}
+  .foot{position:static;margin-top:4vh;flex-direction:column;align-items:flex-start}
 }
 
 /* ---------- reduced motion ---------- */
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{transition:none!important;animation:none!important}
   [data-b]{transform:none!important}
-  .code .ln{clip-path:none!important}
   #hook .bg img{transform:none!important}
 }
 </style>
 </head>
 <body>
 <div id="bar"><i></i></div>
-<div id="where" aria-hidden="true"><span class="n" id="wn">01/09</span><b id="wname">Hook</b><span id="dots"></span></div>
+<div id="where" aria-hidden="true"><span class="n" id="wn">01/06</span><b id="wname">Hook</b><span id="dots"></span></div>
 
 <main>
-<!-- ============ 0 HOOK ============ -->
+<!-- ============ 1 HOOK ============ -->
 <section class="ch" id="hook" data-states="3" data-name="Hook">
   <div class="stage">
     <div class="sky"></div><div class="stars"></div>
-    <div class="bg"><img src="img/starter-world.jpg" alt=""></div>
-    <h1 class="sr">Game making takes years. What if it took a sentence?</h1>
-    <div class="lines">
-      <canvas class="px" data-b="0" data-text="GAME MAKING|TAKES YEARS." data-cells="7" data-color="#ece5d3" aria-hidden="true"></canvas>
-      <canvas class="px" data-b="1" data-text="WHAT IF IT TOOK|A SENTENCE?" data-cells="7" data-color="#f2bf4a" aria-hidden="true"></canvas>
+    <div class="bg"><img src="img/pipeline-live.jpg" alt=""></div>
+    <h1 class="sr">Software that changes itself while it runs. The game is not the point. The technology is.</h1>
+    <div class="hk">
+      <div>
+        <canvas class="px" data-b="0-1" data-text="SOFTWARE THAT|CHANGES ITSELF|WHILE IT RUNS." data-cells="6.4" data-color="#ece5d3" aria-hidden="true"></canvas>
+        <p class="tag" data-b="1=">Describe a change in plain words. AI agents write the code, test it, play it through, and hot-load it into the running program. <b>Nothing ships unverified.</b>
+          <span>Talk-to-Build. Solo entry, Indie track, Meta Global AI Developer Hackathon 2026.</span></p>
+      </div>
+      <div>
+        <canvas class="px" data-b="2" data-text="THE GAME IS|NOT THE POINT." data-cells="6.4" data-color="#ece5d3" aria-hidden="true"></canvas>
+        <canvas class="px" data-b="2" data-text="THE TECHNOLOGY IS." data-cells="6.4" data-color="#f2bf4a" aria-hidden="true"></canvas>
+        <p class="tag" data-b="2" style="color:var(--text)">The game is the showcase: every change is something you can see, play and try to break.</p>
+      </div>
     </div>
-    <p class="tag" data-b="2">One sentence becomes logic, a test, art and a playable asset, and an agent proves it works before it goes live.
-      <span>Talk-to-Build. A pixel-art side scroller that rebuilds itself while you play. Solo entry, Indie track, Meta Global AI Developer Hackathon 2026.</span></p>
     <div class="hint"><span><kbd>Space</kbd> or <kbd>&darr;</kbd> next beat</span><span><kbd>&uarr;</kbd> back</span><span><kbd>H</kbd> hide chrome</span></div>
   </div>
 </section>
 
-<!-- ============ 1 SAY IT ============ -->
-<section class="ch" id="say" data-states="5" data-name="Say it">
-  <div class="stage">
-    <div class="sky"></div>
-    <div class="head"><canvas class="px title" data-text="SAY IT." aria-hidden="true"></canvas><h2 class="sr">Say it</h2>
-      <p>You start with an almost empty world. You talk to it, and it builds itself around you while you keep playing.</p></div>
-    <div class="body">
-      <div>
-        <div class="orb" aria-label="Command bar"><i></i><span class="typed" id="typed"></span></div>
-        <div class="says">
-          <p data-b="0=" class="fade">Type it, or hold Shift and say it. The game never pauses.<small>Starter world, built by talking. Every thing on screen is a mod.</small></p>
-          <p data-b="1=" class="fade">Muse Wonder writes the code while you watch, and the strip under the orb tracks it: route, forge, compile, playtest, live.<small>Live capture from this build, 10-31.</small></p>
-          <p data-b="2=" class="fade">Before anything loads, a bot plays a copy of your world with the new mod. Green means you can still play.<small>The ghost window replays the bot's actual run.</small></p>
-          <p data-b="3=" class="fade">One sentence restyles the whole world. Spark designs the mood, then Muse Image redraws every sprite in it.<small>Palette in about a second; sprite redraw follows.</small></p>
-          <p data-b="4=" class="fade">Place backdrops swap in under a second, with no model call at all. "undo" brings any of it back.<small>Medieval: castle, village, windmills, tents.</small></p>
-        </div>
-      </div>
-      <div class="frame" id="sayframe">
-        <div class="z" data-z="0" data-zoom="0.5,0.5,1"><img src="img/starter-world.jpg" alt="The starter world: a ninja on grassy ground under a night sky"></div>
-        <div class="z off" data-z="1" data-zoom="0.86,0.2,2.5"><img src="img/code-card-streaming.jpg" alt="The code card streaming Wonder's mod source while the build strip shows route and forge"></div>
-        <div class="z off" data-z="2" data-zoom="0.09,0.9,2.2"><img src="img/ghost-still-play.jpg" alt="The ghost playtest window says You can still play"></div>
-        <div class="z off" data-z="3" data-zoom="0.5,0.5,1"><img src="img/spooky-mood.jpg" alt="The same world after make it spooky: purple palette, the ninja redrawn"></div>
-        <div class="z off" data-z="4" data-zoom="0.5,0.5,1"><img src="img/medieval-backdrop.jpg" alt="The world with a medieval backdrop: castle, windmills and tents"></div>
-      </div>
-    </div>
-  </div>
-</section>
-
 <!-- ============ 2 THE LOOP ============ -->
-<section class="ch" id="loop" data-states="9" data-name="The loop">
+<section class="ch" id="loop" data-states="7" data-name="The loop">
   <div class="stage">
     <div class="sky"></div>
     <div class="head"><canvas class="px title" data-text="THE LOOP" aria-hidden="true"></canvas><h2 class="sr">The loop</h2>
-      <p>Talk, build, verify, hot-load. Nothing reaches your game until it has passed.</p></div>
+      <p>Write, test, play through, ship. Nothing goes live until it has passed.</p></div>
     <div class="body">
       <div class="diag" id="diag">
-        <svg viewBox="0 0 1384 520" id="pipe" role="img" aria-label="Pipeline: voice in, Muse Spark routes, Muse Wonder writes, esbuild compiles, the verifier playtests, the mod loader hot-loads it into your world. A rejected mod goes back to Wonder with a reason.">
+        <svg viewBox="0 0 1384 520" id="pipe" role="img" aria-label="The loop: plain words in, Muse Spark routes, Muse Wonder writes the code, automatic tests, a bot QA playthrough, hot-load with no restart, live with clean undo. A rejected change goes back to Wonder with a reason.">
           <g id="wires"></g>
           <path id="arc" d="M890,300 C890,470 494,470 494,300"></path>
           <text id="arcLbl" x="692" y="460" text-anchor="middle">the reason goes back to Wonder</text>
@@ -347,175 +259,98 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--gold);outline-offse
         <div class="reason" id="reason">rejected: the player (100px) can't fit under the 72px cliff overhang</div>
       </div>
       <div class="bottom"><div class="caps">
-        <p data-b="0=" class="fade"><em>Voice in.</em> Muse Voice Transcribe streams partial words while you talk; the final text lands about 130 ms after you let go of Shift.</p>
-        <p data-b="1=" class="fade"><em>Route.</em> Muse Spark decides in about a second: a new thing, a knob tweak, an edit, undo, a mood or a question. Named, deterministic route rules check its answer.</p>
-        <p data-b="2=" class="fade"><em>Write.</em> Muse Wonder writes a mod against a small engine API, and writes the mod's own <code>test()</code> with it.</p>
-        <p data-b="3=" class="fade"><em>Compile.</em> A forbidden-token scan (no <code>eval</code>, <code>fetch</code>, <code>document</code>, <code>process.</code>…), then esbuild turns the TypeScript into a module. A few milliseconds.</p>
-        <p data-b="4=" class="fade"><em>Verify.</em> 600 headless frames on the deterministic 60 Hz sim, then a bot plays a copy of your world with and without the mod, on three seeds.</p>
-        <p data-b="5=" class="fade"><em>Hot-load.</em> The module drops into the running game with its knobs as sliders. No reload. Words to playable: median 11.2 s.</p>
-        <p data-b="6=" class="fade">Now ask for something that breaks the level: <em>"make me huge"</em>. The playtest bot can't get through, so the change is rejected with a reason, and your game doesn't change.</p>
-        <p data-b="7=" class="fade">The reason goes back to Muse Wonder. As a tool-calling agent it inspects the world, rewrites its draft, and runs the playtest itself until it passes.</p>
-        <p data-b="8=" class="fade"><em>Fixed, verified, live.</em> In the 20-run rehearsal, "make me huge" was rejected and then fixed 20 times out of 20.</p>
+        <p data-b="0=" class="fade"><em>Live coding.</em> Muse Wonder, a tool-calling agent, writes a new module for the running program, and writes its own test with it.<small>Every module ships three things: knobs, a <code>test()</code> and a <code>dispose()</code>.</small></p>
+        <p data-b="1=" class="fade"><em>Automatic tests.</em> A safety scan, an esbuild compile, then 600 headless frames on a deterministic 60 Hz simulation, and the module's own <code>test()</code>.</p>
+        <p data-b="2=" class="fade"><em>QA playthrough.</em> A bot plays a copy of the live world, with and without the change, on three seeds. If it can't get through, the change doesn't ship.</p>
+        <p data-b="3=" class="fade"><em>Hot-load.</em> The verified module drops into the running program. No restart, no reload: a median 11.2 s from words to live. Undo calls <code>dispose()</code>, so it is always clean.</p>
+        <p data-b="4=" class="fade">Now ask for something that breaks it: <em>"make me huge"</em>. The QA bot can't get through, so the change is rejected with a reason, and the running world doesn't change.</p>
+        <p data-b="5=" class="fade">The reason goes back to Muse Wonder. It inspects the world, rewrites its draft, and runs the playtest itself until it passes.</p>
+        <p data-b="6=" class="fade"><em>Fixed, verified, live.</em> No human in the loop. In a 20-run rehearsal, "make me huge" was rejected and then fixed 20 times out of 20.</p>
       </div>
-      <div class="lane-wrap" data-b="8">
+      <div class="lane-wrap" data-b="6">
         <div class="lane"><img src="img/pipeline-lanes-impact.webp" alt="The in-app pipeline lane for make me huge: inspect, write, playtest, rejected, fix, write, playtest, pass"></div>
-        <small>The real lane from the in-app pipeline view (press P in the game).</small>
+        <small>The real lane from the in-app pipeline view.</small>
       </div></div>
     </div>
   </div>
 </section>
 
-<!-- ============ 3 META ============ -->
-<section class="ch" id="meta" data-states="7" data-name="Meta models">
+<!-- ============ 3 SECOND OPINION ============ -->
+<section class="ch" id="learn" data-states="3" data-name="Second opinion">
+  <div class="stage">
+    <div class="sky"></div>
+    <div class="head"><canvas class="px title" data-text="SECOND OPINION" aria-hidden="true"></canvas><h2 class="sr">Second opinion</h2>
+      <p>Shipped code keeps getting checked, and every fix teaches the next build.</p></div>
+    <div class="body">
+      <div class="stack">
+        <div data-b="0=" class="fade"><p>After a change ships, a second reviewer keeps reading it: <span class="ow">Muse Spark Open</span>, Meta's open-weights model, served on Baseten. Nobody waits for it.</p></div>
+        <div data-b="1=" class="fade"><p>Here it caught a real bug: a <code>dispose()</code> that left its listeners running.</p><p>Its fix passes the same gates as any build, compile, test and QA playthrough, before it is hot-swapped in. On stage: <em>caught a bug, fixed, re-verified, live.</em></p></div>
+        <div data-b="2=" class="fade"><p>Every accepted fix becomes a rule that every later build reads: <em>+1 rule</em>.</p><p>Say <q>double-check my world</q> and it reviews every build on demand.</p></div>
+      </div>
+      <div class="frame" id="learnframe">
+        <div class="z" data-zoom="0.5,0.5,1|0.12,0.18,2.5|0.9,0.1,2.4"><img src="img/second-opinion-fix-card.jpg" alt="On stage: Muse Spark Open (open weights) caught a bug, Fixed, re-verified, live, and the brain button shows +1 rule"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4 META ============ -->
+<section class="ch" id="meta" data-states="3" data-name="Meta models">
   <div class="stage">
     <div class="sky"></div>
     <div class="head"><canvas class="px title" data-text="WHO DOES WHAT" aria-hidden="true"></canvas><h2 class="sr">Which Meta model does which job</h2>
-      <p>Six Meta models with real jobs at runtime, plus Wonder's agent features.</p></div>
+      <p>Six Meta models with real jobs in the loop, plus Wonder's agent tools.</p></div>
     <div class="body">
       <div class="roster" id="roster">
-        <div class="row" data-b="0"><h3>Muse Voice Transcribe<code>muse-voice-transcribe-1.0</code></h3><p>Hold Shift and talk. Live partials appear under the orb; audio goes through our server, so the key never reaches the browser.</p><span class="t">~130 ms after release</span></div>
-        <div class="row" data-b="1"><h3>Muse Spark<code>muse-spark-1.2</code></h3><p>Routes every command, picks each thing's visual kind, splits compound asks, art-directs moods, explains code.</p><span class="t">~1 s per command</span></div>
-        <div class="row" data-b="2"><h3>Muse Wonder<code>muse-wonder-1.0</code></h3><p>Writes and edits mods. As a tool-calling agent (<code>inspect_world</code>, <code>run_playtest</code>) it fixes what the verifier rejected. Compound asks build in parallel, up to 4 at once.</p><span class="t">~10–20 s per build</span></div>
-        <div class="row" data-b="3"><h3>Muse Image<code>muse-image-1.0</code></h3><p>Draws sprite sheets on demand, and redraws the world in a new mood by editing from an anchor image.</p><span class="t">~17 s, in the background</span></div>
-        <div class="row" data-b="4"><h3>SAM 3.1<code>sam-3.1</code></h3><p>Finds the real object you hold up to the webcam, so it can be cut out, pixelated and dropped in as a physics prop.</p><span class="t">~1.2 s</span></div>
-        <div class="row ow" data-b="5"><h3>Muse Spark Open <span class="badge">open weights</span><code>meta-models/muse-spark-open, on Baseten</code></h3><p>Optional router (918 ms vs 1151 ms p50 for hosted Spark over 30 runs), and a background reviewer that fixes finished builds and writes learned rules.</p><span class="t">with BASETEN_API_KEY</span></div>
+        <div class="row" data-b="0"><h3>Muse Voice Transcribe<code>muse-voice-transcribe-1.0</code></h3><p>Turns the spoken request into text while you talk.</p><span class="t">~130 ms after release</span></div>
+        <div class="row" data-b="0"><h3>Muse Spark<code>muse-spark-1.2</code></h3><p>Routes every request: new code, a knob tweak, an edit, undo, or a question. Splits compound asks.</p><span class="t">~1 s</span></div>
+        <div class="row" data-b="0"><h3>Muse Wonder<code>muse-wonder-1.0</code></h3><p>Writes and edits the code. A tool-calling agent (<code>inspect_world</code>, <code>run_playtest</code>) that fixes what QA rejected. Up to 4 builds in parallel.</p><span class="t">~10–20 s</span></div>
+        <div class="row" data-b="0"><h3>Muse Image<code>muse-image-1.0</code></h3><p>Draws the art each new module needs, in the background.</p><span class="t">~17 s</span></div>
+        <div class="row" data-b="0"><h3>SAM 3.1<code>sam-3.1</code></h3><p>Cuts a real object out of the camera feed so it can become part of the program.</p><span class="t">~1.2 s</span></div>
+        <div class="row ow" data-b="0"><h3>Muse Spark Open <span class="badge">open weights</span><code>meta-models/muse-spark-open, on Baseten</code></h3><p>The second-opinion reviewer and rule writer, and an optional router (918 ms vs 1151 ms p50 for hosted Spark over 30 runs).</p><span class="t">with BASETEN_API_KEY</span></div>
       </div>
-      <p class="state" data-b="5=" style="position:absolute;bottom:0;left:0;margin:0">Meta's open-weights model, served by Baseten, does real work in the product. <b>The open-weights bonus is in the loop, not a side demo.</b></p>
-      <p class="state" data-b="6" style="position:absolute;bottom:0;left:0;margin:0">Every AI call the game makes at runtime goes to a Meta model. <b>No other AI provider, anywhere in the product.</b></p>
+      <p class="state" data-b="1=">Meta's open-weights model does real work in the loop: <b>it reviews shipped code and fixes it.</b></p>
+      <p class="state" data-b="2">Every AI call the product makes at runtime goes to a Meta model. <b>No other AI provider, anywhere.</b></p>
     </div>
   </div>
 </section>
 
-<!-- ============ 4 A MOD ============ -->
-<section class="ch" id="mod" data-states="7" data-name="A mod, up close">
-  <div class="stage">
-    <div class="sky"></div>
-    <div class="head"><canvas class="px title" data-text="A MOD, UP CLOSE" aria-hidden="true"></canvas><h2 class="sr">A mod, up close</h2>
-      <p style="max-width:60ch">Everything visible in the game is a mod. This is real Wonder output for "add a bouncing green slime", from the build log.</p></div>
-    <div class="body">
-      <div class="code" id="code"><div class="diff" id="diff">
-        <h4>"make me huge": the draft, then the fix</h4>
-        <p>Wonder's first draft was rejected. Its fix keeps the player big, caps the height, and adds a check that the player still fits through the gap. Real lines from the build log, 10-29.</p>
-<span class="m">-    scale: { value: 3.5, min: 1, max: 6, label: "Huge size scale" }</span><span class="p">+    scale: { value: 2.5, min: 1, max: 2.6, label: "Huge size scale" }</span><div class="gap"></div><span class="p">+      p.h = Math.min(90, Math.round(34 * scale));</span><div class="gap"></div><span class="m">-      t.expect(p.w >= 78 &amp;&amp; p.h >= 102, "player is huge");</span><span class="p">+      t.expect(p.w >= 60 &amp;&amp; p.h >= 80, "player is huge");</span><span class="p">+      t.expect(p.h &lt; 100, "player fits through 100px gap");</span><span class="p">+      t.expect(p.x > 120, "player moves right at normal speed");</span>
-      </div></div>
-      <div class="side">
-        <div class="note" data-b="0=" ><h4>One file, four parts</h4><p>Knobs, <code>setup()</code>, <code>dispose()</code> and <code>test()</code>. That is the whole contract between the AI and the engine.</p><p>Line breaks added for the slide; the code is otherwise as Wonder wrote it.</p></div>
-        <div class="note" data-b="1=" ><h4>knobs</h4><p>Every number worth changing is a knob. Each one becomes a slider on the mod's card, so "bouncier" is a knob tweak, not a rebuild.</p></div>
-        <div class="note" data-b="2=" ><h4>setup(api, knobs)</h4><p>Only the mod API: <code>spawn</code>, <code>onTick</code>, <code>rand</code>, <code>burst</code>. No DOM, no network, no clock, no <code>Math.random</code>. The engine's seeded RNG keeps every run reproducible.</p></div>
-        <div class="note" data-b="3=" ><h4>dispose(api)</h4><p>Removes everything the mod made. That is why undo is always clean: undo just calls <code>dispose()</code>.</p></div>
-        <div class="note" data-b="4=" ><h4>test(t)</h4><p>Wonder's own check. It spawns its own ground because the verifier runs each mod alone in an empty world, then steps the sim and asserts.</p></div>
-        <ol class="steps note" data-b="5-6">
-          <li><span><b>Safety scan.</b> Forbidden tokens (<code>eval</code>, <code>Function(</code>, <code>fetch</code>, <code>window</code>, <code>process.</code>…) are rejected, and every loop gets an iteration guard.</span></li>
-          <li><span><b>esbuild</b> compiles the TypeScript to a module.</span></li>
-          <li><span><b>600 headless frames</b> at a fixed 60 Hz step. Fails on an exception, NaN, too many entities, a frame over 2 ms, or a failing <code>test()</code>.</span></li>
-          <li><span><b>Bot playtest</b> in a copy of your world, with and without the mod, on seeds 11, 22 and 33.</span></li>
-          <li><span><b>Hot-load</b> from a blob URL into the running sim. The knobs appear as sliders.</span></li>
-        </ol>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ============ 5 LEARNS ============ -->
-<section class="ch" id="learn" data-states="4" data-name="It learns">
-  <div class="stage">
-    <div class="sky"></div>
-    <div class="head"><canvas class="px title" data-text="IT LEARNS" aria-hidden="true"></canvas><h2 class="sr">It learns</h2>
-      <p>A second model reviews every build, then teaches the game.</p></div>
-    <div class="body">
-      <div class="stack">
-        <div data-b="0=" class="fade"><p>After a build lands, Muse Spark Open, Meta's open-weights model on Baseten, reads the code in the background. You never wait for it.</p><p>The 🧠 panel in the game shows every review, fix and rule.</p></div>
-        <div data-b="1=" class="fade"><p>Here it caught a real bug: the player mod's <code>dispose()</code> never removed its <code>onTick</code> listener.</p><p>Reviewed on 10-31, during this capture. Fix accepted in 14.6 s.</p></div>
-        <div data-b="2=" class="fade"><p>A fix goes live only if it passes the same gates as any build: compile, 600-frame verify and the bot playtest. Otherwise the original stays.</p><p>Then it is hot-swapped in place under the same mod id, so undo still works.</p></div>
-        <div data-b="3=" class="fade"><p>Every accepted fix becomes a rule that every later Wonder build reads. 39 rules and skills were learned in the logged window.</p>
-          <ul class="rules">
-            <li><i>review</i> dispose() filtered coins by data.obstacle but coins were spawned with data.collectible only</li>
-            <li><i>autofix</i> Never place solid ground-level walls across the run path</li>
-            <li><i>feedback</i> Rain drops must fall with a wind-driven slant and splash on impact</li>
-          </ul></div>
-      </div>
-      <div class="frame" id="learnframe">
-        <div class="z" data-zoom="0.5,0.5,1|0.27,0.45,1.75|0.27,0.45,1.75|0.76,0.52,1.6"><img src="img/learned-panel.jpg" alt="The What it has learned panel: reviews run, a fix with its code diff, and the rules learned over time"></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ============ 6 SYSTEM ============ -->
-<section class="ch" id="sys" data-states="4" data-name="Not just a game">
-  <div class="stage">
-    <div class="sky"></div>
-    <div class="head"><canvas class="px title" data-text="NOT JUST A GAME" aria-hidden="true"></canvas><h2 class="sr">Not just a game</h2></div>
-    <div class="body">
-      <p class="lead" data-b="0">The product is the loop: words in, verified software out, changed while it runs. A game is where you can watch it work.</p>
-      <div class="bwrap"><div class="bento">
-        <div class="tile t-par" data-b="1"><img src="img/pipeline-live.jpg" alt="The live pipeline view" style="object-position:50% 0%"><div class="cap"><b>Parallel builds</b>"a dragon, some coins, and make it rain" splits into separate builds, each in its own lane.</div></div>
-        <div class="tile t-lvl" data-b="1"><img src="img/harder-level.jpg" alt="A generated level with pits and ledges" style="object-position:30% 50%"><div class="cap"><b>Generated levels</b>"make a harder level": pits, ledges, spikes, enemies and a goal flag in under a second.</div></div>
-        <div class="tile t-moo" data-b="2"><img src="img/christmas-mood.webp" alt="The world restyled for Christmas" style="object-position:35% 70%"><div class="cap"><b>Moods and places</b>Christmas, spooky, medieval, an Indiana farm.</div></div>
-        <div class="tile t-skt" data-b="2"><img src="img/sketch-mode.webp" alt="Sketch mode: drawn platforms, coins, enemy and bouncer" style="object-position:40% 50%"><div class="cap"><b>Draw a level</b>Sketch ledges, coins and enemies over the game; Wonder reads the drawing and builds it. Works with no key, too.</div></div>
-        <div class="t-col">
-          <div class="tile txt" data-b="3"><b>Camera import</b><p>Hold up a real mug. SAM 3.1 finds it, and it drops in as a physics prop.</p></div>
-          <div class="tile txt" data-b="3"><b>Loadout</b><p>One item at a time: Q switches, G drops, R reloads, vehicles run over hostiles.</p></div>
-          <div class="tile txt" data-b="3"><b>Share and export</b><p>A link reopens your exact world to remix. One HTML file plays offline.</p></div>
-        </div>
-      </div></div>
-    </div>
-  </div>
-</section>
-
-<!-- ============ 7 PROOF ============ -->
-<section class="ch" id="proof" data-states="4" data-name="Proof">
+<!-- ============ 5 PROOF ============ -->
+<section class="ch" id="proof" data-states="2" data-name="Proof">
   <div class="stage">
     <div class="sky"></div>
     <div class="head"><canvas class="px title" data-text="DOES IT WORK?" aria-hidden="true"></canvas><h2 class="sr">Does it work?</h2>
-      <p>Numbers from the game's own append-only build log, 10-28 to 10-30. Nothing hand-picked.</p></div>
+      <p>From the product's own append-only build log, 10-28 to 10-30. Nothing hand-picked.</p></div>
     <div class="body">
       <div class="board">
-        <div class="stat g" data-b="0"><div class="big"><span class="count" data-to="92.6" data-dec="1">0</span><small>%</small></div><p>of player requests landed verified and hot-loaded: 162 of 175.</p></div>
-        <div class="stat" data-b="1"><div class="big"><span class="count" data-to="11.2" data-dec="1">0</span><small>s</small></div><p>median from a sentence to a playable change (p90 26.9 s).</p></div>
-        <div class="stat" data-b="2"><div class="trio">
-          <div><div class="big"><span class="count" data-to="146">0</span></div><p>landed on the first try</p></div>
-          <div><div class="big"><span class="count" data-to="16">0</span><small>of 20</small></div><p>saved by the auto-fix round</p></div></div></div>
-        <div class="stat" data-b="3"><div class="trio">
-          <div><div class="big"><span class="count" data-to="1100">0</span><small>+</small></div><p>tests</p></div>
-          <div><div class="big"><span class="count" data-to="75">0</span></div><p>decision records</p></div>
-          <div><div class="big"><span class="count" data-to="20">0</span><small>/20</small></div><p>"make me huge" rejected, then fixed</p></div></div></div>
+        <div class="stat g" data-b="0"><div class="big"><span class="count" data-to="92.6" data-dec="1">0</span><small>%</small></div><p>of requests landed verified and hot-loaded: 162 of 175.</p></div>
+        <div class="stat" data-b="0"><div class="big"><span class="count" data-to="11.2" data-dec="1">0</span><small>s</small></div><p>median from a sentence to a live, verified change (p90 26.9 s).</p></div>
+        <div class="stat wide" data-b="1"><div class="trio">
+          <div><div class="big"><span class="count" data-to="20">0</span><small>/20</small></div><p>"make me huge" rejected, then fixed with no human</p></div>
+          <div><div class="big"><span class="count" data-to="1100">0</span><small>+</small></div><p>tests in the repo</p></div>
+          <div><div class="big"><span class="count" data-to="75">0</span></div><p>architecture decision records</p></div></div></div>
       </div>
       <p class="src" data-b="0">Source: docs/evidence/build-stats.md (regenerate with npm run stats), docs/process/rehearsal-20x.md, docs/adr/.</p>
     </div>
   </div>
 </section>
 
-<!-- ============ 8 RUN IT ============ -->
-<section class="ch" id="run" data-states="3" data-name="Run it">
+<!-- ============ 6 WATCH ============ -->
+<section class="ch" id="watch" data-states="2" data-name="Watch">
   <div class="stage">
     <div class="sky"></div><div class="stars"></div>
-    <div class="head"><canvas class="px title" data-text="RUN IT" aria-hidden="true"></canvas><h2 class="sr">Run it</h2>
-      <p>Node 22+ and five minutes. A Meta Model API key lets the AI build; without one it still plays.</p></div>
-    <div class="body">
-      <div data-b="0">
-        <div class="term" aria-label="Setup commands">
-<div><span class="p">$ </span>git clone https://github.com/sramey/CerebralValleyMetaHackathon2026.git</div>
-<div><span class="p">$ </span>cd CerebralValleyMetaHackathon2026</div>
-<div><span class="p">$ </span>npm install</div>
-<div><span class="p">$ </span>cp .env.example .env <span class="cm"># add your Meta key, or leave it empty</span></div>
-<div><span class="p">$ </span>npm run build &amp;&amp; npm start</div>
-        </div>
-        <p>Open <code>http://127.0.0.1:8787/</code>, click the game, and type <code>add a bouncing green slime</code>.</p>
+    <div class="wrap">
+      <div>
+        <p class="lead" data-b="0-0">A game just makes it watchable.<span>The same loop fits any software that has to keep running while it changes: write the code, test it, play it through, ship it hot, keep reviewing it.</span></p>
+        <div class="loopline" data-b="0-0"><i>write</i><i>test</i><i>QA playthrough</i><i>hot-load</i><i>undo</i><i class="v">second opinion</i></div>
       </div>
-      <div class="nokey" data-b="1">
-        <h4>Without a key, it still runs.</h4>
-        <p>Built-in mods, drawing a level, the 🧠 panel, share and download, and four curated demo worlds, with no AI calls:</p>
-        <ul><li><code>?w=demo-starter</code></li><li><code>?w=demo-bouncy</code></li><li><code>?w=demo-arrows</code></li><li><code>?w=demo-rainy</code></li></ul>
-        <div class="frame"><div class="z" style="transform:scale(1.45)"><img src="img/keyless-startup.jpg" alt="The keyless startup screen listing what needs a Meta key and what still plays"></div></div>
+      <div>
+        <canvas class="px" data-b="1" data-text="LET'S WATCH|IT BUILD." data-cells="8" data-color="#f2bf4a" aria-hidden="true"></canvas>
       </div>
     </div>
-    <div class="final" data-b="2">
-      <div>
-        <canvas class="px" data-text="SAY IT.|IT BUILDS ITSELF." data-cells="5.2" data-color="#f2bf4a" aria-hidden="true"></canvas>
-        <div class="repo"><a href="https://github.com/sramey/CerebralValleyMetaHackathon2026">github.com/sramey/CerebralValleyMetaHackathon2026</a></div>
-      </div>
-      <p>Software that rewrites itself while you use it, and proves every change before it ships.</p>
+    <div class="foot" data-b="1">
+      <span><a href="https://github.com/sramey/CerebralValleyMetaHackathon2026">github.com/sramey/CerebralValleyMetaHackathon2026</a></span>
+      <span>Run it: <code>npm install</code>, <code>npm run build &amp;&amp; npm start</code>. No key? Demo worlds still play.</span>
     </div>
   </div>
 </section>
@@ -564,7 +399,7 @@ function setupPx(cv){
   pxItems.push(item); cv._px = item; return item;
 }
 function sizePx(it){
-  const parentW = (it.cv.closest(".lines,.final > div,.head") || it.cv.parentElement).clientWidth || innerWidth*0.8;
+  const parentW = (it.cv.closest(".hk > div,.wrap > div,.head") || it.cv.parentElement).clientWidth || innerWidth*0.8;
   let cell;
   if (it.cv.classList.contains("title")) cell = Math.max(3, Math.min(innerHeight*0.0088, innerWidth*0.0052));
   else if (it.cv.dataset.cells) cell = Math.min(parseFloat(it.cv.dataset.cells)*innerWidth/1000, innerHeight*parseFloat(it.cv.dataset.cells)/560);
@@ -605,74 +440,10 @@ function playPx(it){
 }
 document.querySelectorAll("canvas.px").forEach(setupPx);
 
-/* ---------------- code highlight ---------------- */
-const SRC = `export default {
-  id: "bouncing-green-slime",
-  title: "Bouncing Green Slime",
-  knobs: {
-    bounce: { value: 520, min: 200, max: 800, label: "Bounce Height" },
-    speed: { value: 55, min: 10, max: 140, label: "Hop Speed" }
-  },
-  setup(api: any, knobs: any) {
-    const h = 36;
-    const slime = api.spawn({ type: "slime", x: 240, y: 400 - h, w: 44, h: h,
-      vx: Number(knobs.speed ?? 55), vy: 0, color: 0x57d94d, solid: false,
-      gravityScale: 1, data: { casual: true, creature: true } });
-    let dir = 1;
-    api.onTick(() => {
-      if (!api.entities().includes(slime)) return;
-      if (slime.onGround) {
-        slime.vy = -Number(knobs.bounce ?? 520);
-        if (api.rand() < 0.08) dir = -dir;
-        slime.vx = dir * Number(knobs.speed ?? 55);
-        slime.facing = dir as 1 | -1;
-        if (api.rand() < 0.3) api.burst(slime.x + slime.w / 2, 398, 0x57d94d, 4);
-      }
-    });
-  },
-  dispose(api: any) {
-    for (const e of api.byType("slime")) api.despawn(e.id);
-  },
-  test(t: any) {
-    t.api.spawn({ type: "ground", x: -200, y: 400, w: 1200, h: 48,
-      solid: true, gravityScale: 0 });
-    t.step(8);
-    const s = t.api.byType("slime")[0];
-    t.expect(!!s, "slime exists");
-    t.expect(!!s && s.color === 0x57d94d, "slime is green");
-    t.expect(!!s && s.y + s.h < 400 && s.vy < 0, "slime bounces upward");
-  }
-}`;
-const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-function hl(line){
-  const re = /("(?:[^"\\]|\\.)*")|(\b0x[0-9a-f]+\b|\b\d+(?:\.\d+)?\b)|(\b(?:export|default|const|let|if|return|for|of|as|any|true|false)\b)|(\b(?:api|t)\.[a-zA-Z]+(?:\.[a-zA-Z]+)?)/g;
-  let out="", last=0, m;
-  while ((m=re.exec(line))){ out+=esc(line.slice(last,m.index));
-    const cls = m[1]?"s":m[2]?"n":m[3]?"k":"a"; out+=`<span class="${cls}">${esc(m[0])}</span>`; last=re.lastIndex; }
-  return out+esc(line.slice(last));
-}
-const codeEl = document.getElementById("code");
-const REGIONS = {1:[4,7],2:[8,24],3:[25,27],4:[28,36]};
-(() => {
-  const lines = SRC.split("\n"); let w=0; const frag=[];
-  lines.forEach((l,i)=>{ const d = Math.max(0.04, l.length*0.006);
-    frag.push(`<span class="ln" data-n="${i+1}" style="--w:${w.toFixed(2)}s;--d:${d.toFixed(2)}s">${hl(l)||" "}</span>`); w+=d*0.45; });
-  codeEl.insertAdjacentHTML("afterbegin", frag.join(""));
-})();
-
-function fitCode(){
-  if (innerWidth <= 900){ codeEl.style.fontSize = ""; return; }
-  const cs = getComputedStyle(codeEl);
-  const h = codeEl.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-  const w = codeEl.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-  const n = SRC.split("\n").length;
-  codeEl.style.fontSize = Math.max(9, Math.min(h/(n*1.42), w/(86*0.6))).toFixed(2) + "px";
-}
-
 /* ---------------- pipeline diagram ---------------- */
 const NODES = [
-  ["Voice in","Transcribe","muse-voice"],["Route","Muse Spark","or Spark Open"],["Write","Muse Wonder","agent + tools"],
-  ["Compile","esbuild","+ safety scan"],["Verify","Verifier","600 frames + bot"],["Hot-load","Mod loader","no reload"],["Play","Your world","knobs + undo"]];
+  ["Ask","Plain words","voice or text"],["Route","Muse Spark","or Spark Open"],["Code","Muse Wonder","agent + tools"],
+  ["Test","Auto-tests","headless 60 Hz"],["QA","Bot playtest","3 seeds"],["Ship","Hot-load","no restart"],["Live","Running app","undo = dispose"]];
 const NX = i => 10 + i*198, NW = 176, NY = 170, NH = 130, CY = NY + NH/2;
 const svgNS = "http://www.w3.org/2000/svg";
 const nodesG = document.getElementById("nodes"), wiresG = document.getElementById("wires");
@@ -691,9 +462,9 @@ for (let i=0;i<NODES.length-1;i++){
 const pkt = document.getElementById("pkt"), arc = document.getElementById("arc"), arcLbl = document.getElementById("arcLbl");
 const tools = document.getElementById("tools"), reason = document.getElementById("reason"), cmd = document.getElementById("cmd");
 let pktAnim = 0;
-function movePkt(path){ // path: array of [x,y] or {svgPath}
+function movePkt(pts){
   cancelAnimationFrame(pktAnim);
-  const pts = path; if (!pts.length) return;
+  if (!pts.length) return;
   if (reduced){ const e=pts[pts.length-1]; pkt.setAttribute("cx",e[0]); pkt.setAttribute("cy",e[1]); return; }
   const t0 = performance.now(), dur = pts.length>10 ? 1300 : Math.min(1500, 380*Math.max(1,pts.length-1));
   const seg = []; let L=0; for(let i=1;i<pts.length;i++){ const d=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]); seg.push(d); L+=d; }
@@ -705,40 +476,25 @@ function movePkt(path){ // path: array of [x,y] or {svgPath}
   pktAnim = requestAnimationFrame(tick);
 }
 const C = i => [NX(i)+NW/2, CY];
-function arcPts(rev){ const out=[]; for(let k=0;k<=40;k++){ const p=arc.getPointAtLength(arc.getTotalLength()*k/40); out.push([p.x,p.y]); } return rev?out.reverse():out; }
-let loopPrev = -1;
+function arcPts(){ const out=[]; for(let k=0;k<=40;k++){ const p=arc.getPointAtLength(arc.getTotalLength()*k/40); out.push([p.x,p.y]); } return out; }
+const LIT = [3,4,5,7,7,7,7];
+const PATHS = [[0,1,2],[2,3],[3,4],[4,5,6],[2,3,4],null,[2,3,4,5,6]];
 function loopState(s){
-  const lit = s<=4 ? s+1 : 7;
+  const lit = LIT[s];
   nodeEls.forEach((g,i)=>{ g.classList.toggle("lit", i<lit); g.classList.remove("bad","good"); });
   wireEls.forEach((w,i)=> w.classList.toggle("lit", i<lit-1));
-  if (s===6) nodeEls[4].classList.add("bad");
-  if (s===8) nodeEls[4].classList.add("good");
-  arc.classList.toggle("on", s>=7); arc.classList.toggle("fixed", s>=8);
-  arcLbl.classList.toggle("on", s>=7); arcLbl.classList.toggle("fixed", s>=8);
-  tools.classList.toggle("on", s===7);
-  reason.classList.toggle("on", s>=6); reason.classList.toggle("fixed", s>=8);
-  reason.textContent = s>=8 ? "passed: the player (64px) fits with normal velocity" : "rejected: the player (100px) can't fit under the 72px cliff overhang";
-  cmd.innerHTML = s>=6 ? "&ldquo;make me huge&rdquo;" : "&ldquo;add a bouncing green slime&rdquo;";
-  pkt.style.fill = s===6 ? "var(--red)" : (s>=8 ? "var(--green)" : "var(--gold)");
-  // packet travel
-  if (s<=5){ const from = loopPrev>=0 && loopPrev<=5 && loopPrev<s ? Math.min(loopPrev,4) : Math.max(0,Math.min(s,4)-1);
-    const to = s<=4 ? s : 6; const path=[]; for(let i=from;i<=to;i++) path.push(C(i)); if (path.length===1) path.unshift(C(Math.max(0,to-1))); movePkt(s===0?[C(0)]:path); }
-  else if (s===6) movePkt([C(2),C(3),C(4)]);
-  else if (s===7) movePkt(arcPts(false));
-  else if (s===8) movePkt([C(2),C(3),C(4),C(5),C(6)]);
-  loopPrev = s;
+  if (s===4) nodeEls[4].classList.add("bad");
+  if (s===6) nodeEls[4].classList.add("good");
+  arc.classList.toggle("on", s>=5); arc.classList.toggle("fixed", s>=6);
+  arcLbl.classList.toggle("on", s>=5); arcLbl.classList.toggle("fixed", s>=6);
+  tools.classList.toggle("on", s===5);
+  reason.classList.toggle("on", s>=4); reason.classList.toggle("fixed", s>=6);
+  reason.textContent = s>=6 ? "passed: the player (64px) fits with normal velocity" : "rejected: the player (100px) can't fit under the 72px cliff overhang";
+  cmd.innerHTML = s>=4 ? "&ldquo;make me huge&rdquo;" : "&ldquo;add a bouncing green slime&rdquo;";
+  pkt.style.fill = s===4 ? "var(--red)" : (s>=6 ? "var(--green)" : "var(--gold)");
+  movePkt(PATHS[s] ? PATHS[s].map(C) : arcPts());
 }
 pkt.setAttribute("cx",C(0)[0]);
-
-/* ---------------- typed orb ---------------- */
-const SAY = ["add a bouncing green slime","add a bouncing green slime","add a bouncing green slime","make it spooky","change the background to medieval"];
-const typedEl = document.getElementById("typed"); let typeTimer=0, typedNow="";
-function typeOrb(text){
-  if (text===typedNow) return; typedNow=text; clearInterval(typeTimer);
-  if (reduced){ typedEl.textContent=text; return; }
-  let i=0; typedEl.textContent="";
-  typeTimer=setInterval(()=>{ i++; typedEl.textContent=text.slice(0,i); if(i>=text.length) clearInterval(typeTimer); }, 38);
-}
 
 /* ---------------- zoom frames ---------------- */
 function zoomTo(z, spec){
@@ -747,25 +503,11 @@ function zoomTo(z, spec){
   z.style.transformOrigin = `${cx*100}% ${cy*100}%`;
   z.style.transform = `translate(${(0.5-cx)*100}%, ${(0.5-cy)*100}%) scale(${s})`;
 }
-function sayState(s){
-  document.querySelectorAll("#sayframe .z").forEach(z=>{
-    const k=+z.dataset.z; z.classList.toggle("off", k!==s);
-    if (k===s){ z.style.transform="none"; z.getBoundingClientRect(); requestAnimationFrame(()=>zoomTo(z, z.dataset.zoom)); }
-  });
-  typeOrb(SAY[s]);
-}
 function learnState(s){
   const z=document.querySelector("#learnframe .z"); const specs=z.dataset.zoom.split("|"); zoomTo(z, specs[Math.min(s,specs.length-1)]);
 }
-function modState(s){
-  codeEl.classList.add("typed");
-  codeEl.classList.toggle("hl", s>=1 && s<=4);
-  const r = REGIONS[s];
-  codeEl.querySelectorAll(".ln").forEach((ln,i)=> ln.classList.toggle("h", !!r && i+1>=r[0] && i+1<=r[1]));
-  document.getElementById("diff").classList.toggle("on", s>=6);
-}
 function metaState(s){
-  document.querySelectorAll("#roster .row").forEach((r,i)=>{ r.classList.toggle("cur", i===s); r.classList.toggle("dim", s<6 && i!==s); });
+  document.querySelectorAll("#roster .row").forEach(r=>{ const ow=r.classList.contains("ow"); r.classList.toggle("cur", s===1 && ow); r.classList.toggle("dim", s===1 && !ow); });
 }
 
 /* ---------------- counters ---------------- */
@@ -780,7 +522,7 @@ function count(el){
 
 /* ---------------- beat engine ---------------- */
 const CH = [...document.querySelectorAll(".ch")];
-const HANDLERS = {say:sayState, loop:loopState, mod:modState, learn:learnState, meta:metaState};
+const HANDLERS = {loop:loopState, learn:learnState, meta:metaState};
 let beatPx = 0, targets = [];
 function inRange(spec, s){
   if (spec.endsWith("=")) return s === +spec.slice(0,-1);
@@ -794,7 +536,6 @@ function layout(){
   targets = [];
   CH.forEach(ch=>{ const top = ch.offsetTop, n=+ch.dataset.states; for(let k=0;k<n;k++) targets.push(Math.round(top + k*beatPx)); });
   pxItems.forEach(sizePx);
-  fitCode();
   onScroll(true);
 }
 function apply(ch, s){
@@ -810,7 +551,7 @@ const bar = document.querySelector("#bar i"), wn=document.getElementById("wn"), 
 let curCh=-1, curS=-1, ticking=false;
 function onScroll(force){
   const y = scrollY, vh = innerHeight, narrow = innerWidth<=900;
-  CH.forEach((ch,ci)=>{
+  CH.forEach(ch=>{
     const top = ch.offsetTop, n=+ch.dataset.states;
     let s;
     if (narrow){ const r=ch.getBoundingClientRect(); s = r.top < vh*0.8 ? n-1 : -1; }
@@ -819,7 +560,6 @@ function onScroll(force){
   });
   const max = document.documentElement.scrollHeight - vh;
   bar.style.transform = `scaleX(${max>0 ? Math.min(1,y/max) : 0})`;
-  // which chapter is on screen
   let ci = 0; CH.forEach((ch,i)=>{ if (ch.offsetTop - vh*0.5 <= y) ci=i; });
   const s = Math.max(0, CH[ci]._s);
   if (ci!==curCh || s!==curS || force){
@@ -857,7 +597,6 @@ addEventListener("keydown", e=>{
   else if (k==="End"){ e.preventDefault(); goTo(document.documentElement.scrollHeight); }
   else if (k==="h"||k==="H") document.documentElement.classList.toggle("clean");
 });
-// cancel a keyboard glide if the wheel takes over
 addEventListener("wheel", ()=>{ cancelAnimationFrame(anim); animTarget=null; }, {passive:true});
 
 layout();
