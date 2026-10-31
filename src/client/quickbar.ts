@@ -1,6 +1,11 @@
 // Quick action bar (bead metabuild-ideation-b1y): compact in-game buttons
 // for the three primary panel features ("What it has learned", "Draw a level",
 // and "Bring an object in") while the side panel starts collapsed by default.
+//
+// Layout (bug qblayout): icon-only 40 px circles in one column on the right edge, under
+// the « and sound buttons, so the bar never covers the build card, the top-centre banners
+// or the top-right HUD. The label span is still rendered for every button and doubles as
+// the hover/focus tooltip (quickbar.css); `title` and `aria-label` carry the same words.
 import "./quickbar.css";
 
 export interface QuickAction {

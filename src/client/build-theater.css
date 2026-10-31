@@ -1,7 +1,9 @@
 /* Build theater (ADR 0022): translucent code stream + live agent steps + stage stepper. */
-/* Positioned in top-right sky quadrant so it never covers player/ground at y=400 (bead 0g9) */
+/* Positioned in top-right sky quadrant so it never covers player/ground at y=400 (bead 0g9).
+   `right` leaves the 40 px quick-action gutter on the right edge free (bug qblayout): the card
+   ends 8 px left of #quickbar, so the bar can never cut off the code. */
 .bt-stream {
-  position: absolute; right: 16px; top: 68px; z-index: 23; pointer-events: none; opacity: 0; transition: opacity .35s ease;
+  position: absolute; right: 60px; top: 68px; z-index: 23; pointer-events: none; opacity: 0; transition: opacity .35s ease;
   display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-end;
 }
 .bt-stream.on { opacity: 1; }
