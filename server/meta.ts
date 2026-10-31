@@ -20,6 +20,18 @@ export interface ChatResult { text: string; ms: number }
 
 let loaded = false;
 let cachedKey = "";
+/** While set, `loadEnv()` ignores `.env` files entirely. Only the test hook below flips it. */
+let envFileOff = false;
+
+/**
+ * Test hook: make `loadEnv()` answer from `process.env` alone, so a suite owns the
+ * environment and a developer's real `.env` cannot leak a key into an assertion. In this
+ * mode the `MODEL_API_KEY` cache is bypassed (it is read live on every call). Runtime code
+ * never calls this, so normal `.env` loading is unchanged.
+ */
+export function setEnvFileLoading(enabled: boolean): void {
+  envFileOff = !enabled;
+}
 
 function envPaths(): string[] {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -28,6 +40,7 @@ function envPaths(): string[] {
 
 /** Parse .env files (first found wins per key) without overriding process.env. Idempotent. */
 export function loadEnv(): string {
+  if (envFileOff) return (process.env.MODEL_API_KEY ?? "").trim();
   if (loaded) return cachedKey;
   loaded = true;
   const fromFile: Record<string, string> = {};
