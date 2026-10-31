@@ -1,12 +1,14 @@
 /* "How does this work?" card (ADR 0043): three plain sentences plus a small code view.
    It sits over the game, top-left, clear of the orb bar, the ghost window and the pipeline
-   button, and never blocks pointer events outside itself. */
+   button, and never blocks pointer events outside itself.
+   The width cap leaves the 40 px quick-action column free on the right (bug layoutfix): at
+   narrow stages the card used to run under it, and below 900 px it spanned the full width. */
 #explain-panel {
   position: absolute;
   top: 84px;
   left: 14px;
   z-index: 30;
-  width: min(380px, calc(100% - 28px));
+  width: min(380px, calc(100% - 82px));
   max-height: min(62%, 460px);
   display: flex;
   flex-direction: column;
@@ -160,5 +162,5 @@
 }
 
 @media (max-width: 900px) {
-  #explain-panel { top: 76px; left: 10px; right: 10px; width: auto; max-height: 54%; }
+  #explain-panel { top: 76px; left: 10px; right: 60px; width: auto; max-height: 54%; }
 }

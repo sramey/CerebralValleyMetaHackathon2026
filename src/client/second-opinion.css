@@ -1,6 +1,9 @@
 /* Open-weights second opinion on stage (ADR 0078). Top-left, under the orb row: clear of the orb bar
-   (top-center), the quick-action bar and the panel toggle (top-right) and the ghost window (bottom-left). */
-#second-opinion { position: absolute; left: 14px; top: 76px; z-index: 27; width: min(360px, calc(50% - 40px)); pointer-events: none; font-family: "Segoe UI", system-ui, sans-serif; }
+   (top-center), the quick-action bar and the panel toggle (top-right) and the ghost window (bottom-left).
+   `top: 124px` also keeps it under the build stepper (bug layoutfix): on a narrow stage the centred
+   stepper (e.g. x 253..647 at 900x600) reaches into this column, and a 360 px card at top 76 covered
+   its first two pips. 124 clears the strip's 114 px bottom at every size. */
+#second-opinion { position: absolute; left: 14px; top: 124px; z-index: 27; width: min(360px, calc(50% - 40px)); pointer-events: none; font-family: "Segoe UI", system-ui, sans-serif; }
 #second-opinion[data-state="off"] { display: none; }
 .so-card { padding: 12px 14px 11px; border-radius: 12px; background: rgba(12, 16, 23, .93); border: 1px solid rgba(126, 229, 154, .6); border-left: 4px solid #7ee59a; box-shadow: 0 8px 26px rgba(0, 0, 0, .55), 0 0 20px rgba(126, 229, 154, .18); color: #e8e4d8; animation: so-in .35s cubic-bezier(.2, 1.2, .4, 1) both; }
 .so-card b { display: block; font-size: 13px; letter-spacing: .01em; color: #bff3cf; }

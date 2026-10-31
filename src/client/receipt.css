@@ -1,12 +1,14 @@
 /* "How was this made?" (ADR 0065): the chain from your words to a verified, playable mod.
    It sits on the right of the stage, clear of the orb bar and the ghost window (bottom-left),
-   and scrolls inside itself. */
+   and scrolls inside itself.
+   `right: 60px` keeps it 8 px left of the 40 px quick-action column on the right edge
+   (#quickbar, bug layoutfix): the panel used to paint over all three buttons. */
 #receipt-panel {
   position: absolute;
   top: 84px;
-  right: 14px;
+  right: 60px;
   z-index: 31;
-  width: min(460px, calc(100% - 28px));
+  width: min(460px, calc(100% - 74px));
   max-height: calc(100% - 140px);
   display: flex;
   flex-direction: column;
@@ -129,5 +131,5 @@
 #radial-menu { --r: clamp(72px, 9.4vh, 82px); }
 
 @media (max-width: 900px) {
-  #receipt-panel { top: 76px; left: 10px; right: 10px; width: auto; max-height: 60%; }
+  #receipt-panel { top: 76px; left: 10px; right: 60px; width: auto; max-height: 60%; }
 }
