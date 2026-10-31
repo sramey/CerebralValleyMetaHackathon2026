@@ -54,6 +54,11 @@ After, 1000x700, panel open (the narrowest real side-panel stage, 660 px wide):
   #orb-bar               70..590  y  14..62  clear
   .bt-stepper           123..537  y  94..114 clear
 
+Production bundle check
+- `npm run build` then `npm start` on PORT 8795 (the same page the demo serves),
+  1280x720, preview card streaming: #quickbar 1228..1268 y 106..242, .bt-card
+  800..1220 -> clear, three buttons mounted. See after-1280x720-build-8795.png.
+
 Notes
 - The starter world only declares a top-left health widget, so the top-right HUD row
   (level progress + score) and the top-centre banner were injected for the measurement
