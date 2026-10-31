@@ -41,6 +41,7 @@ import { createGhost } from "./ghost";
 import { mountTimeline } from "./timeline";
 import { createPipeline } from "./pipeline";
 import { createBrain } from "./brain";
+import { createSecondOpinion } from "./second-opinion";
 import { createQuickbar } from "./quickbar";
 import { createTheater } from "./build-theater";
 import { createHud } from "./hud";
@@ -89,6 +90,7 @@ loader.isolateFaults((mod, message) => {
 const ghost = createGhost(document.getElementById("stage-wrap")!);
 const pipeline = createPipeline(document.getElementById("stage-wrap")!);
 const brain = createBrain(document.getElementById("stage-wrap")!);
+const secondOpinion = createSecondOpinion(document.getElementById("stage-wrap")!, { flash: (id) => flashModEntities(id) });
 const theater = createTheater(document.getElementById("stage-wrap")!, (v) => pipeline.setCode(v.lines, v.partial, v.active), (m) => { pipeline.onMsg(m); theater.onMsg(m); });
 // Declarative mod HUD overlay (ADR 0019): renders world.hud each frame.
 const hud = createHud(document.getElementById("stage-wrap")!);
@@ -724,6 +726,30 @@ function positionRadialMenu(e: Entity, camX: number, camY: number): void {
   radialMenu.style.setProperty("--ring-dx", `${Math.round(rawX - x)}px`);
   radialMenu.style.setProperty("--ring-dy", `${Math.round(rawY - y)}px`);
   radialMenu.style.setProperty("--ring-size", `${Math.round(Math.min(140, Math.max(44, Math.hypot(e.w, visH) + 12)))}px`);
+}
+/** Ring the entities of a mod the open-weights reviewer just fixed (ADR 0078), once the swap has respawned them. */
+function flashModEntities(modId: string): void {
+  window.setTimeout(() => {
+    const cx = camXSmooth ?? world.camera.x;
+    const cy = camYSmooth ?? world.camera.y;
+    const w = app.screen.width || stageWrapEl.clientWidth;
+    const h = app.screen.height || stageWrapEl.clientHeight;
+    const hits = world.entities.filter((e) => e.owner === modId && e.w < 420 && e.h < 420).slice(0, 6);
+    for (const e of hits) {
+      const vh = visualHeightOf(e);
+      const x = e.x - cx + e.w / 2;
+      const y = e.y - cy + e.h - vh / 2;
+      if (x < -60 || y < -60 || x > w + 60 || y > h + 60) continue;
+      const ring = document.createElement("div");
+      ring.className = "so-flash";
+      ring.style.left = `${Math.round(x)}px`;
+      ring.style.top = `${Math.round(y)}px`;
+      ring.style.width = `${Math.round(Math.max(44, e.w + 16))}px`;
+      ring.style.height = `${Math.round(Math.max(44, vh + 16))}px`;
+      stageWrapEl.appendChild(ring);
+      window.setTimeout(() => ring.remove(), 1500);
+    }
+  }, 350);
 }
 function closeRadialMenu(): void {
   radialTargetId = null;
@@ -2306,6 +2332,7 @@ function connect(): void {
     try { msg = JSON.parse(String(ev.data)) as ServerMsg; } catch { return; }
     pipeline.onMsg(msg);
     brain.onMsg(msg);
+    secondOpinion.onMsg(msg);
     theater.onMsg(msg);
     sketch.onServerMsg(msg);
     if (voice.onServerMsg(msg)) return;

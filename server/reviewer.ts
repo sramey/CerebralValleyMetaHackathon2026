@@ -71,6 +71,10 @@ export interface BuildReviewInput {
   playtest?: { ok: boolean; msPerFrame?: number; plain?: string };
   worldMods?: () => PlaytestWorldMod[];
   send?: (ws: WebSocket, msg: ServerMsg) => void;
+  /** An explicit "double-check my world" (ADR 0078): skips only the one-review-per-build cap; kill switch and key still apply. */
+  force?: boolean;
+  /** Set while a sweep runs, so each card says "2 of 5". */
+  sweep?: { n: number; of: number };
 }
 
 export interface BuildReviewOutcome {
@@ -108,11 +112,19 @@ export async function reviewBuild(input: BuildReviewInput): Promise<BuildReviewO
 
   // 3. Cap at one review per build
   const buildKey = `${input.mod.id}:${input.command}`;
-  if (reviewedMods.has(input.mod) || reviewedIds.has(buildKey)) {
+  if (!input.force && (reviewedMods.has(input.mod) || reviewedIds.has(buildKey))) {
     return { skipped: "already-reviewed" };
   }
   reviewedMods.add(input.mod);
   reviewedIds.add(buildKey);
+
+  const tell = (phase: "running" | "ok" | "fixed" | "held", extra: { issue?: string; rule?: string; ms?: number } = {}): void => {
+    if (!input.ws || !input.send) return;
+    try {
+      input.send(input.ws, { kind: "review", modId: input.mod.id, title: input.mod.title, phase, model: cfg.model, ...extra, ...(input.sweep ? { sweep: input.sweep } : {}) });
+    } catch { /* the card is a courtesy; never let it break a review */ }
+  };
+  tell("running");
 
   // 4. Call open-weights endpoint
   const timeoutMs = Number(process.env.REVIEWER_TIMEOUT_MS) || Math.max(cfg.timeoutMs, 25000);
@@ -129,6 +141,7 @@ export async function reviewBuild(input: BuildReviewInput): Promise<BuildReviewO
     rawText = res.text;
   } catch (err) {
     console.log(`[reviewer] open weights call failed/timed out: ${err instanceof Error ? err.message : String(err)}`);
+    tell("held");
     return { error: String(err) };
   }
   const callMs = Math.round(performance.now() - t0);
@@ -137,6 +150,7 @@ export async function reviewBuild(input: BuildReviewInput): Promise<BuildReviewO
   const parsed = parseReviewJson(rawText);
   if (!parsed) {
     console.log("[reviewer] bad JSON reply from open-weights reviewer");
+    tell("held");
     return { error: "bad json" };
   }
 
@@ -162,6 +176,7 @@ export async function reviewBuild(input: BuildReviewInput): Promise<BuildReviewO
         ms: callMs,
       };
     }
+    tell("ok", { ms: callMs });
     return { verdict: "ok", issues: [], accepted: false, ms: callMs };
   }
 
@@ -219,6 +234,7 @@ export async function reviewBuild(input: BuildReviewInput): Promise<BuildReviewO
   });
 
   if (!accepted) {
+    tell("held", { issue: parsed.issues[0], ms: callMs });
     return { verdict: "fix", issues: parsed.issues, accepted: false, ms: callMs };
   }
 
@@ -246,6 +262,7 @@ export async function reviewBuild(input: BuildReviewInput): Promise<BuildReviewO
       kind: "say",
       text: `Reviewed by Muse Spark Open (open weights): fixed ${fixedNote}`,
     });
+    tell("fixed", { issue: fixedNote, ...(taught[0] ? { rule: taught[0] } : {}), ms: callMs });
   }
 
   return { verdict: "fix", issues: parsed.issues, accepted: true, ms: callMs };

@@ -105,4 +105,5 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0075](0075-engine-owned-hurt-window-and-knockback.md) | Getting hurt is engine-owned: a short invulnerability window, a knockback and a red flash | Proposed |
 | [0076](0076-drawn-crosshair-over-the-stage.md) | A drawn crosshair over the stage for aiming, hidden for keyboard and gamepad play | Proposed |
 | [0077](0077-reconnect-adopts-the-home-world.md) | A reconnect adopts the browser's own world file back into the session, so knobs, undo and edits keep working with no reload | Proposed |
+| [0078](0078-open-weights-second-opinion-on-stage.md) | The open-weights second opinion is shown on stage (fix card, +1 rule pulse, pipeline node) and can be asked for: "double-check my world" | Proposed |
 | [0079](0079-startup-no-key-screen.md) | A startup screen in visitor mode (no Meta key) says which features need a key and what still plays, then drops you into the demo worlds | Proposed |

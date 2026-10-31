@@ -22,7 +22,7 @@ export function acceptedPct(f: BrainFeed): number | null {
   return s.fixesFound > 0 ? Math.round((s.accepted / s.fixesFound) * 100) : null;
 }
 
-export const SOURCE_LABEL: Record<string, string> = { feedback: "player feedback", autofix: "verifier auto-fix", review: "open-weights review", seed: "starter rule" };
+export const SOURCE_LABEL: Record<string, string> = { feedback: "player feedback", autofix: "verifier auto-fix", review: "learned from open-weights review", seed: "starter rule" };
 export const SUBSYSTEM_LABEL: Record<string, string> = { router: "Router", wonder: "Wonder", art: "Art" };
 
 /** "Oct 29" in UTC, so a recording made at any hour shows the same day. */
