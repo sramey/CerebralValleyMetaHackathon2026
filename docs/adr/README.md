@@ -107,3 +107,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0077](0077-reconnect-adopts-the-home-world.md) | A reconnect adopts the browser's own world file back into the session, so knobs, undo and edits keep working with no reload | Proposed |
 | [0078](0078-open-weights-second-opinion-on-stage.md) | The open-weights second opinion is shown on stage (fix card, +1 rule pulse, pipeline node) and can be asked for: "double-check my world" | Proposed |
 | [0079](0079-startup-no-key-screen.md) | A startup screen in visitor mode (no Meta key) says which features need a key and what still plays, then drops you into the demo worlds | Proposed |
+| [0080](0080-landmark-art-is-one-picture.md) | A landmark's art is one picture of the whole subject: one-image art order, single-frame slicing, uniform scaling on the ground, and no parallax double-draw | Proposed |

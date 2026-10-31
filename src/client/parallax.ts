@@ -5,6 +5,7 @@
 import type { Graphics } from "pixi.js";
 import type { Entity } from "../contract";
 import { type DepthPalette, mixColor, scaleColor } from "./depth";
+import { isSetPiece } from "./setpieces";
 
 const PARALLAX_TYPE_RE = /^(parallax|bg-|background-|far-mountain|distant-mountain|mountain-bg|hill-bg|forest-bg|treeline|sky-cloud|cloud\b)/i;
 
@@ -25,6 +26,9 @@ export function parallaxFactorOf(e: Entity): number | null {
   }
 
   const t = e.type.toLowerCase();
+  // A landmark (ADR 0080) is drawn by the set-piece layer, on the ground at 1x. Letting this pass draw a
+  // grey silhouette for it too put two mountains on screen, the second sliding at 0.22x.
+  if (isSetPiece(e) && !/(parallax|bg-|background|far-|distant-|-bg\b)/.test(t)) return null;
   if (t === "sky" || t === "day-sky" || t === "night-sky" || t === "background") return 0.0;
   if (t.includes("cloud") || t.includes("cumulus")) return 0.18;
   if (t.includes("parallax-far") || t.includes("bg-far") || t.includes("far-mountain") || t.includes("peak") || t.includes("alps")) return 0.15;

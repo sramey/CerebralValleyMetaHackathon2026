@@ -5,7 +5,7 @@
 // /art/gen/<key>.webp.
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { artPlanFor, canUseSpriteSheet, detectMoodCommand, entityKind, extractSpawnedEntities, isHeldItemType } from "../src/ontology";
+import { artPlanFor, canUseSpriteSheet, detectMoodCommand, entityKind, extractSpawnedEntities, isHeldItemType, isLandmarkSubject } from "../src/ontology";
 import { loadEnv } from "./meta";
 import { logArt } from "./createlog";
 import { loadRules } from "./learn";
@@ -157,7 +157,11 @@ export function isFlyingRequest(text: string, type = ""): boolean {
  * The sprite-sheet prompt for one subject, exactly as Muse Image receives it (the kid-safe screen
  * reads this string too, so it can be screened without spending an image call — bead 82z).
  */
-export function spritePrompt(cleanSubject: string, form: { held: boolean; scenery: boolean; flying?: boolean; skin?: boolean }): string {
+export function spritePrompt(cleanSubject: string, form: { held: boolean; scenery: boolean; flying?: boolean; skin?: boolean; landmark?: boolean }): string {
+  if (form.landmark) {
+    // A landmark is ONE picture of the whole subject (ADR 0080), not a pose sheet or a row of variants.
+    return `Pixel art game landmark: ONE single ${cleanSubject}, the whole subject complete and centered, filling most of the frame, side-on view like a 2D side-scrolling platformer backdrop. Exactly one ${cleanSubject} in the image, NOT a sheet, NOT several variants, NOT a row, NOT a grid, no animation poses. Nothing else: no character, no creature, no ground line, no landscape, no sky, no other objects, no text. Flat solid magenta background (#FF00FF), chunky pixels, thin dark outline, 16-bit platformer style, the base of the ${cleanSubject} flat along the bottom`;
+  }
   if (form.skin) {
     // A player skin (ADR 0066): the player's own character redrawn as this subject, for a game where it flies.
     return `Pixel art game sprite sheet of ${cleanSubject}, the player's own character, for a 2D side-scrolling flight game, side view strictly facing right: ` +
@@ -190,6 +194,7 @@ export function spritePrompt(cleanSubject: string, form: { held: boolean; scener
 export function subjectArtPrompt(cleanSubject: string, key: string, scenery = false, flying = false, skin = false): string {
   if (skin) return spritePrompt(cleanSubject, { held: false, scenery: false, skin: true });
   // The ontology names the art form (ADR 0031); the router's `scenery` hint still wins.
+  if (isLandmarkSubject(cleanSubject) || isLandmarkSubject(key)) return spritePrompt(cleanSubject, { held: false, scenery: true, landmark: true });
   const plan = artPlanFor(key);
   const heldItem = isHeldItemType(cleanSubject) || plan === "held-item";
   const effectiveScenery = scenery || heldItem || plan === "scenery" || isScenerySubject(cleanSubject);
@@ -289,6 +294,8 @@ export interface ArtOrder {
   scenery: boolean;
   /** Airborne poses instead of the walk/run cycle (ADR 0053). */
   flying: boolean;
+  /** Pictures in the sheet Muse Image is asked for: 1 for a landmark (ADR 0080), 4 otherwise. */
+  frames: 1 | 4;
 }
 
 /**
@@ -309,7 +316,9 @@ export function planArtOrders(
   const isArtChange = isArtChangeRequest(command);
   for (const type of artTypesForSource(source)) {
     const subject = deriveSubjectForType(command, type);
+    const landmark = isLandmarkSubject(type) || isLandmarkSubject(subject);
     const scenery =
+      landmark ||
       visual === "prop" ||
       isHeldItemType(subject) ||
       isHeldItemType(type) ||
@@ -326,7 +335,7 @@ export function planArtOrders(
     const key = existing?.key ?? artKeyForType(type, flying ? "fly" : undefined);
     if (!key || seen.has(key)) continue;
     seen.add(key);
-    orders.push({ type, subject, key, scenery, flying });
+    orders.push({ type, subject, key, scenery, flying, frames: landmark ? 1 : 4 });
   }
   return orders;
 }

@@ -80,6 +80,23 @@ export function computeSetPieceLayout(
   return { x: leftX, y: topY, w: targetW, h: targetH };
 }
 
+/**
+ * Fit one landmark picture inside its display box: scaled uniformly (never stretched), centered on the
+ * box and sitting on its bottom edge, so the pixels stay square and the base stands on the ground (ADR 0080).
+ */
+export function fitSetPieceSprite(box: SetPieceBounds, textureW: number, textureH: number): SetPieceBounds {
+  if (!(textureW > 0) || !(textureH > 0)) return box;
+  const scale = Math.min(box.w / textureW, box.h / textureH);
+  const w = textureW * scale;
+  const h = textureH * scale;
+  return { x: box.x + (box.w - w) * 0.5, y: box.y + box.h - h, w, h };
+}
+
+/** The set-piece's code-drawn stand-in shows only while no real art is ready, and returns if the art is lost. */
+export function showsPlaceholder(frames: readonly unknown[] | undefined): boolean {
+  return !frames || frames.length === 0;
+}
+
 function scaleRgb(color: number, f: number): number {
   const r = Math.min(255, Math.max(0, Math.round(((color >> 16) & 255) * f)));
   const g = Math.min(255, Math.max(0, Math.round(((color >> 8) & 255) * f)));
@@ -334,7 +351,7 @@ export class SetPieceLayer {
       // Find if we have loaded textures for this setpiece type or subject
       const frames = this.findFrames(e.type, framesBySubject);
 
-      if (frames && frames.length > 0) {
+      if (!showsPlaceholder(frames) && frames) {
         // Sprite Art Available: render sprite
         let s = this.sprites.get(e.id);
         if (!s) {
@@ -346,7 +363,7 @@ export class SetPieceLayer {
 
         const tex = frames[0];
         s.texture = tex;
-        const bounds = computeSetPieceLayout(e, tex.width, tex.height, 400);
+        const bounds = fitSetPieceSprite(computeSetPieceLayout(e, 0, 0, 400), tex.width, tex.height);
 
         s.width = bounds.w;
         s.height = bounds.h;
