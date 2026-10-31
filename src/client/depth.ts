@@ -559,25 +559,7 @@ export function drawDynamicLighting(
     lightCount++;
   }
 
-  const lightCol = daytime ? 0xfff0c0 : moonColor;
-  drawRimLights(gfx, world.entities, camX, camY, W, lightCol);
   drawForegroundLayer(gfx, camX, camY, W, H, mixColor(0x04070a, mood?.skyBottom ?? 0x0d1b20, 0.18));
-}
-
-/** A soft light edge on the side of each creature that faces the sun/moon. */
-export function drawRimLights(gfx: Graphics, entities: readonly Entity[], camX: number, camY: number, W: number, color: number): void {
-  const lx = celestialPos(W).x;
-  for (let i = 0; i < entities.length; i++) {
-    const e = entities[i];
-    if (e.solid || !castsContactShadow(e)) continue;
-    const cx = e.x + e.w * 0.5 - camX;
-    if (cx < -60 || cx > W + 60) continue;
-    const cy = e.y + e.h * 0.5 - camY;
-    const side = cx < lx ? 1 : -1;
-    const ex = cx + side * e.w * 0.42;
-    gfx.ellipse(ex, cy, Math.max(2, e.w * 0.14), e.h * 0.4).fill({ color, alpha: 0.07 });
-    gfx.ellipse(ex, cy - e.h * 0.04, Math.max(1.2, e.w * 0.07), e.h * 0.3).fill({ color, alpha: 0.13 });
-  }
 }
 
 /**
