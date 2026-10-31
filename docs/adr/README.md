@@ -105,3 +105,4 @@ New ADRs start as **Draft**. Only the project owner marks one **Accepted**.
 | [0075](0075-engine-owned-hurt-window-and-knockback.md) | Getting hurt is engine-owned: a short invulnerability window, a knockback and a red flash | Proposed |
 | [0076](0076-drawn-crosshair-over-the-stage.md) | A drawn crosshair over the stage for aiming, hidden for keyboard and gamepad play | Proposed |
 | [0077](0077-reconnect-adopts-the-home-world.md) | A reconnect adopts the browser's own world file back into the session, so knobs, undo and edits keep working with no reload | Proposed |
+| [0078](0078-startup-no-key-screen.md) | Startup screen explaining visitor mode, disabled AI capabilities and playable demo features when API keys are missing | Draft |
