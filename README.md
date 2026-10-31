@@ -18,6 +18,8 @@ Entry for the Meta Global AI Developer Hackathon (solo, Indie track). **Deadline
 
 **Demo video (3:00):** _link added at submission_ · **Run it yourself:** [5-minute quickstart](#run-it-in-5-minutes-judges-start-here) · **Evidence:** [build stats](docs/evidence/build-stats.md)
 
+**Video presentation:** [docs/talk/index.html](docs/talk/index.html) is the scroll-driven deck the demo video talks over. Open it in any browser, offline; Space steps forward, arrow keys step back and forth, H hides the chrome.
+
 ## For judges: the 60-second version
 
 | Rubric | What to look at | Evidence |
