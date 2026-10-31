@@ -189,7 +189,9 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #
 #game-hud[hidden] { display: none; }
 .hud-pos { position: absolute; display: flex; flex-direction: column; gap: 7px; align-items: flex-start; }
 .hud-pos-top-left { left: 14px; top: 12px; }
-.hud-pos-top-right { right: 14px; top: 62px; align-items: flex-end; }
+/* 60 px keeps the level bar and the stats clear of the quick-action column on the right
+   edge (bug qblayout); they still end 8 px left of #quickbar. */
+.hud-pos-top-right { right: 60px; top: 62px; align-items: flex-end; }
 .hud-pos-top-center { left: 50%; top: 132px; transform: translateX(-50%); align-items: center; }
 .hud-pos-bottom-left { left: 14px; bottom: 44px; }
 .hud-pos-bottom-right { right: 14px; bottom: 52px; align-items: flex-end; }

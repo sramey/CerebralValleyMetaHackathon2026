@@ -1,16 +1,29 @@
 /* Quick action bar (bead metabuild-ideation-b1y): compact in-game buttons
    for the three primary panel features ("What it has learned", "Draw a level",
-   and "Bring an object in") while the side panel starts collapsed by default. */
+   and "Bring an object in") while the side panel starts collapsed by default.
+
+   Layout (bug qblayout): the buttons are icon-only 40 px circles in ONE vertical
+   column on the right edge, under #drawer-toggle and #sound-btn — the same gutter,
+   the same shape and the same look as those two. The bar is 40 px wide, so it can
+   never reach the build card (code stream, .bt-stream), the top-centre banners or
+   the top-right HUD. Those two overlays keep x >= 60 px clear on the right
+   (.bt-stream in build-theater.css, .hud-pos-top-right in style.css); keep the three
+   numbers (12 px inset + 40 px width + 8 px gap) in step if any of them moves. */
 
 #quickbar {
   position: absolute;
-  right: 62px;
-  top: 12px;
+  /* 12 px edge inset, matching #drawer-toggle and #sound-btn. */
+  right: 12px;
+  /* Under #drawer-toggle (top 12..54) and #sound-btn (58..98 while the panel is
+     collapsed, 12..52 while it is open) and under the orb bar's feedback line. */
+  top: 106px;
   z-index: 28;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  pointer-events: auto;
+  gap: 8px;
+  width: 40px;
+  /* Only the buttons themselves take clicks; the gaps stay transparent to the game. */
+  pointer-events: none;
 }
 
 /* Hide quickbar when stage overlays take over */
@@ -19,28 +32,30 @@
 }
 
 .quick-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  background: rgba(16, 22, 31, .85);
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(16, 20, 27, .82);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, .16);
+  border: 1px solid rgba(255, 255, 255, .18);
   color: #e8e4d8;
-  font: 600 12px/1.2 system-ui, -apple-system, sans-serif;
+  font: 600 12px/1 system-ui, -apple-system, sans-serif;
   letter-spacing: .02em;
   cursor: pointer;
+  pointer-events: auto;
   box-shadow: 0 2px 8px rgba(0, 0, 0, .45);
-  transition: background .15s ease, border-color .15s ease, color .15s ease, transform .1s ease, box-shadow .15s ease;
+  transition: background .15s ease, border-color .15s ease, color .15s ease, scale .1s ease, box-shadow .15s ease;
   user-select: none;
-  white-space: nowrap;
 }
 
 .quick-btn:hover {
-  background: rgba(28, 38, 54, .95);
-  border-color: rgba(255, 255, 255, .35);
+  background: rgba(40, 46, 56, .95);
+  border-color: rgba(255, 201, 77, .6);
   color: #fff;
   box-shadow: 0 4px 12px rgba(0, 0, 0, .55);
 }
@@ -51,11 +66,11 @@
 }
 
 .quick-btn:active {
-  transform: scale(0.97);
+  scale: .94;
 }
 
 .quick-btn .quick-icon {
-  font-size: 14px;
+  font-size: 17px;
   line-height: 1;
   display: inline-flex;
   align-items: center;
@@ -63,54 +78,55 @@
   pointer-events: none;
 }
 
+/* The text label is the hover/focus tooltip, so the bar itself stays 40 px wide.
+   It still ships in the markup (and in quickButtonHtml) for every button. */
 .quick-btn .quick-label {
+  position: absolute;
+  right: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%) translateX(4px);
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(11, 14, 19, .94);
+  border: 1px solid rgba(255, 201, 77, .4);
+  color: #e8e4d8;
+  font: 600 11px/1.3 system-ui, -apple-system, sans-serif;
+  letter-spacing: .02em;
+  white-space: nowrap;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .5);
+  opacity: 0;
   pointer-events: none;
+  transition: opacity .14s ease, transform .14s ease;
 }
 
-/* Gold accent for "What it has learned" (matches #brain-btn) */
+.quick-btn:hover .quick-label,
+.quick-btn:focus-visible .quick-label {
+  opacity: 1;
+  transform: translateY(-50%);
+}
+
+/* Gold accent for "What it has learned" (matches #brain-btn and #sound-btn) */
 #quick-brain-btn {
-  background: linear-gradient(135deg, rgba(255, 201, 77, .18), rgba(16, 22, 31, .88) 65%);
+  color: #ffd97a;
   border-color: rgba(255, 201, 77, .55);
-  color: #fff3c4;
 }
 
 #quick-brain-btn:hover {
-  background: linear-gradient(135deg, rgba(255, 201, 77, .3), rgba(28, 38, 54, .95) 65%);
   border-color: #ffc94d;
-  color: #fff;
-  box-shadow: 0 0 12px rgba(255, 201, 77, .25), 0 2px 8px rgba(0, 0, 0, .45);
+  color: #fff3c4;
+  box-shadow: 0 0 12px rgba(255, 201, 77, .3), 0 4px 12px rgba(0, 0, 0, .55);
 }
 
 /* Subtle cyan hover accent for "Draw a level" (matches #sketch-btn) */
 #quick-sketch-btn:hover {
   border-color: #54e0ff;
   color: #d7f6ff;
-  box-shadow: 0 0 10px rgba(84, 224, 255, .25), 0 2px 8px rgba(0, 0, 0, .45);
-}
-
-/* Responsive: collapses to icons only under ~700px width */
-@media (max-width: 700px) {
-  #quickbar {
-    right: 58px;
-    gap: 5px;
-  }
-  #quickbar .quick-label {
-    display: none;
-  }
-  #quickbar .quick-btn {
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    justify-content: center;
-    border-radius: 50%;
-  }
-  #quickbar .quick-icon {
-    font-size: 16px;
-  }
+  box-shadow: 0 0 10px rgba(84, 224, 255, .25), 0 4px 12px rgba(0, 0, 0, .55);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .quick-btn {
+  .quick-btn,
+  .quick-btn .quick-label {
     transition: none;
   }
 }
