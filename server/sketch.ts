@@ -497,6 +497,8 @@ export async function runSketchBuild(
   deps: SketchDeps,
   msg: { image?: unknown; strokes?: unknown; prompt?: unknown; view?: unknown },
   limits: Partial<SketchLimits> = {},
+  /** `noAi`: the AI is off (no key, kill switch), so skip the model reads and build from the drawn boxes. */
+  opts: { noAi?: boolean } = {},
 ): Promise<SketchResult> {
   const L: SketchLimits = { ...SKETCH_LIMITS, ...limits };
   const clean = sanitizeSketch(msg);
@@ -525,7 +527,8 @@ export async function runSketchBuild(
   const readUntil = started + L.readBudgetMs;
   let level: SketchLevel | undefined;
   let error = "";
-  for (let tryIndex = 0; tryIndex < 2 && !level; tryIndex++) {
+  if (opts.noAi) error = "the AI is off";
+  for (let tryIndex = 0; tryIndex < 2 && !level && !opts.noAi; tryIndex++) {
     const left = readUntil - Date.now();
     // A try that cannot finish inside the budget is a try that starves the fallback.
     if (left < (tryIndex === 0 ? Math.min(1_000, L.readBudgetMs / 4) : L.retryMinMs)) {
@@ -594,6 +597,6 @@ export async function runSketchBuild(
     level.coins.length > 0 ? `${level.coins.length} coins` : "",
     level.enemies.length > 0 ? `${level.enemies.length} enemies` : "",
   ].filter(Boolean).join(", ");
-  deps.say(`${level.name} is live: ${counts || "level"}.${usedFallback ? " (built from your boxes directly)" : ""}`);
+  deps.say(`${level.name} is live: ${counts || "level"}.${usedFallback ? (opts.noAi ? " (the AI is off, so this was built straight from your boxes)" : " (built from your boxes directly)") : ""}`);
   return { ok: true, title: level.name, source, level, usedFallback };
 }

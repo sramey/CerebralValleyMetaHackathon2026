@@ -335,6 +335,24 @@ describe("sketch build pipeline (no live calls)", () => {
     expect(r.usedFallback).toBe(false);
   });
 
+  it("builds straight from the boxes with no model call when the AI is off (keyless visitor)", async () => {
+    const d = deps(['{"name":"Never read","platforms":[],"coins":[],"enemies":[]}']);
+    const r = await runSketchBuild(d, msg, {}, { noAi: true });
+    expect(d.asked).toBe(0);
+    expect(r.ok).toBe(true);
+    expect(r.usedFallback).toBe(true);
+    expect(d.delivered[0]).toContain("sketch-platform");
+    expect(d.said.join(" ")).toContain("the AI is off");
+  });
+
+  it("with the AI off, an empty sketch still fails cleanly (the overlay is told)", async () => {
+    const d = deps([]);
+    const r = await runSketchBuild(d, { image: PNG, strokes: [], prompt: "x" }, {}, { noAi: true });
+    expect(d.asked).toBe(0);
+    expect(r.ok).toBe(false);
+    expect(d.delivered.length).toBe(0);
+  });
+
   it("re-asks once on an unusable reply, then falls back to the stroke boxes", async () => {
     const d = deps(["no json here", "still not json"]);
     const r = await runSketchBuild(d, msg);
