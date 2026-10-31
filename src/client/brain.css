@@ -105,3 +105,8 @@
 @keyframes br-pulse { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .br-fix.new, .br-rule.new, .br-skill.new, .br-ow i { animation: none; } .br-stack em, .br-bar em { transition: none; } }
 @media (max-width: 900px) { .br-score { grid-template-columns: repeat(2, 1fr); } .br-cols { grid-template-columns: 1fr; overflow-y: auto; } }
+
+/* #drawer-toggle (fixed, z 60) floats over the stage's top-right whenever the side panel is closed or
+   stacked below the stage (<=900px). Keep the header's right end clear of it. */
+#app.drawer-hidden .br-head { padding-right: 56px; }
+@media (max-width: 900px) { .br-head { padding-right: 56px; } }
