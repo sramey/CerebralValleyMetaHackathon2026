@@ -296,7 +296,7 @@ function manifestText(ws: WebSocket): string {
 function photoTitle(prompt: string): string {
   const trimmed = prompt.trim();
   const cap = trimmed ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1) : "Object";
-  return `${cap} (photo)`;
+  return cap.slice(0, 40);
 }
 
 function buildPhotoModSource(key: string, prompt: string, aspect: number): string {
@@ -451,7 +451,8 @@ async function handlePhotoFind(ws: WebSocket, msg: Extract<ClientMsg, { kind: "p
       }
       perWs.set(key, { box, prompt });
     }
-    send(ws, { kind: "segment", key, box });
+    // `name` is only set when Spark named the object (ADR 0081): the client builds with it.
+    send(ws, { kind: "segment", key, box, ...(box && extra[0] ? { name: extra[0] } : {}) });
   } catch {
     try {
       send(ws, { kind: "segment", key, box: null });
