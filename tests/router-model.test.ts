@@ -1,7 +1,14 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setEnvFileLoading } from "../server/meta";
 import { openConfig, routerChat } from "../server/router-model";
+
+// Hermetic suite: it owns process.env. `loadEnv()` runs lazily inside openConfig(), so
+// without this it would repopulate BASETEN_API_KEY from the developer's .env right after
+// beforeEach cleared it, and "off without BASETEN_API_KEY" failed on any machine that has
+// the key. Disabling .env loading here changes nothing at runtime.
+setEnvFileLoading(false);
 
 const MSGS = [{ role: "user" as const, content: "add a player" }];
 let mock: Server | undefined;
@@ -49,6 +56,18 @@ function stubHosted(): { calls: number } {
 }
 
 describe("router model (ADR 0032)", () => {
+  // First on purpose: this is the call that used to let loadEnv() read .env for the whole
+  // file. It stays first so a suite that forgets setEnvFileLoading(false) fails here on any
+  // machine whose .env carries BASETEN_API_KEY, instead of silently going green.
+  it("stays off with no key in the environment, even when .env has one", async () => {
+    delete process.env.BASETEN_API_KEY; // stricter than beforeEach: nothing for loadEnv to respect
+    expect(openConfig()).toBeNull();
+    expect("BASETEN_API_KEY" in process.env).toBe(false); // and loadEnv must not put it back
+    const hosted = stubHosted();
+    expect(await routerChat(MSGS)).toMatchObject({ text: "hosted", model: "muse-spark-1.2", open: false, fellBack: false });
+    expect(hosted.calls).toBe(1);
+  });
+
   it("is off without BASETEN_API_KEY: hosted Spark, no Baseten call", async () => {
     expect(openConfig()).toBeNull();
     const hosted = stubHosted();
