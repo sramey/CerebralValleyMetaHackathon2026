@@ -48,6 +48,7 @@ import { createHud } from "./hud";
 import { createSpeech } from "./speech";
 import { createSketch } from "./sketch";
 import { cutInBox, finishCut, placeMask, rleToRaster, type Cut, type Img } from "./cutout";
+import { freeSlug, parsePhotoRole, photoName, photoSlug, type PhotoRole } from "../photo-role";
 import { CAMERA_LABEL, CAPTURE_LABEL, UPLOAD_LABEL, defaultAction, dialogCssVars, dialogLayout, fitInside, photoFindMessage, photoWorkSize, stageHint, wantsCameraStream } from "./camera-dialog";
 import type { DialogPhase } from "./camera-dialog";
 import { FINDER_IDLE, finderLine, finderNext } from "./camera-finder";
@@ -634,7 +635,7 @@ function onMood(m: MoodSpec | null): void {
     for (const e of world.entities) { const k = subjectKeyFor(e); if (k) used.add(k); }
     // A new background alone (ADR 0067) leaves every sprite as it is: no sheet edits, no image spend.
     if (m.scope === "background") { say(`New background: ${m.name.replace(/-/g, " ")}.`, "done"); return; }
-    const keys = [...used].filter((k) => !k.startsWith("photo") && !origFrames.has(k) && (framesBySubject[k]?.length ?? 0) > 0);
+    const keys = [...used].filter((k) => !k.startsWith("photo") && !photoSlugs.has(k) && !origFrames.has(k) && (framesBySubject[k]?.length ?? 0) > 0);
     // The palette is already on screen, so the card says done now (bead inh). The sheet redraws
     // arrive later and show on their own (the digitize morph); a card line held open for them
     // would still read "restyling" long after, and could overwrite a newer status.
@@ -1337,6 +1338,34 @@ const cameraPlaceholder = $<HTMLParagraphElement>("#camera-placeholder");
 const cameraLabel = $<HTMLInputElement>("#camera-label");
 const cameraPaper = document.querySelector<HTMLInputElement>("#camera-paper");
 const cameraPixel = document.querySelector<HTMLInputElement>("#camera-pixel");
+// What the object is in the game (ADR 0082). Remembered for the session; Prop until the player picks.
+const cameraRole = document.querySelector<HTMLSelectElement>("#camera-role");
+const ROLE_KEY = "metabuild.photoRole";
+let photoRole: PhotoRole = "prop";
+try { photoRole = parsePhotoRole(sessionStorage.getItem(ROLE_KEY)); } catch { /* storage can be blocked */ }
+if (cameraRole) cameraRole.value = photoRole;
+cameraRole?.addEventListener("change", () => {
+  photoRole = parsePhotoRole(cameraRole.value);
+  try { sessionStorage.setItem(ROLE_KEY, photoRole); } catch { /* ignore */ }
+});
+/** Slugs given to photo objects: their cut-out texture is registered under the slug, so they are not restyled as art. */
+const photoSlugs = new Set<string>();
+/** Send the bring: the name becomes the readable entity type, and the cut-out texture follows it (framesFor matches by type). */
+function bringPhoto(key: string, prompt: string, aspect: number): void {
+  const role = photoRole;
+  const name = photoName(prompt);
+  const frames = framesBySubject[key];
+  let slug: string | undefined;
+  // A name the engine draws as a procedural shape ("gem", "ball") would hide the cut-out, so those keep the photo-N type (ADR 0082).
+  const base = photoSlug(name, role);
+  if (frames && frames.length > 0 && canUseSpriteSheet(base)) {
+    slug = freeSlug(base, (c) =>
+      photoSlugs.has(c) || (framesBySubject[c]?.length ?? 0) > 0 || !!kindOf(c) || world.entities.some((e) => e.type === c));
+    framesBySubject[slug] = frames;
+    photoSlugs.add(slug);
+  }
+  send({ kind: "photoBringLocal", key, prompt: name, aspect, role, ...(slug ? { slug } : {}) } as unknown as ClientMsg);
+}
 const cameraPreview = $<HTMLCanvasElement>("#camera-preview");
 const cameraBg = $<HTMLButtonElement>("#camera-bg");
 const cameraPreviewWrap = $<HTMLDivElement>("#camera-preview-wrap");
@@ -2189,7 +2218,8 @@ cameraConfirm.addEventListener("click", () => {
     storeCutTexture(keyS, samCutCanvas, texCanvas);
     pendingArt.add(keyS);
     // The Spark name (or what the player typed) becomes the object's title.
-    send({ kind: "photoBringLocal", key: keyS, prompt: samName || cameraLabel.value.trim() || "object", aspect: texCanvas.width / texCanvas.height } as unknown as ClientMsg);
+    // What the player typed wins over Spark's guess: it is the name they will say out loud.
+    bringPhoto(keyS, cameraLabel.value.trim() || samName || "object", texCanvas.width / texCanvas.height);
     closeCameraModal(false);
     return;
   }
@@ -2209,7 +2239,7 @@ cameraConfirm.addEventListener("click", () => {
     const cut = maskCutTexture(key, canvas, diffComponents[selectedComponent], "diff");
     if (!cut) { setCameraStatus("That spot cut out empty — try clicking the middle of the object."); return; }
     pendingArt.add(key);
-    send({ kind: "photoBringLocal", key, prompt: currentPrompt(), aspect: cut.width / cut.height } as unknown as ClientMsg);
+    bringPhoto(key, currentPrompt(), cut.width / cut.height);
     closeCameraModal(false);
     return;
   }
@@ -2222,7 +2252,7 @@ cameraConfirm.addEventListener("click", () => {
     }, "click");
     if (!cut) { setCameraStatus("That spot cut out empty — try clicking the middle of the object."); return; }
     pendingArt.add(key);
-    send({ kind: "photoBringLocal", key, prompt: currentPrompt(), aspect: cut.width / cut.height } as unknown as ClientMsg);
+    bringPhoto(key, currentPrompt(), cut.width / cut.height);
     closeCameraModal(false);
     return;
   }
@@ -2230,7 +2260,7 @@ cameraConfirm.addEventListener("click", () => {
     const cut = maskCutTexture(key, canvas, wandMask, "wand");
     if (!cut) { setCameraStatus("That spot cut out empty — try clicking the middle of the object."); return; }
     pendingArt.add(key);
-    send({ kind: "photoBringLocal", key, prompt: currentPrompt(), aspect: cut.width / cut.height } as unknown as ClientMsg);
+    bringPhoto(key, currentPrompt(), cut.width / cut.height);
     closeCameraModal(false);
     return;
   }
@@ -2250,7 +2280,7 @@ cameraConfirm.addEventListener("click", () => {
       return;
     }
     pendingArt.add(key);
-    send({ kind: "photoBringLocal", key, prompt: currentPrompt(), aspect: cut.width / cut.height } as unknown as ClientMsg);
+    bringPhoto(key, currentPrompt(), cut.width / cut.height);
     closeCameraModal(false);
     return;
   }
@@ -2260,7 +2290,7 @@ cameraConfirm.addEventListener("click", () => {
     return;
   }
   pendingArt.add(key);
-  send({ kind: "photoBring", key } as unknown as ClientMsg);
+  send({ kind: "photoBring", key, role: photoRole } as unknown as ClientMsg);
   closeCameraModal(false);
 });
 // --- worlds, share links, visitor mode (ADR 0014, 0037) ----------------------

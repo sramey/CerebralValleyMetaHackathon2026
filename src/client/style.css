@@ -318,3 +318,5 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #
 .camera-adjust-pop { position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 5; width: min(300px, 90vw); display: flex; flex-direction: column; gap: 8px; padding: 10px; background: #171c27; border: 1px solid #3a4454; }
 .camera-adjust-pop p { margin: 0; font-size: 12px; color: #9a9484; }
 .camera-adjust-pop button { height: 32px; background: #232c3b; color: #e8e4d8; border: 1px solid #3a4454; font-size: 13px; font-weight: 700; cursor: pointer; }
+.camera-opts { gap: 12px; }
+.camera-role select { height: 24px; background: #232c3b; color: #e8e4d8; border: 1px solid #3a4454; font-size: 13px; padding: 0 4px; }

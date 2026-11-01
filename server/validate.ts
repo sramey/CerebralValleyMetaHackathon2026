@@ -9,6 +9,7 @@
 // fields the client sends are dropped and a handler can trust the shape it receives.
 import { isHomeWorldId } from "../src/contract";
 import type { ClientMsg, KnobDef, KnobValue, SketchStroke, SketchTag } from "../src/contract";
+import { cleanSlug, parsePhotoRole } from "../src/photo-role";
 
 /** Hard ceiling for one text frame (the socket's maxPayload), so a giant frame is refused before JSON.parse. */
 export const MAX_FRAME = 6 * 1024 * 1024;
@@ -229,14 +230,15 @@ export function validateClientMsg(value: unknown): Validation {
     }
     case "photoBring": {
       const k = key(value.key);
-      return k ? accept({ kind: "photoBring", key: k }) : reject(REPLY.photo);
+      return k ? accept({ kind: "photoBring", key: k, role: parsePhotoRole(value.role) }) : reject(REPLY.photo);
     }
     case "photoBringLocal": {
       const k = key(value.key);
       const prompt = value.prompt === undefined ? "" : typeof value.prompt === "string" && value.prompt.length <= MAX_PROMPT ? value.prompt : null;
       const aspect = finite(value.aspect, 0.1, 10);
       if (!k || prompt === null || aspect === null) return reject(REPLY.photo);
-      return accept({ kind: "photoBringLocal", key: k, prompt, aspect });
+      const slug = cleanSlug(value.slug);
+      return accept({ kind: "photoBringLocal", key: k, prompt, aspect, role: parsePhotoRole(value.role), ...(slug ? { slug } : {}) });
     }
     case "worldState":
     case "worldSave":

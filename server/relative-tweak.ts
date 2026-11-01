@@ -5,7 +5,7 @@
 // a relative adjustment and the target mod has a numeric knob for it.
 import type { KnobDefs, KnobValue } from "../src/contract";
 
-type Dim = "speed" | "jump" | "count";
+type Dim = "speed" | "jump" | "count" | "size";
 
 /** `noun`: the thing the ask names, if any; it must then name the mod being tweaked. */
 interface Ask { dim: Dim; up: boolean; strength: number; noun?: string }
@@ -15,6 +15,7 @@ const KNOB_NAMES: Record<Dim, RegExp> = {
   speed: /speed|velocity|^vel|pace/i,
   jump: /jump/i,
   count: /count|number|^num|amount|density/i,
+  size: /size|scale|height/i,
 };
 
 const STRONG = /\b(a lot|lots|much|way|super|really|very|twice as|even more|so much)\b/;
@@ -52,6 +53,10 @@ export function parseRelativeAsk(command: string): Ask | null {
   const strength = STRONG.test(c) ? 2 : WEAK.test(c) ? 1.25 : 1.5;
   let m = new RegExp(`^(?:make|let)\\s+${WHO}\\s+${FILLER}(?:(?:go|move|run|walk|fly|swim)\\s+)?${FILLER}(faster|quicker|slower)(?:\\s+please)?$`).exec(c);
   if (m) return { dim: "speed", up: m[2] !== "slower", strength, noun: nounOf(m[1]) };
+  // "make the learning toy bigger": only a NAMED thing (a photo object carries a Size knob, ADR 0082).
+  // "make me bigger" / "make it bigger" stay with the router: they name no mod, and the player has its own route.
+  m = new RegExp(`^(?:make|let)\\s+${WHO}\\s+${FILLER}(bigger|larger|smaller|tinier)(?:\\s+please)?$`).exec(c);
+  if (m) { const noun = nounOf(m[1]); if (noun) return { dim: "size", up: m[2] === "bigger" || m[2] === "larger", strength, noun }; }
   m = /^speed\s+(?:it|them|me|things|everything)\s+up$/.exec(c);
   if (m) return { dim: "speed", up: true, strength };
   m = /^slow\s+(?:it|them|me|things|everything)\s+down$/.exec(c);
