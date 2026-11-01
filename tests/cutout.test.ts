@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanMask, cutObject, cutInBox, erode1, finishCut, placeMask } from "../src/client/cutout";
+import { cleanMask, cutObject, cutInBox, erode1, finishCut, placeMask, rleToRaster } from "../src/client/cutout";
 import type { Img, PxBox } from "../src/client/cutout";
 
 // Deterministic "photo": a wall with a gradient and sensor noise, and a rounded object on it.
@@ -37,6 +37,23 @@ describe("cutout (ADR 0081)", () => {
     expect(iou(mask, truth)).toBeGreaterThan(0.95);
   });
 
+  it("uses SAM's own mask as the start and snaps its edge to the photo at full resolution", () => {
+    const { img, truth } = scene([226, 210, 178], [196, 160, 112], OBJ);
+    // A SAM mask at half the photo's resolution (SAM saw a downscaled copy), upscaled by placeMask.
+    const hw = img.w / 2, hh = img.h / 2;
+    const half = new Uint8Array(hw * hh);
+    for (let y = 0; y < hh; y++) for (let x = 0; x < hw; x++) half[y * hw + x] = truth[(y * 2) * img.w + x * 2];
+    const prior = placeMask(img, half, hh, hw, 0, 0, 2, 2);
+    const mask = cutInBox(img, BOX, { prior });
+    expect(iou(mask, truth)).toBeGreaterThan(0.97);
+    // Never worse than the coarse mask it started from.
+    expect(iou(mask, truth)).toBeGreaterThanOrEqual(iou(prior, truth) - 0.005);
+  });
+
+  it("run lengths come back as the raster they came from", () => {
+    expect(Array.from(rleToRaster([2, 3, 1, 2], 8))).toEqual([0, 0, 1, 1, 1, 0, 1, 1]);
+  });
+
   it("cuts a tan object off a beige wall (similar colours), never beyond the box", () => {
     const { img, truth } = scene([226, 210, 178], [196, 160, 112], OBJ);
     const mask = cutInBox(img, BOX);
@@ -65,6 +82,22 @@ describe("cutout (ADR 0081)", () => {
     for (let y = 14; y < 26; y++) for (let x = 14; x < 26; x++) m[y * w + x] = 0; // 144 of ~1000 px
     const c = cleanMask(m, w, h);
     expect(c[20 * w + 20]).toBe(0);
+  });
+
+  it("fills a big enclosed gap that is not background-coloured (coffee in a mug), keeps one that is (a handle)", () => {
+    const w = 40, h = 40;
+    const data = new Uint8ClampedArray(w * h * 4);
+    const m = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const o = (y * w + x) * 4, inObj = x >= 4 && x < 36 && y >= 4 && y < 36;
+      const gapA = x >= 8 && x < 16 && y >= 8 && y < 18, gapB = x >= 22 && x < 32 && y >= 22 && y < 32;
+      const c = gapA ? [60, 40, 30] : gapB ? [226, 210, 178] : inObj ? [40, 100, 140] : [226, 210, 178];
+      data.set([...c, 255], o);
+      m[y * w + x] = inObj && !gapA && !gapB ? 1 : 0;
+    }
+    const c = cleanMask(m, w, h, { w, h, data });
+    expect(c[12 * w + 12]).toBe(1); // brown gap: object content, filled
+    expect(c[27 * w + 27]).toBe(0); // wall-coloured gap: a real opening, kept
   });
 
   it("erodes exactly one pixel off the edge", () => {

@@ -635,8 +635,8 @@ export type ServerMsg =
   | { kind: "say"; text: string }
   /** The open-weights reviewer at work (ADR 0078): `running` while it reads a build, then `ok`, `fixed` (patched, re-verified, live) or `held` (a fix that did not pass the gates). `sweep` is set during "double-check my world". Additive. */
   | { kind: "review"; modId: string; title: string; phase: "running" | "ok" | "fixed" | "held"; model: string; issue?: string; rule?: string; ms?: number; sweep?: { n: number; of: number } }
-  /** SAM's box in 1600 space, plus (additive, ADR 0081) the name Spark gave the held object when the player left the box blank. */
-  | { kind: "segment"; key: string; box: { x: number; y: number; w: number; h: number } | null; name?: string }
+  /** SAM's box in 1600 space, plus (additive, ADR 0081) the name Spark gave the held object when the player left the box blank and SAM's decoded one-bit mask. */
+  | { kind: "segment"; key: string; box: { x: number; y: number; w: number; h: number } | null; name?: string; mask?: SamMask }
   /** One bot playtest. The client replays `inputs` (RLE of input masks) in a copy of its own world plus `mod`. */
   | { kind: "playtest"; command: string; attempt: number; ok: boolean; plain: string; seed: number; frames: number; inputs: number[]; mod: { id: string; compiled: string }; replaces?: string; ms: number }
   /** A piece of the code Wonder is writing for `command`, as it arrives (ADR 0022). */
@@ -732,3 +732,14 @@ export const FORBIDDEN_MOD_TOKENS = [
   "eval", "Function(", "fetch", "WebSocket", "document", "window",
   "localStorage", "process.", "require(", "import(",
 ] as const;
+
+/** SAM's one-bit mask (ADR 0081): w x h cells placed at (x, y) in a srcW x srcH photo, as alternating run lengths starting with 0s. */
+export interface SamMask {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  srcW: number;
+  srcH: number;
+  rle: number[];
+}

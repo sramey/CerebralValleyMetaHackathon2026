@@ -1,10 +1,11 @@
 // SAM 3.1 photo segmentation: prompt + JPEG data URL -> box normalized to 1600 space from whatever space SAM reports.
 // Never throws; any failure returns null.
 import { SPARK, chat, loadEnv } from "./meta";
-
-const BOX_RE = /box;x1=(\d+);y1=(\d+);x2=(\d+);y2=(\d+);w=(\d+);h=(\d+)/;
+import { parseSamText, type WireMask } from "./sam-mask";
 
 export type Box = { x: number; y: number; w: number; h: number };
+/** SAM's pick: the box, and its decoded one-bit mask when it sent one (ADR 0081). */
+export type SamHit = { box: Box; mask: WireMask | null };
 
 export function candidatePrompts(prompt: string, extra: string[] = []): string[] {
   const trimmed = typeof prompt === "string" ? prompt.trim() : "";
@@ -41,13 +42,15 @@ async function segmentOnce(
   imageDataUrl: string,
   prompt: string,
   key: string,
-): Promise<Box | null> {
+): Promise<SamHit | null> {
   try {
     const res = await fetch("https://api.meta.ai/v1/responses", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
       body: JSON.stringify({
         model: "sam-3.1",
+        // one_bit: a binary mask per object, decoded here with Meta's own parser (ADR 0081).
+        metadata: { mask_encoding: "one_bit" },
         input: [
           {
             role: "user",
@@ -63,21 +66,15 @@ async function segmentOnce(
     const data: any = await res.json().catch(() => null);
     const text: unknown = data?.output?.[0]?.content?.[0]?.text;
     if (typeof text !== "string") return null;
-    const m = text.match(BOX_RE);
-    if (!m) return null;
-    const x1 = Number(m[1]);
-    const y1 = Number(m[2]);
-    const x2 = Number(m[3]);
-    const y2 = Number(m[4]);
-    const W = Number(m[5]) || 1600;
-    const H = Number(m[6]) || 1600;
-    const box = { x: x1 * 1600 / W, y: y1 * 1600 / H, w: (x2 - x1) * 1600 / W, h: (y2 - y1) * 1600 / H };
-    // Guard against oversized boxes (covers > 60% of frame area, e.g. whole room or entire person)
-    const areaFraction = (box.w * box.h) / (1600 * 1600);
-    if (areaFraction > 0.60) return null;
-    // Text-sized boxes (a logo on the toy, a button) are never the object.
-    if (areaFraction < 0.01) return null;
-    return box;
+    // Several objects can come back: the most confident plausible one wins. Over 60% of the frame is
+    // the room or the person; under 1% is text on the object, never the object.
+    const ok = (await parseSamText(text))
+      .filter((i) => {
+        const a = (i.box.w * i.box.h) / (1600 * 1600);
+        return a <= 0.6 && a >= 0.01;
+      })
+      .sort((a, b) => b.conf - a.conf);
+    return ok.length ? { box: ok[0].box, mask: ok[0].mask } : null;
   } catch {
     return null;
   }
@@ -87,7 +84,7 @@ export async function segmentPhoto(
   imageDataUrl: string,
   prompt: string,
   extra: string[] = [],
-): Promise<Box | null> {
+): Promise<SamHit | null> {
   try {
     const key = loadEnv();
     if (!key) return null;
@@ -98,8 +95,9 @@ export async function segmentPhoto(
       const batch = all.slice(i, i + 5);
       const boxes = await Promise.all(batch.map((c) => segmentOnce(imageDataUrl, c, key)));
       for (let j = 0; j < batch.length; j++) {
-        const box = boxes[j];
-        console.info(`[photo] sam "${batch[j]}" -> ${box ? `${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.w)}x${Math.round(box.h)}` : "none"}`);
+        const h = boxes[j];
+        const box = h?.box;
+        console.info(`[photo] sam "${batch[j]}" -> ${box ? `${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.w)}x${Math.round(box.h)}${h.mask ? " +mask" : ""}` : "none"}`);
       }
       const hit = boxes.find((b) => b !== null);
       if (hit) return hit;
