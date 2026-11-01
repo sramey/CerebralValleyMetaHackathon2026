@@ -215,7 +215,7 @@ export async function generateSubjectArt(subject: string, keyRaw: string, scener
     // A flying subject gets its own sheet ("cat-fly"), so a cached walking cat can never
     // stand in for a flying one (ADR 0053).
     // A skin carries its form in the key (ADR 0083): a walking elephant and a flying one are different sheets.
-    const key = skin ? (artKeyForType(keyRaw, "skin") ? skinSheetKey(sanitizeArtKey(keyRaw), skin === "flight") : "") : artKeyForType(keyRaw, flying && !scenery ? "fly" : undefined);
+    const key = skin ? (sanitizeArtKey(keyRaw) ? skinSheetKey(sanitizeArtKey(keyRaw), skin === "flight") : "") : artKeyForType(keyRaw, flying && !scenery ? "fly" : undefined);
     if (!key) {
       clearCachedArt(keyRaw);
       return null;
@@ -358,8 +358,10 @@ export function isArtChangeRequest(command: string): boolean {
 /** The skin a mod asks for with api.setScene({ playerSkin: "spaceship" }), or null. */
 export function pickSkin(source: string): string | null {
   const m = /playerSkin\s*:\s*["']([^"']{1,40})["']/.exec(source);
+  // The player is always drawn from art, so the whole name is the subject: "bowling-ball" must not
+  // shrink to "ball" and be refused as a code-drawn shape (the player then silently stayed a ninja).
   const skin = m ? sanitizeArtKey(m[1]) : "";
-  return skin && artKeyForType(skin, "skin") ? skin : null;
+  return skin || null;
 }
 
 const QUANTIFIER_OR_ARTICLE_RE =

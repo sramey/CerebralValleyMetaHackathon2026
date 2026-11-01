@@ -85,3 +85,12 @@ describe("the generated walking elephant sheet", () => {
     for (const b of bounds.slice(0, 3)) expect(base - (b.y + b.h)).toBeLessThan(commonH * 0.12);
   });
 });
+
+describe("a shape-named skin still gets art", () => {
+  it("keeps the whole name, so a bowling ball is drawn instead of refused", async () => {
+    const { pickSkin } = await import("../server/art");
+    expect(pickSkin('api.setScene({ playerSkin: "bowling-ball" })')).toBe("bowling-ball");
+    expect(pickSkin('api.setScene({ playerSkin: "elephant" })')).toBe("elephant");
+    expect(pickSkin("api.setScene({ hideTerrain: true })")).toBeNull();
+  });
+});

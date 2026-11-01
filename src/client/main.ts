@@ -49,6 +49,7 @@ import { createSpeech } from "./speech";
 import { createSketch } from "./sketch";
 import { cutInBox, finishCut, placeMask, rleToRaster, type Cut, type Img } from "./cutout";
 import { freeSlug, parsePhotoRole, photoName, photoSlug, type PhotoRole } from "../photo-role";
+import { slugDrawsAsPhoto } from "./photo-slug";
 import { CAMERA_LABEL, CAPTURE_LABEL, UPLOAD_LABEL, defaultAction, dialogCssVars, dialogLayout, fitInside, photoFindMessage, photoWorkSize, stageHint, wantsCameraStream } from "./camera-dialog";
 import type { DialogPhase } from "./camera-dialog";
 import { FINDER_IDLE, finderLine, finderNext } from "./camera-finder";
@@ -1356,9 +1357,9 @@ function bringPhoto(key: string, prompt: string, aspect: number): void {
   const name = photoName(prompt);
   const frames = framesBySubject[key];
   let slug: string | undefined;
-  // A name the engine draws as a procedural shape ("gem", "ball") would hide the cut-out, so those keep the photo-N type (ADR 0082).
+  // A name the renderer would claim ("gem" as a shape, "speak" as a far peak) would hide the cut-out, so those keep the photo-N type (ADR 0082).
   const base = photoSlug(name, role);
-  if (frames && frames.length > 0 && canUseSpriteSheet(base)) {
+  if (frames && frames.length > 0 && slugDrawsAsPhoto(base)) {
     slug = freeSlug(base, (c) =>
       photoSlugs.has(c) || (framesBySubject[c]?.length ?? 0) > 0 || !!kindOf(c) || world.entities.some((e) => e.type === c));
     framesBySubject[slug] = frames;
