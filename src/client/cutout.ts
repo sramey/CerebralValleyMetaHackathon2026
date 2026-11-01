@@ -227,6 +227,12 @@ export interface CutOptions {
   /** Cap on the full-res crop the edge is finished on (very large uploads are scaled down once, first). */
   maxSide?: number;
   iterations?: number;
+  /**
+   * A full-photo-sized 0/1 mask to start from (SAM's own mask, placed with `placeMask`). When given, the
+   * min-cut is skipped: the mask is the coarse answer and only the edge band is decided again, from the
+   * photo's own full-resolution colours.
+   */
+  prior?: Uint8Array;
 }
 
 /**
@@ -303,7 +309,7 @@ export function cutInBox(img: Img, box: PxBox, opts: CutOptions = {}): Uint8Arra
     }
   }
   // First pass: unknown pixels are classified by the models built from the sure sets.
-  for (let iter = 0; iter < (opts.iterations ?? 4); iter++) {
+  for (let iter = 0; iter < (opts.prior ? 0 : opts.iterations ?? 4); iter++) {
     const fgS: number[] = [], bgS: number[] = [];
     for (let p = 0; p < n; p++) {
       const target = iter === 0 ? (seedFg[p] ? 1 : kind[p] === 0 ? 0 : -1) : sidedFg[p];
@@ -324,6 +330,25 @@ export function cutInBox(img: Img, box: PxBox, opts: CutOptions = {}): Uint8Arra
       tCap[p] = dFg;
     }
     sidedFg = minCut(w, h, sCap, tCap, wR, wD);
+  }
+  if (opts.prior) {
+    // Coarse labels = the prior sampled on the working grid; colour models = pixels well inside / outside it.
+    const lab = new Uint8Array(n);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const gx = Math.min(W - 1, cx0 + Math.floor((x + 0.5) * cw / w)), gy = Math.min(H - 1, cy0 + Math.floor((y + 0.5) * ch / h));
+      lab[y * w + x] = kind[y * w + x] !== 0 && opts.prior[gy * W + gx] ? 1 : 0;
+    }
+    const fgS: number[] = [], bgS: number[] = [];
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+      const p = y * w + x, v = lab[p];
+      // Interior pixels only (all four neighbours agree), so the mixed edge pixels do not blur the models.
+      if (lab[p - 1] !== v || lab[p + 1] !== v || lab[p - w] !== v || lab[p + w] !== v) continue;
+      (v ? fgS : bgS).push(rgb[p * 3], rgb[p * 3 + 1], rgb[p * 3 + 2]);
+    }
+    fg = fitGmm(Float64Array.from(fgS)) ?? fg;
+    bg = fitGmm(Float64Array.from(bgS)) ?? bg;
+    if (!fg || !bg) return full;
+    sidedFg = lab;
   }
   const low = sidedFg;
 
@@ -384,7 +409,7 @@ export function cutInBox(img: Img, box: PxBox, opts: CutOptions = {}): Uint8Arra
 // ---- Mask clean-up and the final cut --------------------------------------------------------
 
 /** Fill holes (background not reachable from the border) and keep only the largest 8-connected blob. */
-export function cleanMask(mask: Uint8Array, w: number, h: number): Uint8Array {
+export function cleanMask(mask: Uint8Array, w: number, h: number, img?: Img): Uint8Array {
   const n = w * h;
   const out = new Uint8Array(mask);
   // Holes: flood the background from the border; whatever background is left is a hole.
@@ -417,7 +442,10 @@ export function cleanMask(mask: Uint8Array, w: number, h: number): Uint8Array {
       const nb = [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, p >= w ? p - w : -1, p < n - w ? p + w : -1];
       for (const r of nb) if (r >= 0 && !out[r] && !reach[r] && !seen[r]) { seen[r] = 1; members.push(r); }
     }
-    if (members.length <= maxHole) for (const p of members) out[p] = 1;
+    if (members.length <= maxHole) { for (const p of members) out[p] = 1; continue; }
+    // A big enclosed gap is a real opening (a handle: the wall shows through) only when it looks like
+    // the surroundings. Coffee in a mug, a screen, a window: not the wall, so it belongs to the object.
+    if (img && !looksLikeOutside(img, members, out, reach)) for (const p of members) out[p] = 1;
   }
   // Largest blob (8-connected); stray islands vanish, anything touching it is part of it.
   const comp = new Int32Array(n).fill(-1);
@@ -444,6 +472,29 @@ export function cleanMask(mask: Uint8Array, w: number, h: number): Uint8Array {
   }
   for (let p = 0; p < n; p++) if (out[p] && comp[p] !== best) out[p] = 0;
   return out;
+}
+
+/** Does this enclosed gap show the same colours as the background just outside the object? */
+function looksLikeOutside(img: Img, hole: number[], out: Uint8Array, reach: Uint8Array): boolean {
+  const { w, h, data } = img;
+  const ring: number[] = [];
+  const n = w * h;
+  for (let p = 0; p < n; p++) {
+    if (out[p] || !reach[p]) continue;
+    const x = p % w;
+    if ((x > 0 && out[p - 1]) || (x < w - 1 && out[p + 1]) || (p >= w && out[p - w]) || (p < n - w && out[p + w])) ring.push(p);
+  }
+  if (ring.length === 0) return true;
+  const step = Math.max(1, Math.floor(ring.length / 400));
+  let hr = 0, hg = 0, hb = 0;
+  for (const p of hole) { hr += data[p * 4]; hg += data[p * 4 + 1]; hb += data[p * 4 + 2]; }
+  hr /= hole.length; hg /= hole.length; hb /= hole.length;
+  let best = Infinity;
+  for (let i = 0; i < ring.length; i += step) {
+    const o = ring[i] * 4;
+    best = Math.min(best, Math.max(Math.abs(data[o] - hr), Math.abs(data[o + 1] - hg), Math.abs(data[o + 2] - hb)));
+  }
+  return best < 45;
 }
 
 /** Drop the outermost ring of pixels (the background halo that survives a soft edge). */
@@ -499,7 +550,7 @@ export function placeMask(img: Img, mask: Uint8Array, rows: number, cols: number
 /** Hole fill, largest blob, 1 px erode, crop, alpha: everything after a mask exists. */
 export function finishCut(img: Img, raw: Uint8Array, feather: boolean): Cut | null {
   const opts = { feather };
-  const clean = erode1(cleanMask(raw, img.w, img.h), img.w, img.h);
+  const clean = erode1(cleanMask(raw, img.w, img.h, img), img.w, img.h);
   let x0 = img.w, y0 = img.h, x1 = -1, y1 = -1, count = 0;
   for (let y = 0; y < img.h; y++) for (let x = 0; x < img.w; x++) {
     if (!clean[y * img.w + x]) continue;
@@ -527,4 +578,16 @@ export function finishCut(img: Img, raw: Uint8Array, feather: boolean): Cut | nu
     data[o] = img.data[sp * 4]; data[o + 1] = img.data[sp * 4 + 1]; data[o + 2] = img.data[sp * 4 + 2]; data[o + 3] = a;
   }
   return { img: { w, h, data }, bounds: { x0: bx0, y0: by0, x1: bx1 + 1, y1: by1 + 1 }, share: count / (img.w * img.h) };
+}
+
+/** Run lengths (alternating, starting with 0s) back to a 0/1 raster of `length` cells. */
+export function rleToRaster(rle: readonly number[], length: number): Uint8Array {
+  const out = new Uint8Array(length);
+  let p = 0, v = 0;
+  for (const run of rle) {
+    if (v) out.fill(1, p, Math.min(length, p + run));
+    p += run;
+    v ^= 1;
+  }
+  return out;
 }

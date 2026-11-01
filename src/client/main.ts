@@ -13,7 +13,7 @@ import { startLateArt } from "./art-late";
 import chickenMod from "../mods/chicken";
 import { SIM, emptyInput, pendingArtKeys, sheetsOf } from "../contract";
 import { canUseSpriteSheet, entityKind } from "../ontology";
-import type { ClientMsg, Entity, KnobValue, ModDefinition, MoodSpec, ServerMsg, ShapeName } from "../contract";
+import type { ClientMsg, Entity, KnobValue, ModDefinition, MoodSpec, ServerMsg, ShapeName, SamMask } from "../contract";
 import { initVoice } from "./voice";
 import { Fx } from "./fx";
 import { Feel } from "./feel";
@@ -47,7 +47,7 @@ import { createTheater } from "./build-theater";
 import { createHud } from "./hud";
 import { createSpeech } from "./speech";
 import { createSketch } from "./sketch";
-import { cutInBox, finishCut, type Cut, type Img } from "./cutout";
+import { cutInBox, finishCut, placeMask, rleToRaster, type Cut, type Img } from "./cutout";
 import { CAMERA_LABEL, CAPTURE_LABEL, UPLOAD_LABEL, defaultAction, dialogCssVars, dialogLayout, fitInside, photoFindMessage, photoWorkSize, stageHint, wantsCameraStream } from "./camera-dialog";
 import type { DialogPhase } from "./camera-dialog";
 import { FINDER_IDLE, finderLine, finderNext } from "./camera-finder";
@@ -1945,7 +1945,7 @@ function cutoutTexture(key: string, src: HTMLCanvasElement, box: SegmentBox): HT
   storeCutTexture(key, cut, texCanvas);
   return texCanvas;
 }
-function handleSegment(key: string, rawBox: unknown, name?: string): void {
+function handleSegment(key: string, rawBox: unknown, name?: string, samMask?: SamMask): void {
   if (key !== currentKey || cameraModal.hidden) return;
   const box = rawBox === null ? null : normalizeBox(rawBox);
   if (box === null || isBoxTooLarge(box)) {
@@ -1984,7 +1984,14 @@ function handleSegment(key: string, rawBox: unknown, name?: string): void {
           x1: Math.min(img.w, Math.ceil((box.x + box.w) / 1600 * img.w)),
           y1: Math.min(img.h, Math.ceil((box.y + box.h) / 1600 * img.h)),
         };
-        const raw = cutInBox(img, px);
+        // SAM's own mask is the coarse answer (placed at its box origin); only its edge band is decided again
+        // from the full-resolution pixels. No mask (or a bad one): the box-guided cut.
+        let prior: Uint8Array | undefined;
+        if (samMask && samMask.w > 0 && samMask.h > 0 && samMask.srcW > 0 && samMask.srcH > 0) {
+          const kx = img.w / samMask.srcW, ky = img.h / samMask.srcH;
+          prior = placeMask(img, rleToRaster(samMask.rle, samMask.w * samMask.h), samMask.h, samMask.w, samMask.x * kx, samMask.y * ky, kx, ky);
+        }
+        const raw = cutInBox(img, px, prior ? { prior } : {});
         samCtx = { img, raw };
         refinishSamCut();
       }
@@ -2609,7 +2616,7 @@ function connect(): void {
     }
     else if ((msg as unknown as { kind: string }).kind === "segment") {
       const segMsg = msg as unknown as { kind: "segment"; key: string; box: unknown };
-      handleSegment(segMsg.key, segMsg.box ?? null, (msg as unknown as { name?: string }).name);
+      handleSegment(segMsg.key, segMsg.box ?? null, (msg as unknown as { name?: string }).name, (msg as unknown as { mask?: SamMask }).mask);
     }
   });
 }

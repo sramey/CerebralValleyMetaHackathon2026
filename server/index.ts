@@ -408,7 +408,7 @@ async function handlePhoto(ws: WebSocket, msg: Extract<ClientMsg, { kind: "photo
   }
   try {
     if (!spend(ws, "sam")) { send(ws, { kind: "segment", key: msg.key, box: null }); return; }
-    const box = await segmentPhoto(msg.image, prompt);
+    const box = (await segmentPhoto(msg.image, prompt))?.box ?? null;
     send(ws, { kind: "segment", key: msg.key, box });
     if (!box) {
       send(ws, { kind: "say", text: "I couldn't spot that in the photo — hold it up clearly and try again." });
@@ -442,7 +442,8 @@ async function handlePhotoFind(ws: WebSocket, msg: Extract<ClientMsg, { kind: "p
       extra = await nameHeldObject(msg.image);
       if (extra[0]) prompt = extra[0];
     }
-    const box = await segmentPhoto(msg.image, prompt, extra);
+    const hit = await segmentPhoto(msg.image, prompt, extra);
+    const box = hit?.box ?? null;
     if (box) {
       let perWs = pendingFinds.get(ws);
       if (!perWs) {
@@ -452,7 +453,8 @@ async function handlePhotoFind(ws: WebSocket, msg: Extract<ClientMsg, { kind: "p
       perWs.set(key, { box, prompt });
     }
     // `name` is only set when Spark named the object (ADR 0081): the client builds with it.
-    send(ws, { kind: "segment", key, box, ...(box && extra[0] ? { name: extra[0] } : {}) });
+    // `mask` is SAM's own one-bit mask, decoded with Meta's parser; absent when SAM sent none.
+    send(ws, { kind: "segment", key, box, ...(box && extra[0] ? { name: extra[0] } : {}), ...(hit?.mask ? { mask: hit.mask } : {}) });
   } catch {
     try {
       send(ws, { kind: "segment", key, box: null });
