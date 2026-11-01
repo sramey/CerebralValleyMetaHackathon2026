@@ -311,6 +311,8 @@ export interface ModApi {
   setScene?: (options: SceneOptions) => void;
   /** Build a whole playable level (ADR 0073): floor with pits, platform runs at several heights, spikes, walkers and fliers on their ledges, coins, checkpoints and a goal flag, from a seed and a difficulty. Deterministic; the starter terrain is put aside and returns on undo. */
   buildLevel?: (options?: LevelBuildOptions) => LevelBuild;
+  /** Clear the level (ADR 0073, ADR 0084): golden particle burst at the finish flag, 'LEVEL CLEAR!' banner, and 'level-clear' signal. */
+  clearLevel?: (flag?: Entity | { x: number; y: number; w: number; h: number }, difficulty?: number) => void;
   /** Tell every other mod something happened ("boss-down", "door-open"); they get a "signal" event next tick. */
   signal?: (name: string, value?: KnobValue) => void;
   /** Register the thing you hold or wield with the engine loadout (ADR 0074): one item is active at a time, Q / wheel / L1 switches,
@@ -408,7 +410,7 @@ export interface ModDefinition {
 }
 
 /** Semantic brush of a sketch stroke: what the drawing means, not just its color. */
-export type SketchTag = "terrain" | "coin" | "hazard" | "bouncer" | "freehand";
+export type SketchTag = "terrain" | "coin" | "hazard" | "bouncer" | "freehand" | "goal";
 
 /** One point of a sketch stroke, in screen pixels relative to the game viewport. */
 export interface SketchPoint { x: number; y: number }

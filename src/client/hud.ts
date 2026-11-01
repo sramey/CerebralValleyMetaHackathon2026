@@ -69,8 +69,38 @@ interface HudNode {
   opacity: string;
 }
 
+/**
+ * True when this widget is a level-specific coin progress counter (e.g. 'Coins 0/5' from sketch-score or any coin stat with max).
+ */
+export function isLevelCoinProgress(w: HudWidget): boolean {
+  if (w.hidden) return false;
+  if (w.id === "sketch-score") return true;
+  const label = w.label?.trim().toLowerCase();
+  return label === "coins" && w.max !== undefined && w.max > 0;
+}
+
+/**
+ * True when this widget is an unbounded cumulative coin/score counter (e.g. 'Coins 15' from ADR 0055 score HUD or coinsMod).
+ */
+export function isGeneralCoinScore(w: HudWidget): boolean {
+  if (w.id === "score") return true;
+  const label = w.label?.trim().toLowerCase();
+  return label === "coins" && (w.max === undefined || w.max <= 0);
+}
+
+/**
+ * Filter widgets to render so that when a level has its own coin count, only that one counter
+ * is shown on the HUD, suppressing the cumulative score counter (ADR 0084).
+ */
+export function filterVisibleHud(widgets: Iterable<HudWidget>): HudWidget[] {
+  const list = Array.from(widgets);
+  const hasLevelCoins = list.some(isLevelCoinProgress);
+  if (!hasLevelCoins) return list;
+  return list.filter((w) => !isGeneralCoinScore(w));
+}
 export function createHud(host: HTMLElement) {
-  const root = document.createElement("div");
+  const doc = (host && host.ownerDocument) || (typeof document !== "undefined" ? document : null);
+  const root = doc ? doc.createElement("div") : ({} as HTMLDivElement);
   root.id = "game-hud";
   host.appendChild(root);
   const layers = new Map<Position, HTMLElement>();
@@ -79,7 +109,7 @@ export function createHud(host: HTMLElement) {
   function layer(pos: Position): HTMLElement {
     let el = layers.get(pos);
     if (!el) {
-      el = document.createElement("div");
+      el = doc.createElement("div");
       el.className = `hud-pos hud-pos-${pos}`;
       root.appendChild(el);
       layers.set(pos, el);
@@ -88,13 +118,13 @@ export function createHud(host: HTMLElement) {
   }
 
   function span(cls: string): HTMLElement {
-    const s = document.createElement("span");
+    const s = doc.createElement("span");
     s.className = cls;
     return s;
   }
 
   function build(w: HudWidget): HudNode {
-    const el = document.createElement("div");
+    const el = doc.createElement("div");
     el.className = `hud-widget hud-${w.kind}`;
     el.dataset.hudId = w.id;
     const node: HudNode = {
@@ -106,14 +136,14 @@ export function createHud(host: HTMLElement) {
     };
     if (w.kind === "bar") {
       node.icon = span("hud-icon");
-      const body = document.createElement("div");
+      const body = doc.createElement("div");
       body.className = "hud-body";
-      const row = document.createElement("div");
+      const row = doc.createElement("div");
       row.className = "hud-row";
       node.label = span("hud-label");
       node.num = span("hud-num");
       row.append(node.label, node.num);
-      const track = document.createElement("div");
+      const track = doc.createElement("div");
       track.className = "hud-bar-track";
       node.fill = span("hud-bar-fill");
       track.appendChild(node.fill);
@@ -122,7 +152,7 @@ export function createHud(host: HTMLElement) {
     } else if (w.kind === "hearts") {
       node.icon = span("hud-icon");
       node.label = span("hud-label");
-      const pips = document.createElement("div");
+      const pips = doc.createElement("div");
       pips.className = "hud-pips";
       el.append(node.icon, node.label, pips);
     } else if (w.kind === "stat") {
@@ -238,8 +268,9 @@ export function createHud(host: HTMLElement) {
   }
 
   function render(world: World): void {
+    const visible = filterVisibleHud(world.hud.values());
     const live = new Set<string>();
-    for (const w of world.hud.values()) {
+    for (const w of visible) {
       live.add(w.id);
       let node = nodes.get(w.id);
       // A widget id whose kind changed gets a fresh element (cheap, rare).
@@ -257,7 +288,7 @@ export function createHud(host: HTMLElement) {
       }
     }
     // Empty layers keep a zero-footprint overlay.
-    root.hidden = world.hud.size === 0;
+    root.hidden = visible.length === 0;
   }
 
   return { render, root };

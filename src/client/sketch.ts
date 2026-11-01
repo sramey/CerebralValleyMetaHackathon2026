@@ -26,6 +26,7 @@ export const SKETCH_BRUSHES: { tag: SketchTag; color: string; label: string; gly
   { tag: "coin", color: "#ffd34d", label: "Coin", glyph: "●" },
   { tag: "hazard", color: "#ff5a4d", label: "Enemy", glyph: "▲" },
   { tag: "bouncer", color: "#54e0ff", label: "Bouncer", glyph: "⌒" },
+  { tag: "goal", color: "#4d88ff", label: "Goal", glyph: "🏁" },
 ];
 
 export const MAX_STROKES = 80;
@@ -79,6 +80,7 @@ const TAP_SIZE: Record<SketchTag, { w: number; h: number }> = {
   coin: { w: 20, h: 20 },
   hazard: { w: 30, h: 30 },
   bouncer: { w: 48, h: 14 },
+  goal: { w: 28, h: 40 },
   terrain: { w: 64, h: 16 },
   freehand: { w: 20, h: 20 },
 };

@@ -13,6 +13,14 @@ const COLORS = { ground: 0x3f9e4d, platform: 0x8a6b46, block: 0x6b5236, spikes: 
 const hit = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }): boolean =>
   a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
+export function clearLevel(api: ModApi, flag?: Entity | { x: number; y: number; w: number; h: number }, difficulty = 1): void {
+  const fx = flag ? flag.x + flag.w / 2 : 0;
+  const fy = flag ? flag.y + 20 : 0;
+  api.burst(fx, fy, 0xffd94d, 40);
+  api.setHud("level-note", { kind: "banner", text: "LEVEL CLEAR!", duration: 4, position: "center" });
+  api.signal?.("level-clear", difficulty);
+}
+
 export function buildLevel(api: ModApi, options: LevelBuildOptions = {}): LevelBuild {
   const spec: LevelSpec = generateLevel(options);
   const colors = { ...COLORS, ...(options.palette ?? {}) };
@@ -104,9 +112,7 @@ export function buildLevel(api: ModApi, options: LevelBuildOptions = {}): LevelB
     api.setHud("level-progress", { kind: "bar", label: "Level", icon: "🏁", value: cleared ? 100 : pct, max: 100, position: "top-right" });
     if (flag && !cleared && hit(p, flag)) {
       cleared = true;
-      api.burst(flag.x + flag.w / 2, flag.y + 20, 0xffd94d, 40);
-      api.setHud("level-note", { kind: "banner", text: "LEVEL CLEAR!", duration: 4, position: "center" });
-      api.signal?.("level-clear", spec.difficulty);
+      clearLevel(api, flag, spec.difficulty);
     }
   });
 

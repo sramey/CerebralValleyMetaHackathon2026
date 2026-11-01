@@ -24,12 +24,13 @@ export interface SketchLevel {
   platforms: SketchPlatform[];
   coins: SketchBox[];
   enemies: SketchBox[];
+  goal?: SketchBox;
 }
 
 const EMPTY_LEVEL: SketchLevel = { name: "Sketched level", platforms: [], coins: [], enemies: [] };
 
 /** World bounds a sketch may reach: the visible sky above the ground slab down to a little below it. */
-const WORLD = { minX: -2400, maxX: 4200, minY: -900, maxY: 420 };
+const WORLD = { minX: -2400, maxX: 4200, minY: -900, maxY: 1200 };
 const MAX_PLATFORMS = 24;
 const MAX_COINS = 40;
 const MAX_ENEMIES = 12;
@@ -85,12 +86,13 @@ export const SKETCH_SYSTEM = `You read hand-drawn Level Sketches for a 2D side-s
 The world: x grows right, y grows DOWN, the ground surface is y = 400, the screen is roughly 900 px tall (sky above), and a player is 26x34 px.
 You get the sketch image and, for every stroke the player drew, its exact world-space box. Trust the numbers over your reading of the pixels.
 Answer with JSON only, no prose, no markdown fence:
-{"name":"short evocative level name","platforms":[{"x":0,"y":0,"w":0,"h":0,"kind":"ledge"|"wall"|"moving"|"bouncer"}],"coins":[{"x":0,"y":0,"w":0,"h":0}],"enemies":[{"x":0,"y":0,"w":0,"h":0}]}
+{"name":"short evocative level name","platforms":[{"x":0,"y":0,"w":0,"h":0,"kind":"ledge"|"wall"|"moving"|"bouncer"}],"coins":[{"x":0,"y":0,"w":0,"h":0}],"enemies":[{"x":0,"y":0,"w":0,"h":0}],"goal":{"x":0,"y":0,"w":0,"h":0}}
 Rules:
 - Keep each world box where the player drew it (at most ~30 px of tidying); the level is built at those coordinates.
 - "ledge" = jump-through platform (wide, thin). "wall" = solid block the player cannot pass. "moving" = a slider. "bouncer" = a trampoline pad.
 - Give platforms a playable thickness: 18-40 px. A stroke drawn along the ground line can stay at the ground.
 - Coins ~16x16, enemies ~28x28, placed just above the platform they belong to.
+- Goal ~28x40 px (flag, door, end block, exit). Optional: omit or null if no goal was drawn.
 - The ground, when drawn, is a long platform at y = 400.
 - Add nothing that the player did not draw except small playability fixes (a coin slightly above its ledge, an enemy on a platform). Empty arrays are fine.`;
 
@@ -131,6 +133,72 @@ function list(raw: unknown): unknown[] {
   return Array.isArray(raw) ? raw : [];
 }
 
+/**
+ * Merge platforms of the same kind that overlap or touch horizontally at about the same height.
+ * Handles hand-drawn segments where a single continuous platform was drawn as multiple adjacent strokes.
+ */
+export function mergeTouchingPlatforms(
+  platforms: readonly SketchPlatform[],
+  yTolerance = 16,
+  xTolerance = 12,
+): SketchPlatform[] {
+  let list = [...platforms];
+  let changed = true;
+  while (changed) {
+    changed = false;
+    outer: for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i];
+        const b = list[j];
+        if (a.kind !== b.kind) continue;
+        if (Math.abs(a.y - b.y) > yTolerance) continue;
+
+        const left = a.x <= b.x ? a : b;
+        const right = a.x <= b.x ? b : a;
+        if (right.x <= left.x + left.w + xTolerance) {
+          const mergedX = Math.min(a.x, b.x);
+          const mergedRight = Math.max(a.x + a.w, b.x + b.w);
+          const mergedY = Math.min(a.y, b.y);
+          const mergedBottom = Math.max(a.y + a.h, b.y + b.h);
+          const mergedH = mergedBottom - mergedY;
+          const merged: SketchPlatform = {
+            x: n2(mergedX),
+            y: n2(mergedY),
+            w: n2(mergedRight - mergedX),
+            h: n2(clamp(mergedH, 12, 400)),
+            kind: a.kind,
+          };
+          list.splice(j, 1);
+          list.splice(i, 1, merged);
+          changed = true;
+          break outer;
+        }
+      }
+    }
+  }
+  return list;
+}
+
+/** Find the nearest elevated platform top under an enemy box, or undefined if drawn on ground. */
+export function findPlatformUnder(
+  enemy: SketchBox,
+  platforms: readonly SketchPlatform[],
+): SketchPlatform | undefined {
+  let best: SketchPlatform | undefined;
+  let bestDist = Infinity;
+  for (const p of platforms) {
+    if (p.y >= 380) continue;
+    if (!(enemy.x < p.x + p.w && enemy.x + enemy.w > p.x)) continue;
+    if (p.y < enemy.y - 30) continue;
+    const dist = Math.abs(p.y - (enemy.y + enemy.h));
+    if (dist < bestDist) {
+      best = p;
+      bestDist = dist;
+    }
+  }
+  return best;
+}
+
 /** Turn whatever the model (or the stroke fallback) said into a bounded, buildable level. */
 export function normalizeLevel(raw: unknown): SketchLevel {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -158,15 +226,26 @@ export function normalizeLevel(raw: unknown): SketchLevel {
     const size = Math.min(b?.w ?? 28, b?.h ?? 28);
     if (b) out.enemies.push({ x: n2(b.x + (b.w - size) / 2), y: n2(b.y + (b.h - size) / 2), w: n2(Math.max(20, size)), h: n2(Math.max(20, size)) });
   }
+  if (o.goal && typeof o.goal === "object") {
+    const gb = box(o.goal, 16, 120);
+    if (gb) {
+      out.goal = {
+        x: n2(gb.x),
+        y: n2(gb.y),
+        w: n2(Math.max(16, Math.min(60, gb.w))),
+        h: n2(Math.max(20, Math.min(120, gb.h))),
+      };
+    }
+  }
   out.coins = out.coins.slice(0, MAX_COINS);
   out.enemies = out.enemies.slice(0, MAX_ENEMIES);
-  const movers = platforms.filter((p) => p.kind === "moving").slice(0, MAX_MOVERS);
-  const bouncers = platforms.filter((p) => p.kind === "bouncer").slice(0, MAX_BOUNCERS);
-  const solids = platforms.filter((p) => p.kind === "ledge" || p.kind === "wall").slice(0, MAX_PLATFORMS);
+  const mergedPlatforms = mergeTouchingPlatforms(platforms);
+  const movers = mergedPlatforms.filter((p) => p.kind === "moving").slice(0, MAX_MOVERS);
+  const bouncers = mergedPlatforms.filter((p) => p.kind === "bouncer").slice(0, MAX_BOUNCERS);
+  const solids = mergedPlatforms.filter((p) => p.kind === "ledge" || p.kind === "wall").slice(0, MAX_PLATFORMS);
   out.platforms = [...solids, ...movers, ...bouncers];
   return out;
 }
-
 /** Pull the JSON object out of a model reply and normalize it. Never throws. */
 export function parseSketchLevel(text: string): { level?: SketchLevel; error?: string } {
   const s = typeof text === "string" ? text : "";
@@ -181,7 +260,7 @@ export function parseSketchLevel(text: string): { level?: SketchLevel; error?: s
   }
   if (!parsed || typeof parsed !== "object") return { error: "the reply was not a JSON object" };
   const level = normalizeLevel(parsed);
-  if (level.platforms.length === 0 && level.coins.length === 0 && level.enemies.length === 0) {
+  if (level.platforms.length === 0 && level.coins.length === 0 && level.enemies.length === 0 && !level.goal) {
     return { error: "the reply named no platforms, coins or enemies" };
   }
   return { level };
@@ -189,7 +268,7 @@ export function parseSketchLevel(text: string): { level?: SketchLevel; error?: s
 
 /** Deterministic level from the raw strokes, used when the model's reply cannot be used. */
 export function levelFromStrokes(strokes: readonly SketchStroke[], hint = ""): SketchLevel {
-  const raw = { name: hint.trim().slice(0, 48) || "Sketched level", platforms: [] as unknown[], coins: [] as unknown[], enemies: [] as unknown[] };
+  const raw = { name: hint.trim().slice(0, 48) || "Sketched level", platforms: [] as unknown[], coins: [] as unknown[], enemies: [] as unknown[], goal: undefined as unknown };
   for (const s of strokes) {
     const b = s?.bbox;
     if (!b || ![b.x, b.y, b.w, b.h].every((v) => Number.isFinite(v))) continue;
@@ -204,6 +283,9 @@ export function levelFromStrokes(strokes: readonly SketchStroke[], hint = ""): S
       case "bouncer":
         raw.platforms.push({ ...b, h: Math.max(14, b.h), kind: "bouncer" });
         break;
+      case "goal":
+        raw.goal = { ...b, w: Math.max(20, b.w), h: Math.max(28, b.h) };
+        break;
       default:
         raw.platforms.push({ ...b, h: Math.max(18, b.h), kind: tall ? "wall" : "ledge" });
         break;
@@ -214,7 +296,7 @@ export function levelFromStrokes(strokes: readonly SketchStroke[], hint = ""): S
 
 /** True when a level has nothing to build. */
 export function isEmptyLevel(level: SketchLevel): boolean {
-  return level.platforms.length === 0 && level.coins.length === 0 && level.enemies.length === 0;
+  return level.platforms.length === 0 && level.coins.length === 0 && level.enemies.length === 0 && !level.goal;
 }
 
 /** True when the drawn level has no wide platform at ground height, so the level mod must lay the floor itself (it replaces the starter ground, bug j2t). */
@@ -226,14 +308,14 @@ export function needsFloor(level: SketchLevel): boolean {
 export function modIdFor(level: SketchLevel): string {
   const slug = level.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 20) || "level";
   let h = 0x811c9dc5;
-  for (const c of JSON.stringify([level.platforms, level.coins, level.enemies])) {
+  for (const c of JSON.stringify([level.platforms, level.coins, level.enemies, level.goal])) {
     h ^= c.charCodeAt(0);
     h = Math.imul(h, 0x01000193) >>> 0;
   }
   return `sketch-${slug}-${h.toString(36).slice(0, 5)}`;
 }
 
-const COLOR = { platform: 0x6b5236, wall: 0x6b5236, moving: 0x7a5cff, bouncer: 0x54e0ff, coin: 0xffd34d, enemy: 0xff5a4d };
+const COLOR = { platform: 0x6b5236, wall: 0x6b5236, moving: 0x7a5cff, bouncer: 0x54e0ff, coin: 0xffd34d, enemy: 0xff5a4d, goal: 0xff4d6d };
 
 /**
  * Compile a level spec into a self-contained mod source. Pure and deterministic: the same
@@ -249,6 +331,21 @@ export function levelToModSource(level: SketchLevel): string {
   const rowsOf = (boxes: readonly SketchBox[]): string => boxes.map((b) => `[${n2(b.x)}, ${n2(b.y)}, ${n2(b.w)}, ${n2(b.h)}]`).join(", ");
   // Last column: 1 = jump-through ledge, 0 = solid wall.
   const platforms = statics.map((p) => `[${n2(p.x)}, ${n2(p.y)}, ${n2(p.w)}, ${n2(p.h)}, ${p.kind === "ledge" ? 1 : 0}]`).join(", ");
+
+  // Enemies snap to nearest platform top under them and patrol within that platform's edges
+  const enemyDefs = level.enemies.map((e) => {
+    const plat = findPlatformUnder(e, level.platforms);
+    if (plat) {
+      const snappedY = n2(plat.y - e.h);
+      const snappedX = n2(clamp(e.x, plat.x, plat.x + Math.max(0, plat.w - e.w)));
+      return [snappedX, snappedY, n2(e.w), n2(e.h), n2(plat.x), n2(plat.x + plat.w)];
+    }
+    return [n2(e.x), n2(e.y), n2(e.w), n2(e.h), null, null];
+  });
+  const enemyRows = enemyDefs.map((d) => `[${d[0]}, ${d[1]}, ${d[2]}, ${d[3]}, ${d[4] !== null ? d[4] : "null"}, ${d[5] !== null ? d[5] : "null"}]`).join(", ");
+
+  const goalBox = level.goal ? `[${n2(level.goal.x)}, ${n2(level.goal.y)}, ${n2(level.goal.w)}, ${n2(level.goal.h)}]` : "null";
+
   const lines: string[] = [];
   lines.push(`// "${level.name}" — built from a hand-drawn sketch (ADR 0026).`);
   lines.push(`// Every box below is the world-space box the player drew, unchanged.`);
@@ -256,7 +353,8 @@ export function levelToModSource(level: SketchLevel): string {
   lines.push(`const MOVERS = [${rowsOf(movers)}];`);
   lines.push(`const BOUNCERS = [${rowsOf(bouncers)}];`);
   lines.push(`const COINS = [${rowsOf(level.coins)}];`);
-  lines.push(`const ENEMIES = [${rowsOf(level.enemies)}];`);
+  lines.push(`const ENEMIES = [${enemyRows}];`);
+  lines.push(`const GOAL = ${goalBox};`);
   lines.push("");
   lines.push(`function overlap(a, b) {`);
   lines.push(`  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;`);
@@ -289,12 +387,14 @@ export function levelToModSource(level: SketchLevel): string {
   lines.push(`      api.spawn({ type: "sketch-coin", x: c[0], y: c[1], w: c[2], h: c[3], color: ${COLOR.coin}, gravityScale: 0, data: { baseY: c[1] } });`);
   lines.push(`    }`);
   lines.push(`    for (const e of ENEMIES) {`);
-  // ADR 0071: a drawn enemy is a real hostile, not scenery. hostile/enemy make it damageable
-  // (bullets) and dangerous (contact) and stompable (the engine's landing rule); \`casual\`
-  // would mark it friendly and put it out of reach of every one of those.
-  lines.push(`      api.spawn({ type: "sketch-walker", x: e[0], y: e[1], w: e[2], h: e[3], vx: 42, color: ${COLOR.enemy}, gravityScale: 1, data: { baseX: e[0], baseY: e[1], hostile: true, enemy: true, creature: true, damage: 8 } });`);
+  // ADR 0071 / ADR 0084: drawn enemy is a real hostile. It snaps to the platform top and patrols it.
+  lines.push(`      api.spawn({ type: "sketch-walker", x: e[0], y: e[1], w: e[2], h: e[3], vx: 42, color: ${COLOR.enemy}, gravityScale: 1, data: { baseX: e[0], baseY: e[1], hostile: true, enemy: true, creature: true, damage: 8, ...(e[4] !== null ? { minX: e[4], maxX: e[5] } : {}) } });`);
+  lines.push(`    }`);
+  lines.push(`    if (GOAL) {`);
+  lines.push(`      api.spawn({ type: "finish-flag", x: GOAL[0], y: GOAL[1], w: GOAL[2], h: GOAL[3], color: ${COLOR.goal}, solid: false, gravityScale: 0 });`);
   lines.push(`    }`);
   lines.push(`    let collected = 0;`);
+  lines.push(`    let cleared = false;`);
   lines.push(`    if (COINS.length > 0) api.setHud("sketch-score", { kind: "stat", label: "Coins", icon: "🪙", value: 0, max: COINS.length, position: "top-left" });`);
   lines.push(`    api.onTick(() => {`);
   lines.push(`      // Deterministic animation from the sim tick only: no wall clock, no Math.random.`);
@@ -307,21 +407,52 @@ export function levelToModSource(level: SketchLevel): string {
   lines.push(`      }`);
   lines.push(`      const player = api.player();`);
   lines.push(`      for (const e of api.byType("sketch-walker")) {`);
-  lines.push(`        // Drawn enemies are hostiles (ADR 0071): they chase the player once they notice one and`);
-  lines.push(`        // patrol around the drawn spot otherwise; the engine turns them at walls and ledges.`);
+  lines.push(`        // Drawn enemies are hostiles (ADR 0071): they chase the player once they notice one.`);
+  lines.push(`        // When drawn on a platform (ADR 0084) they patrol that platform and never walk off.`);
   lines.push(`        const home = Number(e.data.baseX);`);
+  lines.push(`        const minX = e.data.minX !== undefined ? Number(e.data.minX) : undefined;`);
+  lines.push(`        const maxX = e.data.maxX !== undefined ? Number(e.data.maxX) : undefined;`);
   lines.push(`        const dx = player ? (player.x + player.w / 2) - (e.x + e.w / 2) : 0;`);
   lines.push(`        const dy = player ? (player.y + player.h / 2) - (e.y + e.h / 2) : 0;`);
-  lines.push(`        if (player && Math.abs(dx) < 280 && Math.abs(dy) < 150) {`);
-  lines.push(`          e.vx = (dx >= 0 ? 1 : -1) * 55;`);
+  lines.push(`        if (minX !== undefined && maxX !== undefined) {`);
+  lines.push(`          if (player && Math.abs(dx) < 280 && Math.abs(dy) < 150) {`);
+  lines.push(`            const desiredDir = dx >= 0 ? 1 : -1;`);
+  lines.push(`            if (desiredDir > 0 && e.x + e.w >= maxX) {`);
+  lines.push(`              e.vx = -42;`);
+  lines.push(`            } else if (desiredDir < 0 && e.x <= minX) {`);
+  lines.push(`              e.vx = 42;`);
+  lines.push(`            } else {`);
+  lines.push(`              e.vx = desiredDir * 55;`);
+  lines.push(`            }`);
+  lines.push(`          } else {`);
+  lines.push(`            if (e.vx === 0) e.vx = 42;`);
+  lines.push(`            if (e.x <= minX) e.vx = Math.abs(e.vx);`);
+  lines.push(`            if (e.x + e.w >= maxX) e.vx = -Math.abs(e.vx);`);
+  lines.push(`          }`);
+  lines.push(`          if (e.x < minX) { e.x = minX; e.vx = Math.abs(e.vx); }`);
+  lines.push(`          if (e.x + e.w > maxX) { e.x = maxX - e.w; e.vx = -Math.abs(e.vx); }`);
   lines.push(`        } else {`);
-  lines.push(`          if (e.vx === 0) e.vx = 42;`);
-  lines.push(`          if (e.x < home - 90) e.vx = Math.abs(e.vx);`);
-  lines.push(`          if (e.x > home + 90) e.vx = -Math.abs(e.vx);`);
+  lines.push(`          if (player && Math.abs(dx) < 280 && Math.abs(dy) < 150) {`);
+  lines.push(`            e.vx = (dx >= 0 ? 1 : -1) * 55;`);
+  lines.push(`          } else {`);
+  lines.push(`            if (e.vx === 0) e.vx = 42;`);
+  lines.push(`            if (e.x < home - 90) e.vx = Math.abs(e.vx);`);
+  lines.push(`            if (e.x > home + 90) e.vx = -Math.abs(e.vx);`);
+  lines.push(`          }`);
   lines.push(`        }`);
   lines.push(`        if (e.y > 900) { e.x = home; e.y = Number(e.data.baseY); e.vx = 42; e.vy = 0; }`);
   lines.push(`      }`);
   lines.push(`      if (!player) return;`);
+  lines.push(`      const goal = api.byType("finish-flag")[0];`);
+  lines.push(`      if (goal && !cleared && overlap(player, goal)) {`);
+  lines.push(`        cleared = true;`);
+  lines.push(`        if (api.clearLevel) api.clearLevel(goal, 1);`);
+  lines.push(`        else {`);
+  lines.push(`          api.burst(goal.x + goal.w / 2, goal.y + 20, 0xffd94d, 40);`);
+  lines.push(`          api.setHud("level-note", { kind: "banner", text: "LEVEL CLEAR!", duration: 4, position: "center" });`);
+  lines.push(`          api.signal?.("level-clear", 1);`);
+  lines.push(`        }`);
+  lines.push(`      }`);
   lines.push(`      for (const c of api.byType("sketch-coin")) {`);
   lines.push(`        if (!api.touches(player, c)) continue;`);
   lines.push(`        api.burst(c.x + c.w / 2, c.y + c.h / 2, ${COLOR.coin}, 10);`);
@@ -338,10 +469,11 @@ export function levelToModSource(level: SketchLevel): string {
   lines.push(`    });`);
   lines.push(`  },`);
   lines.push(`  dispose(api) {`);
-  lines.push(`    for (const type of ["sketch-platform", "sketch-mover-platform", "sketch-trampoline", "sketch-coin", "sketch-walker", "ground"]) {`);
+  lines.push(`    for (const type of ["sketch-platform", "sketch-mover-platform", "sketch-trampoline", "sketch-coin", "sketch-walker", "finish-flag", "ground"]) {`);
   lines.push(`      for (const e of api.byType(type)) api.despawn(e.id);`);
   lines.push(`    }`);
   lines.push(`    api.removeHud("sketch-score");`);
+  lines.push(`    api.removeHud("level-note");`);
   lines.push(`  },`);
   lines.push(`  test(t) {`);
   lines.push(`    const plats = t.api.byType("sketch-platform");`);
@@ -356,6 +488,9 @@ export function levelToModSource(level: SketchLevel): string {
     lines.push(`    t.expect(t.api.byType("sketch-walker").every((e) => e.data.hostile === true && e.data.enemy === true && Number(e.data.damage) > 0), "every drawn enemy is a real hostile (shootable, stompable, hurts on touch)");`);
   }
   lines.push(`    t.expect(t.api.byType("sketch-trampoline").length === ${bouncers.length}, "every bouncer spawns (${bouncers.length})");`);
+  if (level.goal) {
+    lines.push(`    t.expect(t.api.byType("finish-flag").length === 1, "goal flag spawns");`);
+  }
   // The verifier runs mods alone in an empty world: spawn our own ground before stepping.
   lines.push(`    t.api.spawn({ type: "ground", x: -600, y: 400, w: 8000, h: 48, solid: true, gravityScale: 0 });`);
   lines.push(`    t.step(90);`);
@@ -380,7 +515,7 @@ export function sketchPrompt(strokes: readonly SketchStroke[], hint = "", view?:
     const b = s.bbox;
     lines.push(`${i + 1}. tag=${s.tag} color=${s.color} box={x:${n2(b.x)}, y:${n2(b.y)}, w:${n2(b.w)}, h:${n2(b.h)}}`);
   });
-  lines.push("Meant by the tags: terrain = platforms/walls/ground, coin = collectibles, hazard = enemies, bouncer = moving or bouncy surfaces.");
+  lines.push("Meant by the tags: terrain = platforms/walls/ground, coin = collectibles, hazard = enemies, bouncer = moving or bouncy surfaces, goal = finish flag / end goal.");
   lines.push("Reply with the JSON level object only.");
   return lines.join("\n");
 }
