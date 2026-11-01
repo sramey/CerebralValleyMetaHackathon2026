@@ -47,6 +47,7 @@ import { createTheater } from "./build-theater";
 import { createHud } from "./hud";
 import { createSpeech } from "./speech";
 import { createSketch } from "./sketch";
+import { cutInBox, finishCut, type Cut, type Img } from "./cutout";
 import { CAMERA_LABEL, CAPTURE_LABEL, UPLOAD_LABEL, defaultAction, dialogCssVars, dialogLayout, fitInside, photoFindMessage, photoWorkSize, stageHint, wantsCameraStream } from "./camera-dialog";
 import type { DialogPhase } from "./camera-dialog";
 import { FINDER_IDLE, finderLine, finderNext } from "./camera-finder";
@@ -1359,6 +1360,34 @@ let selectedComponent = -1;
 let wandMask: MaskInfo | null = null;
 let lastWandPoint: { fx: number; fy: number } | null = null;
 const wandSensEl = document.querySelector<HTMLInputElement>("#wand-sens");
+const cameraAdjust = document.querySelector<HTMLElement>("#camera-adjust");
+// The AI cut (ADR 0081): SAM's box -> a cut made at the photo's own resolution, shown in the preview
+// and used as the sprite as it is. Cleared whenever the player takes over with the Adjust tools.
+let fullPhoto: HTMLCanvasElement | null = null;
+let samCtx: { img: Img; raw: Uint8Array } | null = null;
+let samCut: Cut | null = null;
+let samCutCanvas: HTMLCanvasElement | null = null;
+let samName = "";
+const FULL_PHOTO_MAX = 2048;
+function pixelStyleOn(): boolean {
+  return (cameraPixel?.checked ?? true) !== false;
+}
+function cutToCanvas(cut: Cut): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = cut.img.w; c.height = cut.img.h;
+  c.getContext("2d")!.putImageData(new ImageData(new Uint8ClampedArray(cut.img.data), cut.img.w, cut.img.h), 0, 0);
+  return c;
+}
+/** Rebuild the finished cut from the kept raw mask (the pixel-art switch changes how the edge is finished). */
+function refinishSamCut(): void {
+  if (!samCtx) return;
+  samCut = finishCut(samCtx.img, samCtx.raw, !pixelStyleOn());
+  samCutCanvas = samCut ? cutToCanvas(samCut) : null;
+}
+function dropSamCut(): void {
+  if (samCut === null && samCtx === null) return;
+  samCut = null; samCutCanvas = null; samCtx = null;
+}
 
 cameraUploadBtn.textContent = UPLOAD_LABEL;
 cameraStart.textContent = CAMERA_LABEL;
@@ -1390,6 +1419,7 @@ function setCameraPhase(phase: DialogPhase, note?: string): void {
   cameraCapture.hidden = cameraStream === null;
   cameraFind.hidden = phase !== "preview";
   cameraBg.hidden = phase !== "preview";
+  if (cameraAdjust) cameraAdjust.hidden = phase !== "preview";
   // One obvious next step per phase, highlighted (the same answer the model gives the tests).
   const next = defaultAction(phase);
   cameraUploadBtn.classList.toggle("primary", next === "upload");
@@ -1436,6 +1466,7 @@ function updateCameraConfirm(): void {
   if (cameraStatus.textContent === TOO_MUCH_MSG) setCameraStatus("Selected object — Bring it in, or click again to add/remove parts.");
 
   cameraConfirm.disabled = !(
+    samCut !== null ||
     (diffComponents.length > 0 && selectedComponent >= 0) ||
     (activeSelection !== null && activeSelection.count > 0 && !activeSelection.isTooLarge) ||
     (wandMask !== null && wandMask.count >= 300) ||
@@ -1444,6 +1475,8 @@ function updateCameraConfirm(): void {
   );
 }
 function clearDetection(): void {
+  dropSamCut();
+  samName = "";
   foundBox = null;
   cachedSamBox = null;
   samBoxActive = false;
@@ -1484,7 +1517,14 @@ function redrawPreview(): void {
     ctx.drawImage(tmp, 0, 0, cameraPreview.width, cameraPreview.height);
     ctx.restore();
   };
-  if (diffComponents.length > 0) {
+  if (samCut !== null && samCutCanvas !== null && fullPhoto !== null && diffComponents.length === 0 && wandMask === null && activeSelection === null) {
+    // The AI cut: the photo dimmed, the object clear, so what you see is what gets built.
+    ctx.fillStyle = "rgba(10,12,18,0.62)";
+    ctx.fillRect(0, 0, cameraPreview.width, cameraPreview.height);
+    const k = cameraPreview.width / fullPhoto.width;
+    const b = samCut.bounds;
+    ctx.drawImage(samCutCanvas, b.x0 * k, b.y0 * k, (b.x1 - b.x0) * k, (b.y1 - b.y0) * k);
+  } else if (diffComponents.length > 0) {
     for (let i = 0; i < diffComponents.length; i++) drawTint(diffComponents[i], i === selectedComponent ? 0.65 : 0.45);
   } else if (activeSelection && activeSelection.count > 0 && currentSegmentation) {
     drawTint({ w: currentSegmentation.w, h: currentSegmentation.h, mask: activeSelection.mask, count: activeSelection.count }, 0.45);
@@ -1686,7 +1726,18 @@ function pixelateCut(cut: HTMLCanvasElement): { canvas: HTMLCanvasElement; pixel
   const sctx = small.getContext("2d", { willReadFrequently: true });
   if (!sctx) return { canvas: cut, pixelInfo: "pixel: off" };
   sctx.imageSmoothingEnabled = true;
-  sctx.drawImage(cut, 0, 0, GW, GH);
+  // Halve until close, then land on the grid: one big bilinear jump aliases the edge.
+  let srcC: HTMLCanvasElement = cut;
+  while (srcC.height >= GH * 2 && srcC.width >= GW * 2) {
+    const half = document.createElement("canvas");
+    half.width = Math.max(GW, Math.floor(srcC.width / 2)); half.height = Math.max(GH, Math.floor(srcC.height / 2));
+    const hctx = half.getContext("2d");
+    if (!hctx) break;
+    hctx.imageSmoothingEnabled = true; hctx.imageSmoothingQuality = "high";
+    hctx.drawImage(srcC, 0, 0, half.width, half.height);
+    srcC = half;
+  }
+  sctx.drawImage(srcC, 0, 0, GW, GH);
   const simg = sctx.getImageData(0, 0, GW, GH);
   const spx = simg.data;
   for (let i = 0; i < spx.length; i += 4) {
@@ -1747,7 +1798,7 @@ function maskCutTexture(key: string, src: HTMLCanvasElement, m: MaskInfo, mode: 
 }
 async function openCameraModal(paperMode = false): Promise<void> {
   if (cameraPaper) cameraPaper.checked = paperMode;
-  cameraLabel.placeholder = paperMode ? "Level name (optional, e.g. Sky Castle)" : "What are you holding? e.g. coffee mug";
+  cameraLabel.placeholder = paperMode ? "Level name (optional, e.g. Sky Castle)" : "optional: what is it?";
   pendingCapture = null;
   currentKey = null;
   bgCanvas = null;
@@ -1792,6 +1843,16 @@ function setPendingCapture(source: CanvasImageSource, sw: number, sh: number): v
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  // Keep the photo's own resolution (capped) for the cut: the 768 px copy above only travels to SAM.
+  fullPhoto = null;
+  if (!cameraPaper?.checked) {
+    const fs = Math.min(1, FULL_PHOTO_MAX / Math.max(sw, sh));
+    const full = document.createElement("canvas");
+    full.width = Math.max(1, Math.round(sw * fs));
+    full.height = Math.max(1, Math.round(sh * fs));
+    full.getContext("2d")?.drawImage(source, 0, 0, full.width, full.height);
+    fullPhoto = full;
+  }
   const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
   if (currentKey !== null && pendingPhotos.has(currentKey)) pendingPhotos.delete(currentKey);
   currentKey = `photo-${++photoSeq}`;
@@ -1884,7 +1945,7 @@ function cutoutTexture(key: string, src: HTMLCanvasElement, box: SegmentBox): HT
   storeCutTexture(key, cut, texCanvas);
   return texCanvas;
 }
-function handleSegment(key: string, rawBox: unknown): void {
+function handleSegment(key: string, rawBox: unknown, name?: string): void {
   if (key !== currentKey || cameraModal.hidden) return;
   const box = rawBox === null ? null : normalizeBox(rawBox);
   if (box === null || isBoxTooLarge(box)) {
@@ -1910,7 +1971,36 @@ function handleSegment(key: string, rawBox: unknown): void {
   cameraBoxEl.style.height = `${box.h / 16}%`;
   cameraBoxEl.hidden = false;
 
-  // Prefer Meta SAM 3.1: auto-seed selection to foreground inside model box
+  // Prefer Meta SAM 3.1's box: cut the object out at once, at the photo's own resolution (ADR 0081).
+  samName = typeof name === "string" ? name.trim().slice(0, 40) : "";
+  if (fullPhoto) {
+    try {
+      const fctx = fullPhoto.getContext("2d", { willReadFrequently: true });
+      if (fctx) {
+        const img: Img = { w: fullPhoto.width, h: fullPhoto.height, data: fctx.getImageData(0, 0, fullPhoto.width, fullPhoto.height).data };
+        const px = {
+          x0: Math.max(0, Math.floor(box.x / 1600 * img.w)),
+          y0: Math.max(0, Math.floor(box.y / 1600 * img.h)),
+          x1: Math.min(img.w, Math.ceil((box.x + box.w) / 1600 * img.w)),
+          y1: Math.min(img.h, Math.ceil((box.y + box.h) / 1600 * img.h)),
+        };
+        const raw = cutInBox(img, px);
+        samCtx = { img, raw };
+        refinishSamCut();
+      }
+    } catch (err) {
+      console.warn("[photo] AI cut failed, falling back to selection", err);
+      dropSamCut();
+    }
+  }
+  if (samCut !== null) {
+    redrawPreview();
+    cameraFinder({ kind: "found" });
+    setCameraStatus(samName ? `Got it: ${samName}. Bring it into the game.` : "Got it. Bring it into the game.");
+    updateCameraConfirm();
+    return;
+  }
+  // The cut came back empty: fall back to the old selection seeded from the box.
   if (pendingCapture) {
     if (!currentSegmentation) {
       const img = workImage(pendingCapture.canvas, 384);
@@ -1936,7 +2026,7 @@ cameraPaper?.addEventListener("change", () => {
     if (pendingCapture) { cameraConfirm.disabled = false; setCameraStatus("Drawing photo ready! Click 'Build this level' to make it playable."); }
     else setCameraStatus("Level drawing mode: upload or capture your paper drawing.");
   } else {
-    cameraLabel.placeholder = "What are you holding? e.g. coffee mug";
+    cameraLabel.placeholder = "optional: what is it?";
     setCameraStatus("");
   }
   updateCameraConfirm();
@@ -1974,6 +2064,7 @@ cameraFind.addEventListener("click", () => {
 });
 cameraBg.addEventListener("click", () => {
   if (!pendingCapture) return;
+  dropSamCut();
   const clone = document.createElement("canvas");
   clone.width = pendingCapture.canvas.width; clone.height = pendingCapture.canvas.height;
   clone.getContext("2d")?.drawImage(pendingCapture.canvas, 0, 0);
@@ -1986,11 +2077,13 @@ cameraBg.addEventListener("click", () => {
   cameraFinder({ kind: "covered" });
   setCameraStatus(cameraStream ? "Background remembered. Hold the object up and press Capture again." : "Background remembered — pick the photo with the object in it.");
 });
+cameraPixel?.addEventListener("change", () => { if (samCtx) { refinishSamCut(); redrawPreview(); } });
 wandSensEl?.addEventListener("input", () => {
   if (wandMask && lastWandPoint) computeWand(lastWandPoint.fx, lastWandPoint.fy);
 });
 cameraPreview.addEventListener("click", (e) => {
   if (!pendingCapture) return;
+  if (samCut !== null) { dropSamCut(); redrawPreview(); }
   const rect = cameraPreview.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return;
   const fx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
@@ -2077,6 +2170,16 @@ cameraConfirm.addEventListener("click", () => {
     return;
   }
 
+  if (samCut !== null && samCutCanvas !== null) {
+    const keyS = currentKey;
+    const { canvas: texCanvas } = pixelateCut(samCutCanvas);
+    storeCutTexture(keyS, samCutCanvas, texCanvas);
+    pendingArt.add(keyS);
+    // The Spark name (or what the player typed) becomes the object's title.
+    send({ kind: "photoBringLocal", key: keyS, prompt: samName || cameraLabel.value.trim() || "object", aspect: texCanvas.width / texCanvas.height } as unknown as ClientMsg);
+    closeCameraModal(false);
+    return;
+  }
   const hasActiveSelection = activeSelection !== null && activeSelection.count > 0 && currentSegmentation !== null;
   const hasDiff = diffComponents.length > 0 && selectedComponent >= 0;
   const hasWand = wandMask !== null && wandMask.count >= 300;
@@ -2506,7 +2609,7 @@ function connect(): void {
     }
     else if ((msg as unknown as { kind: string }).kind === "segment") {
       const segMsg = msg as unknown as { kind: "segment"; key: string; box: unknown };
-      handleSegment(segMsg.key, segMsg.box ?? null);
+      handleSegment(segMsg.key, segMsg.box ?? null, (msg as unknown as { name?: string }).name);
     }
   });
 }

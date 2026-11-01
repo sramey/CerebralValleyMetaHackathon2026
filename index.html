@@ -89,19 +89,25 @@
           </div>
           <p id="camera-placeholder">Upload a photo of something you are holding — no camera needed.</p>
         </div>
-        <input id="camera-label" type="text" placeholder="What are you holding? e.g. coffee mug" autocomplete="off" />
+        <input id="camera-label" type="text" placeholder="optional: what is it?" autocomplete="off" />
         <div class="camera-opts">
           <label class="camera-paper"><input id="camera-paper" type="checkbox" /> It's a level drawing</label>
           <label class="camera-pixel"><input id="camera-pixel" type="checkbox" checked /> Pixel-art style</label>
-          <label class="camera-wand-sens">Sensitivity <input id="wand-sens" type="range" min="18" max="60" value="40" /></label>
+          <details id="camera-adjust" class="camera-adjust" hidden>
+            <summary>Adjust</summary>
+            <div class="camera-adjust-pop">
+              <p>Only needed when the AI misses the object. Click the photo to select by hand.</p>
+              <button id="camera-bg" type="button" hidden title="Capture the empty scene first: the cleanest cutout">Empty background</button>
+              <button id="camera-find" type="button" hidden title="Use AI to detect and outline the object named above">Find object (AI)</button>
+              <label class="camera-wand-sens">Sensitivity <input id="wand-sens" type="range" min="18" max="60" value="40" /></label>
+            </div>
+          </details>
         </div>
         <div class="camera-actions">
           <button id="camera-upload-btn" type="button" class="primary">Upload a photo</button>
           <input id="camera-upload" type="file" accept="image/*" hidden />
           <button id="camera-start" type="button">Use camera</button>
           <button id="camera-capture" type="button" hidden>Capture</button>
-          <button id="camera-bg" type="button" hidden title="Capture the empty scene first: the cleanest cutout">Empty background</button>
-          <button id="camera-find" type="button" hidden title="Use AI to detect and outline the object named above">Find object (AI)</button>
           <button id="camera-cancel" type="button">Cancel</button>
         </div>
         <p id="camera-status"></p>
