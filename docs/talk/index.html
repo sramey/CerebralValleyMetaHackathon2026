@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Talk-to-Build</title>
-<meta name="description" content="Scroll-driven presentation of Talk-to-Build: software that writes, tests, QA-plays and hot-loads its own code while it runs. The game is the showcase; the technology is the point.">
+<meta name="description" content="Scroll-driven presentation of Talk-to-Build: software that writes, tests, QA-plays, hot-loads, and continuously reviews its own code while it runs. The game is the showcase; the technology is an autonomous software engineering team.">
 <style>
 :root{
   --ink:#060912;          /* deepest night */
@@ -148,11 +148,11 @@ kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;pa
 
 /* ---------- 4 meta roster ---------- */
 .roster{display:grid;grid-template-columns:minmax(0,1fr);gap:.4vh}
-.row{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,2fr) minmax(0,.55fr);gap:2vw;align-items:baseline;padding:1.05vh 0 1.05vh 1.2vw;border-left:3px solid transparent;transition:opacity .5s,border-color .5s,background .5s}
+.row{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1.9fr) minmax(0,.8fr);gap:2vw;align-items:baseline;padding:1.05vh 0 1.05vh 1.2vw;border-left:3px solid transparent;transition:opacity .5s,border-color .5s,background .5s}
 .row h3{font-size:1.18em;color:var(--bone);font-weight:700;line-height:1.15}
 .row h3 code{display:block;font-size:.5em;color:var(--blue);font-weight:400;margin-top:.35em}
 .row p{font-size:.78em;color:var(--text);line-height:1.4}
-.row .t{font-family:var(--mono);font-size:.66em;color:var(--gold);text-align:right}
+.row .t{font-family:var(--mono);font-size:.72em;color:var(--gold);text-align:right;white-space:nowrap}
 .row.dim{opacity:.38}
 .row.cur{border-left-color:var(--gold);background:linear-gradient(90deg,rgba(242,191,74,.08),transparent 70%)}
 .row.ow h3{color:var(--violet)}
@@ -222,17 +222,17 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--gold);outline-offse
   <div class="stage">
     <div class="sky"></div><div class="stars"></div>
     <div class="bg"><img src="img/pipeline-live.jpg" alt=""></div>
-    <h1 class="sr">Software that changes itself while it runs. The game is not the point. The technology is.</h1>
+    <h1 class="sr">Software that changes itself while it runs. The technology is the showcase, proven in a live game.</h1>
     <div class="hk">
       <div>
         <canvas class="px" data-b="0-1" data-text="SOFTWARE THAT|CHANGES ITSELF|WHILE IT RUNS." data-cells="6.4" data-color="#ece5d3" aria-hidden="true"></canvas>
-        <p class="tag" data-b="1=">Describe a change in plain words. AI agents write the code, test it, play it through, and hot-load it into the running program. <b>Nothing ships unverified.</b>
+        <p class="tag" data-b="1=">Talk to it, and software builds itself around you while you play. AI agents write the code, test it, playtest it, and hot-load it live in seconds. <b>Nothing ships unverified.</b>
           <span>Talk-to-Build. Solo entry, Indie track, Meta Global AI Developer Hackathon 2026.</span></p>
       </div>
       <div>
-        <canvas class="px" data-b="2" data-text="THE GAME IS|NOT THE POINT." data-cells="6.4" data-color="#ece5d3" aria-hidden="true"></canvas>
-        <canvas class="px" data-b="2" data-text="THE TECHNOLOGY IS." data-cells="6.4" data-color="#f2bf4a" aria-hidden="true"></canvas>
-        <p class="tag" data-b="2" style="color:var(--text)">The game is the showcase: every change is something you can see, play and try to break.</p>
+        <canvas class="px" data-b="2" data-text="THE TECHNOLOGY|IS THE SHOWCASE." data-cells="6.4" data-color="#ece5d3" aria-hidden="true"></canvas>
+        <canvas class="px" data-b="2" data-text="PROVEN IN|A LIVE GAME." data-cells="6.4" data-color="#f2bf4a" aria-hidden="true"></canvas>
+        <p class="tag" data-b="2" style="color:var(--text)">The platformer is our live proof of work: every change is real code you can see, play with, and try to break in real time.</p>
       </div>
     </div>
     <div class="hint"><span><kbd>Space</kbd> or <kbd>&darr;</kbd> next beat</span><span><kbd>&uarr;</kbd> back</span><span><kbd>H</kbd> hide chrome</span></div>
@@ -244,10 +244,10 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--gold);outline-offse
   <div class="stage">
     <div class="sky"></div>
     <div class="head"><canvas class="px title" data-text="THE LOOP" aria-hidden="true"></canvas><h2 class="sr">The loop</h2>
-      <p>Write, test, play through, ship. Nothing goes live until it has passed.</p></div>
+      <p>An autonomous software engineering team in a loop. Nothing ships unverified.</p></div>
     <div class="body">
       <div class="diag" id="diag">
-        <svg viewBox="0 0 1384 520" id="pipe" role="img" aria-label="The loop: plain words in, Muse Spark routes, Muse Wonder writes the code, automatic tests, a bot QA playthrough, hot-load with no restart, live with clean undo. A rejected change goes back to Wonder with a reason.">
+        <svg viewBox="0 0 1384 520" id="pipe" role="img" aria-label="The loop: plain words in, Muse Spark triages, Muse Wonder writes code, automated unit tests, bot QA playthrough, hot-deploy with no restart, live with clean undo. A rejected change returns to Wonder with the bug report.">
           <g id="wires"></g>
           <path id="arc" d="M890,300 C890,470 494,470 494,300"></path>
           <text id="arcLbl" x="692" y="460" text-anchor="middle">the reason goes back to Wonder</text>
@@ -259,13 +259,13 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--gold);outline-offse
         <div class="reason" id="reason">rejected: the player (100px) can't fit under the 72px cliff overhang</div>
       </div>
       <div class="bottom"><div class="caps">
-        <p data-b="0=" class="fade"><em>Live coding.</em> Muse Wonder, a tool-calling agent, writes a new module for the running program, and writes its own test with it.<small>Every module ships three things: knobs, a <code>test()</code> and a <code>dispose()</code>.</small></p>
-        <p data-b="1=" class="fade"><em>Automatic tests.</em> A safety scan, an esbuild compile, then 600 headless frames on a deterministic 60 Hz simulation, and the module's own <code>test()</code>.</p>
-        <p data-b="2=" class="fade"><em>QA playthrough.</em> A bot plays a copy of the live world, with and without the change, on three seeds. If it can't get through, the change doesn't ship.</p>
-        <p data-b="3=" class="fade"><em>Hot-load.</em> The verified module drops into the running program. No restart, no reload: a median 11.2 s from words to live. Undo calls <code>dispose()</code>, so it is always clean.</p>
-        <p data-b="4=" class="fade">Now ask for something that breaks it: <em>"make me huge"</em>. The QA bot can't get through, so the change is rejected with a reason, and the running world doesn't change.</p>
-        <p data-b="5=" class="fade">The reason goes back to Muse Wonder. It inspects the world, rewrites its draft, and runs the playtest itself until it passes.</p>
-        <p data-b="6=" class="fade"><em>Fixed, verified, live.</em> No human in the loop. In a 20-run rehearsal, "make me huge" was rejected and then fixed 20 times out of 20.</p>
+        <p data-b="0=" class="fade"><em>Live Coding.</em> You ask for an idea. Muse Wonder—our AI software engineer—instantly writes the TypeScript code and writes custom unit tests with it.<small>Every module exposes live knobs, a <code>test()</code> suite, and a clean <code>dispose()</code>.</small></p>
+        <p data-b="1=" class="fade"><em>Sandbox Testing.</em> Before anything touches your game, the new code passes a safety scan, compiles, runs 600 headless frames of a deterministic 60&nbsp;Hz simulation, and runs its own <code>test()</code>. If anything fails, it never ships.</p>
+        <p data-b="2=" class="fade"><em>Automated QA Playtest.</em> A QA bot actually plays a copy of your world, with and without the change, on three seeds. If it can't reach the goal, the build is rejected.</p>
+        <p data-b="3=" class="fade"><em>Zero-Downtime Hot-Deploy.</em> The verified feature drops straight into the running game with no restart and no reload, a median 11.2&nbsp;s from words to live. And every change has a clean undo.</p>
+        <p data-b="4=" class="fade">Now let's try to break it: <em>"make me huge"</em>. The QA bot spots the problem right away: the oversized character cannot fit under obstacles, so it rejects the build with a bug report.</p>
+        <p data-b="5=" class="fade">That bug report feeds straight back to the engineer. Muse Wonder inspects the world, rewrites the code to fit, and re-tests until the bot clears the course.</p>
+        <p data-b="6=" class="fade"><em>Self-Healing Code.</em> Fixed, re-verified by the bot, and hot-loaded into the game—100% autonomously with no human in the loop. 20 out of 20 attempts self-healed in testing.</p>
       </div>
       <div class="lane-wrap" data-b="6">
         <div class="lane"><img src="img/pipeline-lanes-impact.webp" alt="The in-app pipeline lane for make me huge: inspect, write, playtest, rejected, fix, write, playtest, pass"></div>
@@ -275,17 +275,17 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--gold);outline-offse
   </div>
 </section>
 
-<!-- ============ 3 SECOND OPINION ============ -->
-<section class="ch" id="learn" data-states="3" data-name="Second opinion">
+<!-- ============ 3 CONTINUOUS REVIEW ============ -->
+<section class="ch" id="learn" data-states="3" data-name="Continuous review">
   <div class="stage">
     <div class="sky"></div>
-    <div class="head"><canvas class="px title" data-text="SECOND OPINION" aria-hidden="true"></canvas><h2 class="sr">Second opinion</h2>
-      <p>Shipped code keeps getting checked, and every fix teaches the next build.</p></div>
+    <div class="head"><canvas class="px title" data-text="ALWAYS-ON REVIEW" aria-hidden="true"></canvas><h2 class="sr">Continuous review</h2>
+      <p>Meta's open-weights model audits live code in the background, auto-fixes edge cases, and learns permanent rules.</p></div>
     <div class="body">
       <div class="stack">
-        <div data-b="0=" class="fade"><p>After a change ships, a second reviewer keeps reading it: <span class="ow">Muse Spark Open</span>, Meta's open-weights model, served on Baseten. Nobody waits for it.</p></div>
-        <div data-b="1=" class="fade"><p>Here it caught a real bug: a <code>dispose()</code> that left its listeners running.</p><p>Its fix passes the same gates as any build, compile, test and QA playthrough, before it is hot-swapped in. On stage: <em>caught a bug, fixed, re-verified, live.</em></p></div>
-        <div data-b="2=" class="fade"><p>Every accepted fix becomes a rule that every later build reads: <em>+1 rule</em>.</p><p>Say <q>double-check my world</q> and it reviews every build on demand.</p></div>
+        <div data-b="0=" class="fade"><p>Why an always-on reviewer? Even code that passes playtesting can have hidden bugs or memory leaks. So Meta's open-weights model (<span class="ow">Muse Spark Open</span> on Baseten) continuously audits live code in the background while you keep playing.</p></div>
+        <div data-b="1=" class="fade"><p>Here it caught a real runtime bug: lingering event listeners that would leak memory.</p><p>It generated a fix, verified it through the full compile and QA playtest gates, and hot-patched the running game live. <em>Caught a bug, auto-fixed, re-verified, live.</em></p></div>
+        <div data-b="2=" class="fade"><p><em>What it has learned:</em> every accepted fix teaches the system. It writes new <b>rules</b> and agent <b>skills</b> that every later build reads.</p><p>So the AI engineer stops repeating the mistakes it has already been caught making. Say <em>double-check my world</em> and it reviews every build on demand.</p></div>
       </div>
       <div class="frame" id="learnframe">
         <div class="z" data-zoom="0.5,0.5,1|0.12,0.18,2.5|0.9,0.1,2.4"><img src="img/second-opinion-fix-card.jpg" alt="On stage: Muse Spark Open (open weights) caught a bug, Fixed, re-verified, live, and the brain button shows +1 rule"></div>
@@ -299,36 +299,36 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--gold);outline-offse
   <div class="stage">
     <div class="sky"></div>
     <div class="head"><canvas class="px title" data-text="WHO DOES WHAT" aria-hidden="true"></canvas><h2 class="sr">Which Meta model does which job</h2>
-      <p>Six Meta models with real jobs in the loop, plus Wonder's agent tools.</p></div>
+      <p>Six Meta models acting as a complete autonomous software engineering studio.</p></div>
     <div class="body">
       <div class="roster" id="roster">
-        <div class="row" data-b="0"><h3>Muse Voice Transcribe<code>muse-voice-transcribe-1.0</code></h3><p>Turns the spoken request into text while you talk.</p><span class="t">~130 ms after release</span></div>
-        <div class="row" data-b="0"><h3>Muse Spark<code>muse-spark-1.2</code></h3><p>Routes every request: new code, a knob tweak, an edit, undo, or a question. Splits compound asks.</p><span class="t">~1 s</span></div>
-        <div class="row" data-b="0"><h3>Muse Wonder<code>muse-wonder-1.0</code></h3><p>Writes and edits the code. A tool-calling agent (<code>inspect_world</code>, <code>run_playtest</code>) that fixes what QA rejected. Up to 4 builds in parallel.</p><span class="t">~10–20 s</span></div>
-        <div class="row" data-b="0"><h3>Muse Image<code>muse-image-1.0</code></h3><p>Draws the art each new module needs, in the background.</p><span class="t">~17 s</span></div>
-        <div class="row" data-b="0"><h3>SAM 3.1<code>sam-3.1</code></h3><p>Cuts a real object out of the camera feed so it can become part of the program.</p><span class="t">~1.2 s</span></div>
-        <div class="row ow" data-b="0"><h3>Muse Spark Open <span class="badge">open weights</span><code>meta-models/muse-spark-open, on Baseten</code></h3><p>The second-opinion reviewer and rule writer, and an optional router (918 ms vs 1151 ms p50 for hosted Spark over 30 runs).</p><span class="t">with BASETEN_API_KEY</span></div>
+        <div class="row" data-b="0"><h3>Muse Voice Transcribe<code>muse-voice-transcribe-1.0</code></h3><p>Real-time speech to text: turns what you say into build requests, ~130&nbsp;ms after you stop talking.</p><span class="t">Voice Input</span></div>
+        <div class="row" data-b="0"><h3>Muse Spark<code>muse-spark-1.2</code></h3><p>Tech lead &amp; triage: classifies intent (new feature, knob tweak, restyle, undo) and splits compound asks into parallel builds. ~1&nbsp;s.</p><span class="t">Triage &amp; Dispatch</span></div>
+        <div class="row" data-b="0"><h3>Muse Wonder<code>muse-wonder-1.0</code></h3><p>Autonomous software engineer: writes TypeScript mods, runs test tools (<code>inspect_world</code>, <code>run_playtest</code>), and fixes what QA rejected. Up to 4 builds in parallel, ~10–20&nbsp;s.</p><span class="t">Software Engineer</span></div>
+        <div class="row" data-b="0"><h3>Muse Image<code>muse-image-1.0</code></h3><p>Artist &amp; animator: generates custom pixel-art sprite sheets and scenery on demand, in the background. ~17&nbsp;s.</p><span class="t">Asset Generation</span></div>
+        <div class="row" data-b="0"><h3>SAM 3.1<code>sam-3.1</code></h3><p>Computer vision: finds a real object in a photo and cuts it out with its own mask, so it can drop into the game. ~1.2&nbsp;s.</p><span class="t">Vision Segmenter</span></div>
+        <div class="row ow" data-b="0"><h3>Muse Spark Open <span class="badge">open weights</span><code>meta-models/muse-spark-open (Baseten)</code></h3><p>Senior code auditor: continuously reviews live code, generates patches, and writes the rules later builds read. Also an optional router: 918&nbsp;ms vs 1151&nbsp;ms p50 for hosted Spark over 30 runs.</p><span class="t">Continuous Reviewer</span></div>
       </div>
-      <p class="state" data-b="1=">Meta's open-weights model does real work in the loop: <b>it reviews shipped code and fixes it.</b></p>
-      <p class="state" data-b="2">Every AI call the product makes at runtime goes to a Meta model. <b>No other AI provider, anywhere.</b></p>
+      <p class="state" data-b="1=">Meta's open-weights model does real engineering work: <b>it actively audits live code, patches bugs, and teaches future builds.</b></p>
+      <p class="state" data-b="2">100% powered by Meta AI at runtime. <b>No other AI provider anywhere in the pipeline.</b></p>
     </div>
   </div>
 </section>
 
 <!-- ============ 5 PROOF ============ -->
-<section class="ch" id="proof" data-states="2" data-name="Proof">
+<section class="ch" id="proof" data-states="2" data-name="Numbers">
   <div class="stage">
     <div class="sky"></div>
-    <div class="head"><canvas class="px title" data-text="DOES IT WORK?" aria-hidden="true"></canvas><h2 class="sr">Does it work?</h2>
-      <p>From the product's own append-only build log, 10-28 to 10-30. Nothing hand-picked.</p></div>
+    <div class="head"><canvas class="px title" data-text="BY THE NUMBERS" aria-hidden="true"></canvas><h2 class="sr">By the numbers</h2>
+      <p>From the product's own append-only build log. Nothing hand-picked.</p></div>
     <div class="body">
       <div class="board">
-        <div class="stat g" data-b="0"><div class="big"><span class="count" data-to="92.6" data-dec="1">0</span><small>%</small></div><p>of requests landed verified and hot-loaded: 162 of 175.</p></div>
-        <div class="stat" data-b="0"><div class="big"><span class="count" data-to="11.2" data-dec="1">0</span><small>s</small></div><p>median from a sentence to a live, verified change (p90 26.9 s).</p></div>
+        <div class="stat g" data-b="0"><div class="big"><span class="count" data-to="92.6" data-dec="1">0</span><small>%</small></div><p>landing rate: 162 of 175 voice &amp; text prompts verified and hot-loaded live.</p></div>
+        <div class="stat" data-b="0"><div class="big"><span class="count" data-to="11.2" data-dec="1">0</span><small>s</small></div><p>median from a sentence to verified code running in game (p90 26.9&nbsp;s).</p></div>
         <div class="stat wide" data-b="1"><div class="trio">
-          <div><div class="big"><span class="count" data-to="20">0</span><small>/20</small></div><p>"make me huge" rejected, then fixed with no human</p></div>
-          <div><div class="big"><span class="count" data-to="1100">0</span><small>+</small></div><p>tests in the repo</p></div>
-          <div><div class="big"><span class="count" data-to="75">0</span></div><p>architecture decision records</p></div></div></div>
+          <div><div class="big"><span class="count" data-to="20">0</span><small>/20</small></div><p>"make me huge" rejected by QA and autonomously self-healed with no human</p></div>
+          <div><div class="big"><span class="count" data-to="1200">0</span><small>+</small></div><p>automated tests in the test suite</p></div>
+          <div><div class="big"><span class="count" data-to="80">0</span><small>+</small></div><p>architecture decision records (ADRs)</p></div></div></div>
       </div>
       <p class="src" data-b="0">Source: docs/evidence/build-stats.md (regenerate with npm run stats), docs/process/rehearsal-20x.md, docs/adr/.</p>
     </div>
@@ -341,8 +341,8 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--gold);outline-offse
     <div class="sky"></div><div class="stars"></div>
     <div class="wrap">
       <div>
-        <p class="lead" data-b="0-0">A game just makes it watchable.<span>The same loop fits any software that has to keep running while it changes: write the code, test it, play it through, ship it hot, keep reviewing it.</span></p>
-        <div class="loopline" data-b="0-0"><i>write</i><i>test</i><i>QA playthrough</i><i>hot-load</i><i>undo</i><i class="v">second opinion</i></div>
+        <p class="lead" data-b="0-0">The loop is the technology. The game is the ultimate proof.<span>The exact same autonomous loop—code, test, playtest, hot-deploy, and learn—fits any software that has to keep running while it changes.</span></p>
+        <div class="loopline" data-b="0-0"><i>ask</i><i>triage</i><i>engineer</i><i>unit test</i><i>qa playtest</i><i>hot-deploy</i><i class="v">continuous audit</i></div>
       </div>
       <div>
         <canvas class="px" data-b="1" data-text="LET'S WATCH|IT BUILD." data-cells="8" data-color="#f2bf4a" aria-hidden="true"></canvas>
@@ -350,7 +350,7 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--gold);outline-offse
     </div>
     <div class="foot" data-b="1">
       <span><a href="https://github.com/sramey/CerebralValleyMetaHackathon2026">github.com/sramey/CerebralValleyMetaHackathon2026</a></span>
-      <span>Run it: <code>npm install</code>, <code>npm run build &amp;&amp; npm start</code>. No key? Demo worlds still play.</span>
+      <span>Run it: <code>npm install</code>, <code>npm run build &amp;&amp; npm start</code> · Add your <b>Meta Model API key</b> to unlock full live agentic creation. (Demo worlds playable offline).</span>
     </div>
   </div>
 </section>
@@ -442,8 +442,8 @@ document.querySelectorAll("canvas.px").forEach(setupPx);
 
 /* ---------------- pipeline diagram ---------------- */
 const NODES = [
-  ["Ask","Plain words","voice or text"],["Route","Muse Spark","or Spark Open"],["Code","Muse Wonder","agent + tools"],
-  ["Test","Auto-tests","headless 60 Hz"],["QA","Bot playtest","3 seeds"],["Ship","Hot-load","no restart"],["Live","Running app","undo = dispose"]];
+  ["Ask","User request","voice or text"],["Route","Muse Spark","triage & dispatch"],["Code","Muse Wonder","software engineer"],
+  ["Test","Unit tests","compile & sandbox"],["QA","Playtest bot","staging simulation"],["Ship","Hot-deploy","zero downtime"],["Live","Running app","clean undo"]];
 const NX = i => 10 + i*198, NW = 176, NY = 170, NH = 130, CY = NY + NH/2;
 const svgNS = "http://www.w3.org/2000/svg";
 const nodesG = document.getElementById("nodes"), wiresG = document.getElementById("wires");
@@ -489,7 +489,7 @@ function loopState(s){
   arcLbl.classList.toggle("on", s>=5); arcLbl.classList.toggle("fixed", s>=6);
   tools.classList.toggle("on", s===5);
   reason.classList.toggle("on", s>=4); reason.classList.toggle("fixed", s>=6);
-  reason.textContent = s>=6 ? "passed: the player (64px) fits with normal velocity" : "rejected: the player (100px) can't fit under the 72px cliff overhang";
+  reason.textContent = s>=6 ? "passed: character resized to fit terrain overhangs" : "rejected: the player (100px) can't fit under the 72px cliff overhang";
   cmd.innerHTML = s>=4 ? "&ldquo;make me huge&rdquo;" : "&ldquo;add a bouncing green slime&rdquo;";
   pkt.style.fill = s===4 ? "var(--red)" : (s>=6 ? "var(--green)" : "var(--gold)");
   movePkt(PATHS[s] ? PATHS[s].map(C) : arcPts());
