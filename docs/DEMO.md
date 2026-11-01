@@ -1,4 +1,34 @@
-# Demo video: 3:00 shot list (DRAFT for the owner to edit)
+# Demo video: recording plan (11-01, current)
+
+The video is a ~1-minute technology intro over the scroll deck ([docs/talk/index.html](talk/index.html)), then ~2 minutes of the live product doing the work. Judges stop at 3:00, so aim for **2:50**.
+
+## Before every take
+1. `npm run demo:prep` (resets `server/learned/`, warms spooky art, preflights a Meta call). **Do this before each take:** a rehearsal or take that auto-fixes "make me huge" teaches a size rule, and from then on it builds right first time, so the rejection beat disappears (seen 11-01: runs 1-2 rejected-then-fixed, runs 3-5 landed first try).
+2. Leave `DEMO_FREEZE_LEARNING` unset: freezing stops the "+1 rule" pulse on the second-opinion card. The reset in step 1 is enough.
+3. `npm run build`, restart the server, open the game with `?nocoach`, **Ctrl+Shift+R**, then **New world**.
+4. Deck: open `docs/talk/index.html?clean` full screen (H hides chrome). Space or the down arrow advances.
+
+## Live order (rehearsed 11-01, 5 runs on a frozen stage server at 28c0c1d)
+| # | Say | Result | p50 | p90 | Notes |
+|---|---|---|---|---|---|
+| 1 | "add a bouncing green slime" | 5/5 | 9.2 s | 9.9 s | |
+| 2 | "make me huge" | 5/5 landed; **rejected then fixed 2/2 on a fresh world** | 9.2 s | 24.7 s | Needs the reset above. Proof of the claim: show the red card and the reason |
+| 3 | "make a harder level" | 5/5 | instant | | level generator, no model call |
+| 4 | "make this look like England" | 5/5 | instant | | place theme, no model call |
+| 5 | "add a tank that shoots shells" | 5/5 | 13.9 s | 14.8 s | |
+| 6 | "add a zombie that chases me" | 5/5 | 7.8 s | 8.7 s | |
+| 7 | "double-check my world" | works | ~7-8 s per build | | Muse Spark Open (open weights) reviews each build in turn; with 4-5 builds expect ~30-40 s, so cut or speed it up. Probe 11-01: one run "fixed 1" (zombie had no health), one "fixed 0". The rehearse harness shows 180 s here because the sweep sends no end marker; that is the harness, not the product |
+| 8 | "make it spooky" | 5/5 | 1.1 s repaint | 1.6 s | sprite redraw follows |
+| 9 | Bring an object in (camera icon) | not rehearsed on a real photo | | | New 10-31: SAM 3.1's own mask is the cut (ADR 0081). Type the name (e.g. "calculator") for the most reliable take; plain background helps |
+| 10 | Press **P** | | | | pipeline view, close |
+
+The open-weights router (Baseten) timed out 3 times in 40 commands on 11-01; each time it fell back to hosted Spark after 4 s, so that command is ~4 s slower. Nothing breaks.
+
+Rehearse this order yourself: `npm run rehearse -- --runs 3 --port 8796 --file rehearse-record.json` against a frozen stage server.
+
+---
+
+# Earlier plan: 3:00 live-only shot list (10-30, kept for reference)
 
 Built from what the game does today. No slides: every beat is the live product, and the closing architecture beat is the in-app pipeline view (**P**). Judges stop watching at 3:00 exactly, so the plan ends at **2:50** and leaves 10 s of slack for one speed-up or one retake.
 

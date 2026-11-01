@@ -1,0 +1,10 @@
+[
+  { "cmd": "add a bouncing green slime", "source": "slime" },
+  { "cmd": "make me huge", "expect": "rejected-then-fixed" },
+  { "cmd": "make a harder level" },
+  { "cmd": "make this look like England" },
+  { "cmd": "add a tank that shoots shells" },
+  { "cmd": "add a zombie that chases me" },
+  { "cmd": "double-check my world" },
+  { "cmd": "make it spooky", "mood": "spooky" }
+]
