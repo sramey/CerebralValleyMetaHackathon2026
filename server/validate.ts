@@ -55,7 +55,7 @@ const DANGEROUS_KEYS: ReadonlySet<string> = new Set(["__proto__", "prototype", "
 const KEY_RE = /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/;
 /** Printable characters only: a model-written mod id or knob name may have spaces or unicode, never control chars. */
 const LABEL_RE = /^[^\u0000-\u001f\u007f]+$/;
-const SKETCH_TAGS: readonly string[] = ["terrain", "coin", "hazard", "bouncer", "freehand"];
+const SKETCH_TAGS: readonly string[] = ["terrain", "coin", "hazard", "bouncer", "freehand", "goal"];
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
