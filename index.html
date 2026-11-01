@@ -93,6 +93,14 @@
         <div class="camera-opts">
           <label class="camera-paper"><input id="camera-paper" type="checkbox" /> It's a level drawing</label>
           <label class="camera-pixel"><input id="camera-pixel" type="checkbox" checked /> Pixel-art style</label>
+          <label class="camera-role" title="What it does in the game">
+            <select id="camera-role" aria-label="What it does in the game">
+              <option value="prop">Prop</option>
+              <option value="collectible">Collectible</option>
+              <option value="enemy">Enemy</option>
+              <option value="friendly">Friendly</option>
+            </select>
+          </label>
           <details id="camera-adjust" class="camera-adjust" hidden>
             <summary>Adjust</summary>
             <div class="camera-adjust-pop">

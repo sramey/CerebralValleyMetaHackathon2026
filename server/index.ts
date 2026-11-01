@@ -60,6 +60,8 @@ import { cachedExplanation, explainMod } from "./explain";
 import { anySignal, CANCEL_DETAIL, createCancelRegistry } from "./cancel";
 import type { CancelRegistry } from "./cancel";
 import { AI_OFF } from "../src/ai-off";
+import { buildPhotoModSource } from "./photo-mod";
+import { cleanSlug, parsePhotoRole, type PhotoRole } from "../src/photo-role";
 
 loadEnv();
 const PORT = Number(process.env.PORT ?? 8787);
@@ -293,48 +295,9 @@ function manifestText(ws: WebSocket): string {
   return formatManifest([...sess(ws).manifest.values()].map((m) => ({ id: m.id, title: m.title, knobs: knobValues(m), entities: extractSpawnedEntities(m.source).map((e) => ({ type: e.type, kind: e.kind })) })));
 }
 
-function photoTitle(prompt: string): string {
-  const trimmed = prompt.trim();
-  const cap = trimmed ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1) : "Object";
-  return cap.slice(0, 40);
-}
-
-function buildPhotoModSource(key: string, prompt: string, aspect: number): string {
-  const aspectLit = String(Number((Number.isFinite(aspect) && aspect > 0 ? aspect : 1).toFixed(4)));
-  const idLit = JSON.stringify(key);
-  const titleLit = JSON.stringify(photoTitle(prompt));
-  return [
-    `export default {`,
-    `  id: ${idLit},`,
-    `  title: ${titleLit},`,
-    `  knobs: { size: { value: 64, min: 24, max: 160, label: "Size" } },`,
-    `  setup(api, knobs) {`,
-    `    const h = Number(knobs.size);`,
-    `    const aspect = ${aspectLit};`,
-    `    const w = Math.min(220, Math.max(16, h * aspect));`,
-    `    api.spawn({ type: ${idLit}, x: 260, y: 400 - h, w: w, h: h, color: 0xffd76a, solid: false, gravityScale: 1 });`,
-    `    api.onTick(() => {`,
-    `      if (api.tick() % 200 !== 0) return;`,
-    `      for (const e of api.byType(${idLit})) {`,
-    `        if (e.onGround) e.vy = -240;`,
-    `      }`,
-    `    });`,
-    `  },`,
-    `  dispose(api) {`,
-    `    for (const e of api.byType(${idLit})) api.despawn(e.id);`,
-    `  },`,
-    `  test(t) {`,
-    `    t.step(5);`,
-    `    t.expect(t.api.byType(${idLit}).length === 1, "exactly one photo entity");`,
-    `  },`,
-    `};`,
-    ``,
-  ].join("\n");
-}
-
 const pendingFinds = new Map<WebSocket, Map<string, { box: { x: number; y: number; w: number; h: number }; prompt: string }>>();
 
-async function buildPhotoMod(ws: WebSocket, key: string, prompt: string, aspect: number): Promise<void> {
+async function buildPhotoMod(ws: WebSocket, key: string, prompt: string, aspect: number, role: PhotoRole = "prop", slug?: string): Promise<void> {
   const manifest = sess(ws).manifest;
   const t0 = performance.now();
   const safePrompt = typeof prompt === "string" ? prompt : "";
@@ -352,7 +315,7 @@ async function buildPhotoMod(ws: WebSocket, key: string, prompt: string, aspect:
       return;
     }
     const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
-    const source = buildPhotoModSource(key, safePrompt, safeAspect);
+    const source = buildPhotoModSource(key, safePrompt, safeAspect, role, slug);
     const c0 = performance.now();
     const compiled = compileMod(source);
     compileMs = Math.round(performance.now() - c0);
@@ -474,7 +437,7 @@ async function handlePhotoBring(ws: WebSocket, msg: Extract<ClientMsg, { kind: "
   if (perWs!.size === 0) pendingFinds.delete(ws);
   const aspect = entry.box.h !== 0 ? entry.box.w / entry.box.h : 1;
   console.info(`[photo] bring key=${key} prompt="${entry.prompt}" aspect=${aspect.toFixed(3)}`);
-  await buildPhotoMod(ws, key, entry.prompt, aspect);
+  await buildPhotoMod(ws, key, entry.prompt, aspect, parsePhotoRole((msg as { role?: unknown }).role), cleanSlug((msg as { slug?: unknown }).slug) ?? undefined);
 }
 
 async function handlePhotoBringLocal(ws: WebSocket, msg: Extract<ClientMsg, { kind: "photoBringLocal" }>): Promise<void> {
@@ -486,7 +449,7 @@ async function handlePhotoBringLocal(ws: WebSocket, msg: Extract<ClientMsg, { ki
     return;
   }
   console.info(`[photo] bringLocal key=${key} prompt="${prompt}" aspect=${aspect.toFixed(3)}`);
-  await buildPhotoMod(ws, key, prompt, aspect);
+  await buildPhotoMod(ws, key, prompt, aspect, parsePhotoRole((msg as { role?: unknown }).role), cleanSlug((msg as { slug?: unknown }).slug) ?? undefined);
 }
 
 /**

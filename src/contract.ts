@@ -2,6 +2,8 @@
 // The sim (worker1), server/verifier (worker2) and client (orchestrator) all
 // build against this file. Do not change it without updating all three.
 
+import type { PhotoRole } from "./photo-role";
+
 export interface InputState {
   left: boolean;
   right: boolean;
@@ -431,8 +433,8 @@ export type ClientMsg =
   | { kind: "knob"; modId: string; knob: string; value: KnobValue }
   | { kind: "photo"; key: string; image: string; prompt: string }
   | { kind: "photoFind"; key: string; image: string; prompt: string }
-  | { kind: "photoBring"; key: string }
-  | { kind: "photoBringLocal"; key: string; prompt: string; aspect: number }
+  | { kind: "photoBring"; key: string; role?: PhotoRole; slug?: string }
+  | { kind: "photoBringLocal"; key: string; prompt: string; aspect: number; role?: PhotoRole; slug?: string }
   /** The mods in the player's world right now, in load order, sent before each command so the playtest runs in a copy of it (ADR 0013). */
   /** Make step `n` the world again, as a new step; nothing is deleted (ADR 0041). */
   | { kind: "timelineRestore"; n: number }
