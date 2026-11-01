@@ -25,6 +25,7 @@
     "cold:check": "tsx scripts/cold-start-check.ts"
   },
   "dependencies": {
+    "@meta-sam/parser": "0.1.0",
     "esbuild": "^0.25.0",
     "pixi.js": "^8.6.0",
     "ws": "^8.18.0"
