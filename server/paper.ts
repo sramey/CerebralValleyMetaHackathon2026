@@ -15,6 +15,7 @@ import {
   askWithin,
   isEmptyLevel,
   levelToModSource,
+  mergeTouchingPlatforms,
   normalizeLevel,
   parseSketchLevel,
   type SketchBox,
@@ -50,6 +51,7 @@ Identify the paper sheet and every hand-drawn game element on it:
 - Trampolines / springs (bouncy pads, springs) -> kind: "bouncer"
 - Coins (circles, stars, dots, gold marks) -> coins
 - Enemies (monsters, spikes, walkers, skulls) -> enemies
+- Goal (flags, doors, stars-at-end, or a distinct solid block at the end / exit) -> goal
 
 Coordinates:
 Report coordinates in normalized paper units (0 to 1000):
@@ -59,11 +61,12 @@ Report coordinates in normalized paper units (0 to 1000):
 - Sky platforms are near y = 200..700.
 
 Answer with JSON only, no markdown fence, no preamble:
-{"name":"short evocative level name","platforms":[{"x":0,"y":0,"w":0,"h":0,"kind":"ledge"|"wall"|"moving"|"bouncer"}],"coins":[{"x":0,"y":0,"w":0,"h":0}],"enemies":[{"x":0,"y":0,"w":0,"h":0}]}
+{"name":"short evocative level name","platforms":[{"x":0,"y":0,"w":0,"h":0,"kind":"ledge"|"wall"|"moving"|"bouncer"}],"coins":[{"x":0,"y":0,"w":0,"h":0}],"enemies":[{"x":0,"y":0,"w":0,"h":0}],"goal":{"x":0,"y":0,"w":0,"h":0}}
 
 Rules:
 - Give platforms reasonable paper thickness: 25-50 units high.
 - Coins ~25x25 units, enemies ~40x40 units, placed on or just above platforms.
+- Goal ~30x40 units (flag, door, end block), at most one goal. Optional: omit or null if no goal was drawn.
 - If the photo is blank, blurry, has no recognizable hand-drawn level, or is an arbitrary object, return:
 {"name":"empty","platforms":[],"coins":[],"enemies":[]}`;
 
@@ -362,6 +365,7 @@ export function normalizePaperLevel(
   const platforms: SketchPlatform[] = [];
   const coins: SketchBox[] = [];
   const enemies: SketchBox[] = [];
+  let goal: SketchBox | undefined;
 
   for (const p of norm.platforms) {
     const box = mapBoxToStage(p, paperBounds, imgDims);
@@ -389,14 +393,26 @@ export function normalizePaperLevel(
     });
   }
 
+  if (norm.goal) {
+    const box = mapBoxToStage(norm.goal, paperBounds, imgDims);
+    goal = {
+      x: n2(box.x),
+      y: n2(box.y),
+      w: n2(Math.max(16, Math.min(60, box.w))),
+      h: n2(Math.max(20, Math.min(120, box.h))),
+    };
+  }
+
+  const mergedPlatforms = mergeTouchingPlatforms(platforms, 16, 12);
+
   return {
     name: norm.name === "Sketched level" ? "Paper level" : norm.name,
-    platforms,
+    platforms: mergedPlatforms,
     coins,
     enemies,
+    ...(goal ? { goal } : {}),
   };
 }
-
 /** Parse multimodal Wonder's reply and map paper coordinates to the stage. */
 export function parsePaperLevelReply(
   text: string,
@@ -406,7 +422,7 @@ export function parsePaperLevelReply(
   const parsed = parseSketchLevel(text);
   if (!parsed.level) return { error: parsed.error ?? "no level found in reply" };
   if (parsed.level.name.toLowerCase() === "empty" || isEmptyLevel(parsed.level)) {
-    return { error: "the drawing had no platforms, coins or enemies" };
+    return { error: "the drawing had no platforms, coins, enemies or goal" };
   }
   const level = normalizePaperLevel(parsed.level, paperBounds, imgDims);
   if (isEmptyLevel(level)) {
@@ -427,7 +443,7 @@ export function paperPrompt(hint = "", bounds?: PaperBounds, imageDims?: { w: nu
   if (hint.trim()) {
     lines.push(`The player named or described it: "${hint.trim().slice(0, 200)}"`);
   }
-  lines.push("Extract the hand-drawn platforms, coins, and enemies inside the paper sheet.");
+  lines.push("Extract the hand-drawn platforms, coins, enemies, and optional goal inside the paper sheet.");
   lines.push("Map coordinates to normalized paper units 0..1000 (0=top/left, 1000=bottom/right).");
   lines.push("Reply with ONLY the JSON level object.");
   return lines.join("\n");
@@ -586,6 +602,7 @@ export async function runPaperBuild(
     level.platforms.length > 0 ? `${level.platforms.length} platforms` : "",
     level.coins.length > 0 ? `${level.coins.length} coins` : "",
     level.enemies.length > 0 ? `${level.enemies.length} enemies` : "",
+    level.goal ? "1 goal" : "",
   ]
     .filter(Boolean)
     .join(", ");
