@@ -33,10 +33,33 @@ export interface SceneRec {
   stash: Entity[];
   backdrop?: string;
   skin?: string;
+  /** The scene is a flight scene: terrain hidden or a backdrop set (ADR 0083). */
+  flight?: boolean;
   /** The player's gravity before this scene, handed down the stack so undo order never matters. */
   prevGravity?: number;
 }
 
 export function sceneOptionsOk(o: SceneOptions | undefined): SceneOptions {
   return o && typeof o === "object" ? o : {};
+}
+
+/**
+ * The sheet key of the player's skin (ADR 0083). A flight scene keeps the original "<skin>-skin" key
+ * (ADR 0066 sheets stay valid); a plain character swap is "<skin>-walk-skin", so a walking elephant and a
+ * flying one never share a cache entry. The client, the server and the export all use this one function.
+ */
+export function skinSheetKey(skin: string, flight: boolean): string {
+  return flight ? `${skin}-skin` : `${skin}-walk-skin`;
+}
+
+/** The skin sheet key the scene asks for, or undefined when the player keeps the ninja. */
+export function skinKeyOf(scene: { playerSkin?: string; skinFlight?: boolean }): string | undefined {
+  return scene.playerSkin ? skinSheetKey(scene.playerSkin, scene.skinFlight === true) : undefined;
+}
+
+/** The form a mod's `setScene(...)` call asks for, read from its source: flight when it hides terrain or sets a backdrop. */
+export function skinFlightOfSource(source: string): boolean {
+  const m = /setScene\s*\(\s*\{([^}]*)\}/.exec(source);
+  const body = m ? m[1] : "";
+  return /hideTerrain\s*:\s*true/.test(body) || /backdrop\s*:\s*["']/.test(body);
 }

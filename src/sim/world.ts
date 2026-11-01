@@ -267,7 +267,7 @@ export class World {
   /** What the client should paint: the newest claim's backdrop and player skin. */
   get scene(): SceneState {
     const out: SceneState = {};
-    for (const r of this.scenes) { if (r.backdrop) out.backdrop = r.backdrop; if (r.skin) out.playerSkin = r.skin; }
+    for (const r of this.scenes) { if (r.backdrop) out.backdrop = r.backdrop; if (r.skin) { out.playerSkin = r.skin; out.skinFlight = r.flight === true; } }
     return out;
   }
 
@@ -292,6 +292,7 @@ export class World {
     }
     const b = cleanSceneWord(o.backdrop);
     if (b && BACKDROPS.includes(b)) rec.backdrop = b;
+    if (hideTerrain || rec.backdrop) rec.flight = true;
     const skin = cleanSceneWord(o.playerSkin);
     if (skin) rec.skin = skin;
   }

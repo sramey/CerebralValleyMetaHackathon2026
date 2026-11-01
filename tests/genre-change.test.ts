@@ -41,7 +41,7 @@ describe("genre change pattern (ADR 0066)", () => {
     // No per-build image cap: the skin plus every creature the mod spawns each get a sheet (bead 852).
     const orders = planArtOrders('api.spawn({ type: "dragon", x: 0 }); api.spawn({ type: "knight", x: 9 });', "add a dragon and a knight");
     expect(orders.map((o) => o.type)).toEqual(["dragon", "knight"]);
-    const p = subjectArtPrompt("spaceship", "spaceship-skin", false, false, true);
+    const p = subjectArtPrompt("spaceship", "spaceship-skin", false, false, "flight");
     expect(p).toContain("the player's own character");
     expect(p).toContain("hovering level, flying forward with thrust");
     expect(p).toContain("facing right");

@@ -35,6 +35,7 @@ import { activeLogFile, logBuild, logMood, saveModSources } from "./createlog";
 import { createStatsHandler } from "./stats-feed";
 import { createBrainHandler } from "./brain";
 import { genreWarnings } from "./genre";
+import { skinFlightOfSource, skinSheetKey } from "../src/sim/scene";
 import { artCachedUrl, artCachedUrlByKey, artKeyForType, clearCachedArt, generateSubjectArt, isArtChangeRequest, pickArtType, pickSkin, planArtOrders, purgeLegacyArt, subjectArtPrompt, IMAGE_MODEL } from "./art";
 import { drawPendingArt, planBuildArt } from "./art-orders";
 import { aiReceipt, plainReceipt } from "./receipt";
@@ -1203,9 +1204,11 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     let skinArt: { key: string; url: string } | undefined;
     let skinPending: string | undefined;
     const skin = pickSkin(source);
+    const skinFlight = skinFlightOfSource(source);
     if (skin) {
-      const key = artKeyForType(skin, "skin");
-      const cachedUrl = artCachedUrl(skin, "skin");
+      // The scene decides the form (ADR 0083): a flight scene draws the flight sheet, a plain character swap draws a walker.
+      const key = skinSheetKey(skin, skinFlight);
+      const cachedUrl = artCachedUrlByKey(key);
       if (cachedUrl) skinArt = { key, url: cachedUrl };
       else if (spend(ws, "image")) skinPending = key;
     }
@@ -1241,11 +1244,11 @@ async function handleSingle(ws: WebSocket, text: string, batch?: { size: number;
     for (const cachedArt of extraArt) { try { send(ws, { kind: "art", modId: def.id, art: cachedArt }); } catch {} }
     if (skinPending && skin) {
       const skinKey = skinPending;
-      generateSubjectArt(skin.replace(/-/g, " "), skin, false, false, true).then((url) => {
-        if (!url) return;
+      generateSubjectArt(skin.replace(/-/g, " "), skin, false, false, skinFlight ? "flight" : "ground").then((url) => {
+        if (!url) { try { send(ws, { kind: "artFailed", modId: def.id, key: skinKey }); } catch {} return; }
         rec.skinArt = { key: skinKey, url };
         try { send(ws, { kind: "art", modId: def.id, art: { key: skinKey, url } }); } catch {}
-      }).catch(() => {});
+      }).catch(() => { try { send(ws, { kind: "artFailed", modId: def.id, key: skinKey }); } catch {} });
       send(ws, { kind: "say", text: `Drawing your ${skin.replace(/-/g, " ")}...` });
     }
     if (pendingArts.length > 0) {

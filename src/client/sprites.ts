@@ -31,10 +31,10 @@ export function framesFor(
   framesBySubject: Record<string, Texture[]>,
   entityType: string,
   isPlayer: boolean,
-  playerSkin?: string,
+  skinKey?: string,
 ): Texture[] {
-  // A genre change re-skins the player (ADR 0066); until its sheet lands the ninja stays.
-  if (isPlayer) return (playerSkin && framesBySubject[`${playerSkin}-skin`]) || framesBySubject["ninja"] || [];
+  // A re-skin (ADR 0066/0083) names the player's sheet key; until it lands the ninja stays.
+  if (isPlayer) return (skinKey && framesBySubject[skinKey]) || framesBySubject["ninja"] || [];
   if (!canUseSpriteSheet(entityType)) return [];
   const lower = entityType.toLowerCase();
   if (isProjectileType(lower)) return [];
@@ -49,16 +49,29 @@ export function framesFor(
   return best === undefined ? [] : framesBySubject[best];
 }
 
+/**
+ * True while the player's skin sheet is still being drawn (ADR 0083): the player then shows the same
+ * pixelating "digitizing" effect a new creature gets, and the old look returns if the draw fails.
+ */
+export function skinIsPending(
+  isPlayer: boolean,
+  skinKey: string | undefined,
+  pendingArt: { has(key: string): boolean },
+  framesBySubject: Record<string, Texture[]>,
+): boolean {
+  return isPlayer && !!skinKey && pendingArt.has(skinKey) && (framesBySubject[skinKey]?.length ?? 0) < 1;
+}
+
 export function computePrimaries(
   entities: { id: number; owner?: string; type: string; w: number; h: number }[],
   framesBySubject: Record<string, Texture[]>,
   hasCustomLook?: (type: string) => boolean,
-  playerSkin?: string,
+  skinKey?: string,
 ): Set<number> {
   const primaries = new Set<number>();
   const groups = new Map<string, { maxArea: number; items: { id: number; area: number }[] }>();
   for (const e of entities) {
-    const frames = framesFor(framesBySubject, e.type, e.type === "player", playerSkin);
+    const frames = framesFor(framesBySubject, e.type, e.type === "player", skinKey);
     if (frames.length < 1 || (hasCustomLook && hasCustomLook(e.type))) continue;
     const subject = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0] ?? e.type;
     const gk = `${e.owner ?? ""}|${subject}`;

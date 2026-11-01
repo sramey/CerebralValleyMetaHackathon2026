@@ -8,7 +8,7 @@ import { Application, Graphics, Sprite, Texture } from "pixi.js";
 import { pickWalkFrame } from "./walk-frame";
 import { PadTracker, HINT_TEXT, mergeInputs, nextMode, type InputMode } from "./gamepad";
 import { healthBarColor, healthBarRect, rectBody, spriteBody, type DrawnBody } from "./health-bar";
-import { computePrimaries, framesFor, isProjectileType, loadSpriteSheet, loadSubjects } from "./sprites";
+import { computePrimaries, framesFor, isProjectileType, loadSpriteSheet, loadSubjects, skinIsPending } from "./sprites";
 import { startLateArt } from "./art-late";
 import chickenMod from "../mods/chicken";
 import { SIM, emptyInput, pendingArtKeys, sheetsOf } from "../contract";
@@ -57,6 +57,7 @@ import type { SegmentationResult, SelectionState } from "./camera-selection";
 import { compactPaperImage, paperImageSize, paperLevelMessage } from "./paper-image";
 import { matchPaperIntent, matchSketchIntent } from "./phrases";
 import { World } from "../sim/world";
+import { skinKeyOf } from "../sim/scene";
 import playerMod from "../mods/player";
 import groundMod from "../mods/ground";
 import enemyMod from "../mods/enemy";
@@ -279,7 +280,7 @@ $("#brain-btn").addEventListener("click", () => brain.toggle());
 };
 const layerOverride = new Map<number, number>();
 function subjectKeyFor(e: Entity): string | undefined {
-  const frames = framesFor(framesBySubject, e.type, e.type === "player", world.scene.playerSkin);
+  const frames = framesFor(framesBySubject, e.type, e.type === "player", skinKeyOf(world.scene));
   if (frames.length < 1) return undefined;
   return Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0];
 }
@@ -447,6 +448,10 @@ function drawShot(e: Entity, x: number, y: number): void {
   gfx.rect(x + e.w * 0.2, y + e.h * 0.3, e.w * 0.6, e.h * 0.4).fill(0xfff6d8);
 }
 
+function playerSkinPending(e: Entity): boolean {
+  return skinIsPending(e.type === "player", skinKeyOf(world.scene), pendingArt, framesBySubject);
+}
+
 function drawDigitize(e: Entity, x: number, y: number): void {
   const fract = (v: number): number => v - Math.floor(v);
   const pulse = 0.5 + 0.5 * Math.sin(world.tickCount * 0.18);
@@ -468,7 +473,7 @@ let cachedPrimaries = new Set<number>();
 function getActivePrimaries(): Set<number> {
   if (lastPrimariesTick !== world.tickCount) {
     lastPrimariesTick = world.tickCount;
-    cachedPrimaries = computePrimaries(world.entities, framesBySubject, (type) => !!kindOf(type), world.scene.playerSkin);
+    cachedPrimaries = computePrimaries(world.entities, framesBySubject, (type) => !!kindOf(type), skinKeyOf(world.scene));
   }
   return cachedPrimaries;
 }
@@ -489,6 +494,7 @@ function drawEntityRaw(e: Entity, camX: number, camY: number): void {
   }
   if (x + e.w < -40 || x > W + 40 || y + e.h < -40 || y > H + 40) return; // off-screen cull
   const t = e.type;
+  if (playerSkinPending(e)) { drawDigitize(e, x, y); return; } // the new skin is being drawn (ADR 0083)
   if (morph.size > 0 && isMorphing(e)) { drawDigitize(e, x, y); return; } // a restyled sheet is about to swap in (ADR 0017)
   if (isHoop(e)) { drawHoop(gfx, e, x, y); return; } // a goal is a structure, never a floating ring (bead z1d)
   const look = kindOf(t); // code-drawn shapes and engine effects never use sprites or the outline (ADR 0015)
@@ -704,7 +710,7 @@ function formatRadialLabel(type: string): string {
 const scaleOverride = new Map<number, number>();
 
 function hasDrawnArt(e: Entity): boolean {
-  return framesFor(framesBySubject, e.type, e.type === "player", world.scene.playerSkin).length >= 1 && !kindOf(e.type);
+  return framesFor(framesBySubject, e.type, e.type === "player", skinKeyOf(world.scene)).length >= 1 && !kindOf(e.type);
 }
 world.hasArt = hasDrawnArt; // gear sockets measure the body the eye sees (ADR 0061)
 
@@ -987,7 +993,7 @@ function render(): void {
     const groups = new Map<string, { maxArea: number; items: { id: number; area: number }[] }>();
     for (const e of world.entities) {
       if (isParallaxOrSkyEntity(e)) continue;
-      const frames = framesFor(framesBySubject, e.type, e.type === "player", world.scene.playerSkin);
+      const frames = framesFor(framesBySubject, e.type, e.type === "player", skinKeyOf(world.scene));
       if (frames.length < 1 || kindOf(e.type) || isTetherGear(e) || isSetPiece(e)) continue;
       const subject = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0] ?? e.type;
       const gk = `${e.owner}|${subject}`;
@@ -1007,8 +1013,8 @@ function render(): void {
   const spriteDraw: { e: Entity; frame: Texture; subjectKey: string | undefined; bob: number }[] = [];
   for (const e of world.entities) {
     if (isParallaxOrSkyEntity(e)) continue;
-    const frames = framesFor(framesBySubject, e.type, e.type === "player", world.scene.playerSkin);
-    if (frames.length < 1 || !primaries.has(e.id) || kindOf(e.type) || (morph.size > 0 && isMorphing(e)) || isSetPiece(e)) continue;
+    const frames = framesFor(framesBySubject, e.type, e.type === "player", skinKeyOf(world.scene));
+    if (frames.length < 1 || !primaries.has(e.id) || kindOf(e.type) || (morph.size > 0 && isMorphing(e)) || playerSkinPending(e) || isSetPiece(e)) continue;
     seen.add(e.id);
     const moving = Math.abs(e.vx) > 5;
     const subjectKey = Object.entries(framesBySubject).find(([, v]) => v === frames)?.[0];
@@ -2613,6 +2619,10 @@ function connect(): void {
       const artMsg = msg as unknown as { kind: "art"; modId: string; art: { key: string; url: string; scenery?: boolean } };
       pendingArt.add(artMsg.art.key);
       loadArtWithRetry(artMsg.art.key, artMsg.art.url, artMsg.art.scenery === true);
+    }
+    else if (msg.kind === "artFailed") {
+      pendingArt.delete(msg.key);
+      if (msg.key === skinKeyOf(world.scene)) say("I couldn't draw that one, so you keep your old look.", "failed");
     }
     else if ((msg as unknown as { kind: string }).kind === "segment") {
       const segMsg = msg as unknown as { kind: "segment"; key: string; box: unknown };
