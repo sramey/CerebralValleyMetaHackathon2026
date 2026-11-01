@@ -378,7 +378,12 @@ export interface Speech { entityId: number; owner: string; text: string; remaini
 
 export interface SceneOptions { hideTerrain?: boolean; hideScenery?: boolean; backdrop?: string; playerSkin?: string }
 /** What the scene looks like right now, derived from the mods' claims (ADR 0066). Pure data: the client paints it. */
-export interface SceneState { backdrop?: string; playerSkin?: string }
+export interface SceneState {
+  backdrop?: string;
+  playerSkin?: string;
+  /** True when the skin belongs to a flight scene (terrain hidden or a backdrop set), false for a plain character swap on the ground (ADR 0083). Set with playerSkin. */
+  skinFlight?: boolean;
+}
 
 export type KnobValue = number | string | boolean;
 export interface KnobDef { value: KnobValue; min?: number; max?: number; label?: string }
@@ -626,6 +631,8 @@ export type ServerMsg =
   | { kind: "stage"; stage: BuildStage; detail: string; command?: string }
   | { kind: "mod"; mod: { id: string; title: string; source: string; compiled: string; knobs: KnobDefs; art?: { key: string; url: string; scenery?: boolean }; artPending?: string; artPendingList?: string[]; skinArt?: { key: string; url: string }; skinPending?: string; look?: Look } }
   | { kind: "art"; modId: string; art: { key: string; url: string; scenery?: boolean } }
+  /** A sheet could not be drawn (declined or failed): the client drops its pending effect and keeps the old look (ADR 0083). */
+  | { kind: "artFailed"; modId: string; key: string }
   | { kind: "mood"; mood: MoodSpec | null }
   | { kind: "restyled"; mood: string; key: string; url: string | null }
   | { kind: "tweak"; modId: string; knob: string; value: KnobValue }

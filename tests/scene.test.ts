@@ -31,7 +31,7 @@ describe("setScene (ADR 0066)", () => {
     const { world, loader } = level();
     loader.load(scene("space", { hideTerrain: true, hideScenery: true, backdrop: "space", playerSkin: "spaceship" }));
     expect(types(world)).toBe("gun,player");
-    expect(world.scene).toEqual({ backdrop: "space", playerSkin: "spaceship" });
+    expect(world.scene).toEqual({ backdrop: "space", playerSkin: "spaceship", skinFlight: true });
   });
 
   it("a shot at a hidden tower passes through it, and the ship is not stopped by the ground", () => {
@@ -86,7 +86,7 @@ describe("setScene (ADR 0066)", () => {
     loader.load({ id: "a", title: "a", setup(api) { api.setScene!({ hideScenery: true, backdrop: "space" }); api.player()!.gravityScale = 0; }, dispose() {} });
     loader.load(scene("b", { hideTerrain: true, playerSkin: "spaceship" }));
     loader.unload("a");
-    expect(world.scene).toEqual({ playerSkin: "spaceship" });
+    expect(world.scene).toEqual({ playerSkin: "spaceship", skinFlight: true });
     loader.unload("b");
     expect(types(world)).toBe(t0);
     expect(world.scene).toEqual({});
