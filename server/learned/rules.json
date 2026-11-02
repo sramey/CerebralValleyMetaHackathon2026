@@ -124,5 +124,74 @@
     "command": "add a flapping bird pet",
     "note": "test: bird stays airborne while flapping",
     "createdAt": "2026-10-31T13:17:38.068Z"
+  },
+  {
+    "id": "autofix-1793548904699-gnlj",
+    "subsystem": "wonder",
+    "rule": "When changing player skin/size, always implement locomotion in onTick by mapping api.input() to player vx/vy/facing; cosmetics alone don't move the pl",
+    "source": "autofix",
+    "command": "make my character a bowling ball.",
+    "note": "test: bowling ball rolls right",
+    "createdAt": "2026-11-01T16:01:44.699Z"
+  },
+  {
+    "id": "review-1793549049475-1bo2",
+    "subsystem": "wonder",
+    "rule": "dispose() never removes the api.on(\"interact\") and api.onTick() listeners registered in setup, leaving HUD/logic handlers after unload",
+    "source": "review",
+    "modId": "zoo-creatures",
+    "command": "add some other zoo creatures on the level.",
+    "note": "dispose() never removes the api.on(\"interact\") and api.onTick() listeners registered in setup, leaving HUD/logic handlers after unload",
+    "createdAt": "2026-11-01T16:04:09.475Z"
+  },
+  {
+    "id": "review-1793550621150-pfjk",
+    "subsystem": "wonder",
+    "rule": "dispose() does not remove the interact listener and onTick handler registered in setup",
+    "source": "review",
+    "modId": "dragon",
+    "command": "add dragon",
+    "note": "dispose() does not remove the interact listener and onTick handler registered in setup",
+    "createdAt": "2026-11-01T16:30:21.150Z"
+  },
+  {
+    "id": "review-1793551121306-e2re",
+    "subsystem": "wonder",
+    "rule": "driftSpeed knob allows 0 but Number(knobs.driftSpeed) || 18 replaces 0 with 18, breaking zero-drift setting",
+    "source": "review",
+    "modId": "fog",
+    "command": "add fog",
+    "note": "driftSpeed knob allows 0 but Number(knobs.driftSpeed) || 18 replaces 0 with 18, breaking zero-drift setting",
+    "createdAt": "2026-11-01T16:38:41.306Z"
+  },
+  {
+    "id": "review-1793551526219-wxzv",
+    "subsystem": "wonder",
+    "rule": "Gifts spawned from onTick are never despawned (they fall through ground and accumulate off-screen) despite being capped",
+    "source": "review",
+    "modId": "santa-sled",
+    "command": "have santa flying in the sky on his sled with his reindeers",
+    "note": "Gifts spawned from onTick are never despawned (they fall through ground and accumulate off-screen) despite being capped",
+    "createdAt": "2026-11-01T16:45:26.219Z"
+  },
+  {
+    "id": "review-1793551647274-bbj5",
+    "subsystem": "wonder",
+    "rule": "dispose() does not remove the interact and tick listeners registered in setup",
+    "source": "review",
+    "modId": "christmas-carollers",
+    "command": "add christmas carollers",
+    "note": "dispose() does not remove the interact and tick listeners registered in setup",
+    "createdAt": "2026-11-01T16:47:27.274Z"
+  },
+  {
+    "id": "review-1793551816706-r0x6",
+    "subsystem": "wonder",
+    "rule": "dispose() does not remove the interact/order listeners and tick handler it registered",
+    "source": "review",
+    "modId": "wandering-characters",
+    "command": "add some characters walking around",
+    "note": "dispose() does not remove the interact/order listeners and tick handler it registered",
+    "createdAt": "2026-11-01T16:50:16.706Z"
   }
 ]

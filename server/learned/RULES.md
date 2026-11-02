@@ -20,6 +20,13 @@ Automatically distilled by Muse Spark (`muse-spark-1.2`, `reasoning_effort: "min
 - **[review]** tank.vy may be undefined on spawn causing Math.min(tank.vy,300) to produce NaN velocity _(from `driveable-tank`)_
 - **[review]** dispose() filtered coins by data.obstacle but coins were spawned with data.collectible only, leaving orphaned coin entities after dispose _(from `obstacle-course`)_
 - **[autofix]** Flapping bird pet must set gravityScale=0 and apply per-frame flapPhase/bobHeight vertical lift to stay airborne while following.
+- **[autofix]** When changing player skin/size, always implement locomotion in onTick by mapping api.input() to player vx/vy/facing; cosmetics alone don't move the pl
+- **[review]** dispose() never removes the api.on("interact") and api.onTick() listeners registered in setup, leaving HUD/logic handlers after unload _(from `zoo-creatures`)_
+- **[review]** dispose() does not remove the interact listener and onTick handler registered in setup _(from `dragon`)_
+- **[review]** driftSpeed knob allows 0 but Number(knobs.driftSpeed) || 18 replaces 0 with 18, breaking zero-drift setting _(from `fog`)_
+- **[review]** Gifts spawned from onTick are never despawned (they fall through ground and accumulate off-screen) despite being capped _(from `santa-sled`)_
+- **[review]** dispose() does not remove the interact and tick listeners registered in setup _(from `christmas-carollers`)_
+- **[review]** dispose() does not remove the interact/order listeners and tick handler it registered _(from `wandering-characters`)_
 
 ## Sprite Sheet & Art Generation (`art`)
 
